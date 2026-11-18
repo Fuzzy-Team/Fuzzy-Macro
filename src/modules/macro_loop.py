@@ -1665,7 +1665,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                     numberToPlant = min(len(openSlots), maxAllowedPlanters - plantersPlaced)
                     if bonusLoot.enabled(macro.setdat) and numberToPlant > 0:
                         occupiedFields = {planter["field"] for planter in planterData if planter["field"]}
-                        occupiedPlanters = {planter["planter"] for planter in planterData if planter["planter"]}
+                        occupiedPlanters = {bonusLoot.planterKey(planter["planter"]) for planter in planterData if planter["planter"]}
                         allowedPlanters = [name for name in macroModule.allPlanters
                                            if bonusLoot.planterEnabled(macro.setdat, name) and name not in occupiedPlanters]
                         disallowedFields = occupiedFields | {field for field in fieldToNectar
@@ -1673,15 +1673,17 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                         nectarHours = {nectar: getCurrentNectarPercent(nectar) * 0.24 for nectar in macroModule.nectarNames}
                         bonusPicks, lockedPlanters = bonusLoot.choosePicks(
                             macro.setdat, allowedPlanters, disallowedFields, numberToPlant, nectarHours, getFieldDegradationHours)
-                        blockedPlanters.update(lockedPlanters)
+                        # the rest of the auto path names planters as the rankings do: "red clay"
+                        blockedPlanters.update(name.replace("_", " ") for name in lockedPlanters)
                         for planterName, field in bonusPicks:
                             slot = next(idx for idx, planter in enumerate(planterData) if not planter["planter"])
                             macro.logger.webhook("", f"Planting {planterName.replace('_', ' ').title()} in {field.title()} for a planter drop", "dark brown")
-                            if runTask(macro.placePlanter, args=(planterName, field, False), resetAfter=True, convertAfter=False, allowAFB=False):
+                            rankedName = planterName.replace("_", " ")
+                            if runTask(macro.placePlanter, args=(rankedName, field, False), resetAfter=True, convertAfter=False, allowAFB=False):
                                 growHours = bonusLoot.growHours(planterName, field, getFieldDegradationHours(field))
                                 multiplier, growth = bonusLoot.GROWTH[(planterName, field)]
                                 now = time.time()
-                                savePlacedPlanter(slot, field, {"name": planterName}, fieldToNectar[field], {
+                                savePlacedPlanter(slot, field, {"name": rankedName}, fieldToNectar[field], {
                                     "grow_duration": growHours * 3600,
                                     "harvest_time": now + growHours * 3600,
                                     "placed_time": now,
@@ -1696,9 +1698,9 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                                 gameFull = True
                                 break
                             if failure == "missing_inventory":
-                                blockedPlanters.add(planterName)
+                                blockedPlanters.add(rankedName)
                             else:
-                                blockedPlacements.add((planterName, field))
+                                blockedPlacements.add((rankedName, field))
 
                     def getAvailableFields(occupiedFields):
                         return [
