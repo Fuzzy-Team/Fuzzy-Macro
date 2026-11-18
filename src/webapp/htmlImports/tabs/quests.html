@@ -128,6 +128,11 @@
           ["honey_bee", "Honey Bee"],
           ["bucko_bee", "Bucko Bee"],
           ["riley_bee", "Riley Bee"],
+          ["panda_bear", "Panda Bear"],
+          ["science_bear", "Science Bear"],
+          ["mother_bear", "Mother Bear"],
+          ["onett", "Onett"],
+          ["spirit_bear", "Spirit Bear"],
         ].map(([key, label]) => ({
           id: `${key}_quest_gather_interrupt`,
           title: label,
@@ -137,6 +142,92 @@
             triggerFunction: saveProfileTriggerFunction,
           },
         })),
+      ]);
+
+      buildStandardContainer(questsSettingsParent, "Quest Items", "Items quests may use up. Anything switched off stays yours to do, and you get a ping.", [
+        {
+          id: "quest_use_jelly_beans",
+          title: "Jelly Beans",
+          desc: "Share Jelly Beans at the hub when a quest asks for it",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "quest_use_magic_beans",
+          title: "Magic Beans",
+          desc: "Use Magic Beans while gathering when a quest asks for it",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "quest_use_field_dice",
+          title: "Field Dice",
+          desc: "Use Field Dice while converting when a quest asks for it",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "quest_use_cloud_vials",
+          title: "Cloud Vials",
+          desc: "Use Cloud Vials while gathering when a quest asks for it",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "quest_use_extracts",
+          title: "Red and Blue Extracts",
+          desc: "Use Extracts before gathering when a quest asks for it",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "quest_donate_wind_shrine",
+          title: "Wind Shrine Donations",
+          desc: "Donate to the Wind Shrine when a quest asks for it, instead of your Wind Shrine item",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "quest_play_memory_match",
+          title: "Memory Match",
+          desc: "Play Memory Match for quest pairs, even if the Memory Matches are off",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "quest_hunt_vicious",
+          title: "Vicious Bees",
+          desc: "Vic hop public servers when a quest asks for vicious bee kills, checking every field they spawn in, then rejoin your server",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "quest_blender_item",
+          title: "Blender Crafts",
+          desc: "Item to craft when a quest asks for blender crafts. None leaves those to you",
+          type: {
+            name: "dropdown",
+            data: toImgArray(blenderIcons),
+            triggerFunction: saveProfileTriggerFunction,
+            length: 16,
+          },
+        },
       ]);
 
       buildStandardContainer(questsSettingsParent, "Petal Gather", "Petal objectives use BloomsAI by default. Individual objective settings take priority.", [
@@ -203,8 +294,8 @@
         },
         {
           id: "black_bear_quest",
-          title: "Black Bear (Repeatable Quests Only)",
-          desc: "Complete Black Bear's Repeatable Quests",
+          title: "Black Bear",
+          desc: "Complete Black Bear's Quests",
           type: {
             name: "checkbox",
             triggerFunction: saveProfileTriggerFunction,
@@ -232,6 +323,51 @@
           id: "riley_bee_quest",
           title: "Riley Bee",
           desc: "Complete Riley Bee's Quests",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "panda_bear_quest",
+          title: "Panda Bear",
+          desc: "Complete Panda Bear's Quests. Anything the macro can't do is left for you. Needs 5 bees in your hive (Bees in Config).",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "science_bear_quest",
+          title: "Science Bear",
+          desc: "Complete Science Bear's Quests. Anything the macro can't do is left for you. Needs 10 bees in your hive (Bees in Config).",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "mother_bear_quest",
+          title: "Mother Bear",
+          desc: "Complete Mother Bear's Quests. Anything the macro can't do is left for you.",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "onett_quest",
+          title: "Onett",
+          desc: "Complete Onett's Quests. Anything the macro can't do is left for you. Needs 30 bees in your hive (Bees in Config).",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "spirit_bear_quest",
+          title: "Spirit Bear",
+          desc: "Complete Spirit Bear's Quests. Anything the macro can't do is left for you. Needs 35 bees in your hive (Bees in Config).",
           type: {
             name: "checkbox",
             triggerFunction: saveProfileTriggerFunction,

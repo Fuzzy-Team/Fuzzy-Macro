@@ -497,8 +497,10 @@ class GatherMixin:
         else:
             self.set_task_status(f"gather_{field}", task="gather", field=field)
 
+        # Before the quest watch opens the menu, since using an item closes it.
+        self.useQuestItems("gather")
         questMenuKeptOpen = False
-        questWatchGiver = questObjective["giver"] if questObjective else None
+        questWatchGiver =questObjective["giver"] if questObjective else None
         questWatchObjective = questObjective["action"] if questObjective else None
         lastQuestProgressCheck = time.time()
         questWatchFailures = 0

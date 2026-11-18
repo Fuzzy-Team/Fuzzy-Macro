@@ -12,18 +12,115 @@ import modules.misc.settingsManager as settingsManager
 import modules.screen.ocr as ocr
 from modules import bitmap_matcher
 from modules.controls.sleep import InterruptRequested, is_stopped, pause_aware_time as time, sleep
-from modules.macro.game_data import quest_data
-from modules.quest_planning import make_quest_objectives, objective_matches_text
+from modules.macro.game_data import quest_data, MAIN_GAME_PLACE_ID
+from modules.quest_planning import (make_quest_objectives, objective_matches_text, objective_allowed, quest_giver_order,
+                                    quest_item, QUEST_ITEMS)
 from modules.screen.imageSearch import locateImageOnScreen
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP, mssScreenshotPillowRGBA
 
 
 class QuestMixin:
-    def recordQuestObjectives(self, giver, title, actions, statuses):
+    def recordQuestObjectives(self, giver, title, actions, statuses, remaining=None):
         if not hasattr(self, "questObservations"):
             self.questObservations = {}
-        self.questObservations[giver] = make_quest_objectives(giver, title, actions, statuses)
+        self.questObservations[giver] = make_quest_objectives(giver, title, actions, statuses, remaining)
+        # A fresh read replaces what we counted ourselves.
+        for key in [key for key in self.questItemUses if key[0] == giver]:
+            del self.questItemUses[key]
         return [action for action, status in zip(actions, statuses) if status != "complete"]
+
+    def questItemsLeft(self, objective):
+        """How many more of a row's item the quest asks for, counting what we used since the last read."""
+        # An unread count could be anything, so spend one and look again rather than the whole amount.
+        left = objective["remaining"] if objective["remaining"] is not None else 1
+        return max(0, left - self.questItemUses.get(objective["id"], 0))
+
+    def questItemIsShort(self, objectiveId):
+        """The inventory ran out recently; the row stays the user's for half an hour, then we look again."""
+        return time.time() - self.questItemShort.get(objectiveId, 0) < 30 * 60
+
+    def pendingQuestObjectives(self, kind):
+        """Rows of a kind the quest log shows as incomplete, in giver order, that the user's settings let the macro do."""
+        return [objective for giver in quest_giver_order(self.setdat)
+                for objective in (getattr(self, "questObservations", {}).get(giver) or [])
+                if objective["kind"] == kind and objective["status"] == "incomplete"
+                and objective_allowed(objective, self.setdat) and not self.questItemIsShort(objective["id"])
+                and self.questItemsLeft(objective) > 0]
+
+    def questWantsCollect(self, name):
+        """True when a quest row needs this collect even though its own setting is off."""
+        if time.time() - self.questCollectBackoff.get(name, 0) < 30 * 60:
+            return False
+        if name == "wind_shrine":
+            return bool(self.pendingQuestObjectives("donate"))
+        if name in ("memory_match", "mega_memory_match", "extreme_memory_match"):
+            return bool(self.pendingQuestObjectives("pairs"))
+        return False
+
+    def backOffFailedQuestCollect(self, name):
+        """A collect only a quest asked for that left its cooldown unsaved did not happen; leave it alone for half an hour."""
+        if not self.setdat.get(name, False) and self.hasRespawned(name, self.collectCooldowns[name]):
+            self.questCollectBackoff[name] = time.time()
+
+    def memoryMatchRewards(self):
+        """Preferred rewards for the solver; none while a quest needs pairs, so it just matches as many as it can."""
+        return [] if self.pendingQuestObjectives("pairs") else self.setdat.get("memory_match_rewards", [])
+
+    def useQuestItems(self, moment):
+        """Use the inventory items quests still need at this point of a run ('gather' or 'convert')."""
+        for objective in self.pendingQuestObjectives("use"):
+            name, _, when = QUEST_ITEMS[quest_item(objective)]
+            if when != moment:
+                continue
+            used = 0
+            for _ in range(self.questItemsLeft(objective)):
+                if not self.useItemInInventory(name):
+                    self.questItemShort[objective["id"]] = time.time()
+                    break
+                used += 1
+            self.questItemUses[objective["id"]] = self.questItemUses.get(objective["id"], 0) + used
+            if used:
+                self.logger.webhook("", f"Used {used} {name} for {objective['giver'].title()}", "bright green",
+                                    route_category="quests")
+
+    def shareJellyBeans(self):
+        """One trip to a public Hive Hub server for every Jelly Bean row, using beans until each row is done."""
+        rows = [objective for objective in self.pendingQuestObjectives("use")
+                if QUEST_ITEMS[quest_item(objective)][2] == "hub"]
+        if not rows:
+            return
+        # Always public: a private server has nobody to share with.
+        if not self.goToField("hive hub", usePrivateServer=False):
+            return
+        outOfBeans = False
+        for objective in rows:
+            # Beans shared for one quest count for the others too, so look again before starting a row.
+            objective = self.readQuestObjective(objective)
+            idle = 0
+            while objective and objective["status"] == "incomplete" and objective["remaining"] is not None and idle < 5:
+                if not self.useItemInInventory(QUEST_ITEMS["jellybean"][0]):
+                    outOfBeans = True
+                    break
+                time.sleep(2)
+                before = objective["remaining"]
+                objective = self.readQuestObjective(objective)
+                if objective and objective["status"] == "incomplete":
+                    idle = 0 if objective["remaining"] is not None and objective["remaining"] < before else idle + 1
+            if outOfBeans:
+                break
+            # Nobody picked them up (or the count could not be read): leave the row for later.
+            if objective and objective["status"] == "incomplete":
+                self.questItemShort[objective["id"]] = time.time()
+        if outOfBeans:
+            for objective in rows:
+                self.questItemShort[objective["id"]] = time.time()
+        self.rejoin(placeId=MAIN_GAME_PLACE_ID, claimHive=True)
+
+    def readQuestObjective(self, objective):
+        """Re-read the quest log and return this row as it now stands, or None if it couldn't be read."""
+        self.findQuest(objective["giver"], logDetection=False)
+        return next((row for row in (self.questObservations.get(objective["giver"]) or [])
+                     if row["id"] == objective["id"]), None)
 
     def readWatchedQuestObjective(self, objective, reposition=False):
         previous = self.questObservations.get(objective["giver"]) or []
@@ -275,7 +372,12 @@ class QuestMixin:
             "riley bee": "riley",
             "honey bee": "honey",
             "brown bear": "brown",
-            "black bear": "black"
+            "black bear": "black",
+            "panda bear": "panda",
+            "science bear": "science",
+            "mother bear": "mother",
+            "onett": "onett",
+            "spirit bear": "spirit"
         }
 
         #prevent the macro from false detecting beesmas quests
@@ -696,8 +798,12 @@ class QuestMixin:
         primaryScales = [1.0, 1.2, 1.1, 0.9, 0.8, 0.7, 1.3]
 
         questGiverTemplates = []
-        questGiverImg = Image.open(f"./images/quest/{questGiver}-{self.robloxWindow.display_type}.png").convert('RGBA')
-        questGiverTemplates.extend(buildScaledTemplates(questGiverImg, primaryScales, self.robloxWindow.display_type))
+        # The title image is only a fallback for OCR, so a giver without one just reads by OCR.
+        try:
+            questGiverImg = Image.open(f"./images/quest/{questGiver}-{self.robloxWindow.display_type}.png").convert('RGBA')
+            questGiverTemplates.extend(buildScaledTemplates(questGiverImg, primaryScales, self.robloxWindow.display_type))
+        except FileNotFoundError:
+            pass
 
         fallbackDisplayType = "built-in" if self.robloxWindow.display_type == "retina" else "retina"
         fallbackScales = primaryScales if fallbackDisplayType == "built-in" else [0.7]
@@ -788,6 +894,8 @@ class QuestMixin:
         step = self.questMenuStep if manageQuestUi else (i if len(questScreens) > 1 else None)
         if step is not None:
             self.questGiverSteps[questGiver] = step
+        # The screens after the title's, for a quest that runs past the bottom of the screen it was found on.
+        screensAfterTitle = questScreens[i + 1:] if questScreens is not None else []
 
         def objectiveTextShowsIncompleteProgress(textChunk):
             import re
@@ -997,6 +1105,7 @@ class QuestMixin:
 
         #merge the texts into chunks. Using those chunks, compare it with the known objectives
         #assume that the merging is done properly, so 1st chunk = 1st objective
+        titleScreenFull = screen
         screen = cv2.cvtColor(np.array(screen), cv2.COLOR_RGBA2BGR)
         #crop it just above the quest title
         screen = screen[questTitleYPos: , : ]
@@ -1080,15 +1189,81 @@ class QuestMixin:
         incompleteObjectives = []
         objectivePanels = detectObjectivePanels(screen)
         observedStatuses = ["unknown"] * len(objectives)
+        observedRemaining = [None] * len(objectives)
 
         def observeRow(index, text, status, fullRow=True):
             if not fullRow:
                 return
             matches = [row for row, action in enumerate(objectives) if objective_matches_text(action, text)]
             if len(matches) == 1:
-                observedStatuses[matches[0]] = status
-            elif len(objectivePanels) >= len(objectives):
-                observedStatuses[index] = status
+                row = matches[0]
+            elif index is not None and len(objectivePanels) >= len(objectives):
+                row = index
+            else:
+                return
+            observedStatuses[row] = status
+            progress = re.search(r"(\d[\d,.]*)\s*/\s*(\d[\d,.]*)", text)
+            if progress:
+                done, total = (int(re.sub(r"\D", "", part)) for part in progress.groups())
+                observedRemaining[row] = max(0, total - done)
+
+        def screensBelowTitle():
+            """Scroll on from the title's screen, one notch at a time, until the list stops moving."""
+            if questScreens is not None:
+                yield from screensAfterTitle
+                return
+            lastHash = average_hash(Image.fromarray(screenshotQuest(100)))
+            for _ in range(60):
+                if is_stopped():
+                    return
+                mouse.scroll(-1, True)
+                time.sleep(0.06)
+                currentHash = average_hash(Image.fromarray(screenshotQuest(100)))
+                if currentHash == lastHash:
+                    return
+                lastHash = currentHash
+                self.questMenuStep += 1
+                yield screenshotQuest(self.robloxWindow.mh, mode="RGBA")
+
+        def notchHeight(before, after):
+            """How far one scroll notch moved the list: the offset that lines the two screens up."""
+            a = cv2.cvtColor(np.array(before), cv2.COLOR_RGBA2GRAY).astype(np.int16)
+            b = cv2.cvtColor(np.array(after), cv2.COLOR_RGBA2GRAY).astype(np.int16)
+            return min(range(1, a.shape[0] // 2), key=lambda offset: np.abs(a[offset:] - b[:-offset]).mean())
+
+        def readRowsBelow():
+            """A long quest runs past the bottom of the screen: scroll on and read the rows below by their text."""
+            seen = set()
+            rowsTop = questTitleYPos + endIndex  # where the quest's rows start on the title's screen
+            notch = None
+            for nextScreen in screensBelowTitle():
+                if notch is None:
+                    notch = notchHeight(titleScreenFull, nextScreen)
+                rowsTop -= notch
+                below = cv2.cvtColor(np.array(nextScreen), cv2.COLOR_RGBA2BGR)
+                # Above the rows are the quests before this one, and below them the next quest.
+                end = findQuestSectionEnd(below, rowsTop + int(60*self.robloxWindow.multi) if rowsTop > 0 else 0)
+                for panel in detectObjectivePanels(below):
+                    x, y, w, h = panel["bbox"]
+                    # Rows cut off by the screen's edge are read whole on a neighbouring screen.
+                    cutOff = y == 0 or (y + h >= below.shape[0] if end is None else y >= end)
+                    if cutOff or y < rowsTop - 2:
+                        continue
+                    panelPixels = below[y:y+h, x:x+w]
+                    rowKey = panelPixels.tobytes()
+                    if rowKey in seen:
+                        continue
+                    seen.add(rowKey)
+                    lines = [self.convertCyrillic(line[1][0].strip().lower()) for line in ocr.ocrRead(Image.fromarray(panelPixels))]
+                    text = ' '.join(lines)
+                    status = panel["status"]
+                    if re.search(r"\bcomplete(?:d)?\b", text, re.IGNORECASE):
+                        status = "complete"
+                    if objectiveTextShowsIncompleteProgress(''.join(lines)):
+                        status = "incomplete"
+                    observeRow(None, text, status)
+                if end is not None or "unknown" not in observedStatuses:
+                    return
 
         if objectivePanels:
             for i, panel in enumerate(objectivePanels[:len(objectives)]):
@@ -1135,6 +1310,8 @@ class QuestMixin:
                 cv2.rectangle(screenOriginal, (x, drawY), (x+w, drawY+h), color, 2)
                 cv2.putText(screenOriginal, objectives[i], (x, max(0, drawY-10)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
 
+            if not bottomIsQuestEnd and "unknown" in observedStatuses:
+                readRowsBelow()
         else:
             i = 0
             for _, contour in indexedContours:
@@ -1212,13 +1389,17 @@ class QuestMixin:
         if manageQuestUi and not keepQuestMenuOpen and not is_stopped():
             self.toggleQuest()
             self.moveMouseToDefault()
-        return self.recordQuestObjectives(questGiver, questTitle, objectives, observedStatuses)
+        return self.recordQuestObjectives(questGiver, questTitle, objectives, observedStatuses, observedRemaining)
 
     def goToQuestGiver(self, questGiver, reason):
         for _ in range(3):
             if is_stopped():
                 return False
-            if not self.travelViaCannon(questGiver.title()):
+            # Mother Bear's path walks from the hive instead of the cannon.
+            if questGiver == "mother bear":
+                if not self.reset(convert=False):
+                    return False
+            elif not self.travelViaCannon(questGiver.title()):
                 return False
             if is_stopped():
                 return False
@@ -1314,6 +1495,7 @@ class QuestMixin:
                     break
 
     def getNewQuest(self, questGiver, submitQuest):
+        # False: never reached the giver. None: reached, but no quest came out of it.
         if not self.goToQuestGiver(questGiver, "Submit Quest" if submitQuest else "Get New Quest"):
             return False
         if is_stopped():
