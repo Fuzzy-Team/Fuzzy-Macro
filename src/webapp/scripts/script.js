@@ -1095,6 +1095,8 @@ function textboxRestriction(ele, evt) {
     if (charCode == 45) {
       return ele.dataset.allowNegative == "1" && ele.selectionStart === 0 && !ele.value.includes("-");
     }
+    //nothing goes in front of the minus sign, or "-2" could become "1-2"
+    if (ele.value.startsWith("-") && ele.selectionStart === 0 && ele.selectionEnd === 0) return false;
     if (charCode == 46) {
       //Check if the text already contains the . character
       if (ele.value.indexOf(".") === -1) {
