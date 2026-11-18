@@ -29,6 +29,8 @@ sprinklerCount = {
 #studs a field dimension covers per millisecond (the dimensions are walk times at 18 studs/s), and studs per tile
 STUDS_PER_MS = 18/1000
 STUDS_PER_TILE = 4
+#the sprinkler offset setting is in flowers
+STUDS_PER_FLOWER = 3.908
 
 #sprinklers can't be placed within 8 tiles of each other unless placed middair. One more tile covers walking error
 MIN_SPRINKLER_GAP = 9
@@ -88,14 +90,17 @@ class GatherMixin:
     #place sprinklers by jumping up and down and placing them middair
     #fieldDimensions and startOffset (right, up tiles from the field center) spread sprinklers that place more than one
     #across the field. Without them, they are all placed where the player stands
-    def placeSprinkler(self, fieldDimensions=None, startOffset=(0, 0)):
+    #sprinklerOffset (right, up tiles) is the field's sprinkler offset, already included in startOffset. It shifts the spread
+    def placeSprinkler(self, fieldDimensions=None, startOffset=(0, 0), sprinklerOffset=(0, 0)):
         sprinklerSlot = str(self.setdat['sprinkler_slot'])
         sprinklerType = str(self.setdat.get("sprinkler_type", "")).strip().lower()
         times = sprinklerCount.get(sprinklerType, 1)
         if is_stopped():
             return False
         if times > 1 and fieldDimensions:
-            return self.placeSprinklersSpread(sprinklerSlot, sprinklerSpots(times, fieldDimensions, startOffset), startOffset)
+            base = (startOffset[0] - sprinklerOffset[0], startOffset[1] - sprinklerOffset[1])
+            spots = [(x + sprinklerOffset[0], y + sprinklerOffset[1]) for x, y in sprinklerSpots(times, fieldDimensions, base)]
+            return self.placeSprinklersSpread(sprinklerSlot, spots, startOffset)
         #place one sprinkler and check if its in field
         self.keyboard.press(sprinklerSlot)
         time.sleep(1)
@@ -355,11 +360,16 @@ class GatherMixin:
                      startRight = fwid
 
                 time.sleep(0.4)
+                #the field's sprinkler offset (flowers right and up from the start location). The sprinkler goes where the player stands,
+                #so drift correction, which keeps the sprinkler on screen center, then holds the offset spot
+                sprinklerOffset = tuple(float(fieldSetting.get(key, 0) or 0)*STUDS_PER_FLOWER/STUDS_PER_TILE for key in ("sprinkler_offset_x", "sprinkler_offset_y"))
+                if not self.walkTiles(*sprinklerOffset):
+                    return
                 #place sprinkler + check if in field. Sprinklers that place more than one are spread across the field
                 if is_stopped():
                     return
-                startTiles = (startRight*STUDS_PER_MS/STUDS_PER_TILE, startUp*STUDS_PER_MS/STUDS_PER_TILE)
-                if self.placeSprinkler(startLocationDimensions[normalized_field], startTiles):
+                startTiles = (startRight*STUDS_PER_MS/STUDS_PER_TILE + sprinklerOffset[0], startUp*STUDS_PER_MS/STUDS_PER_TILE + sprinklerOffset[1])
+                if self.placeSprinkler(startLocationDimensions[normalized_field], startTiles, sprinklerOffset):
                     landedInField = True
                     break
                 if is_stopped():

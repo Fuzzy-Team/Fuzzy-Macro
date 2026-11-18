@@ -150,7 +150,7 @@ function buildInput(id, type) {
     let html = `<input type="text" id="${id}" style="width: ${type.length ? type.length : 10
       }rem; margin-top: 0.6rem;" class="poppins-regular textbox" data-input-type="${type.inputType
       }" data-input-limit="${type.inputLimit ? type.inputLimit : 0
-      }" onkeypress="return textboxRestriction(this, event)" onchange="${type.triggerFunction
+      }"${type.allowNegative ? ' data-allow-negative="1"' : ""} onkeypress="return textboxRestriction(this, event)" onchange="${type.triggerFunction
       }">`;
     return html;
   } else if (type.name == "textbox_with_button") {

@@ -267,6 +267,30 @@
               triggerFunction: triggerFunction,
             },
           },
+          {
+            id: "sprinkler_offset_x",
+            title: "Sprinkler Offset X",
+            desc: "Flowers to move the sprinkler right of the start location before placing it (negative moves it left). Leave at 0 unless lag makes the sprinkler land off center",
+            type: {
+              name: "textbox",
+              inputType: "float",
+              inputLimit: 6,
+              allowNegative: true,
+              triggerFunction: triggerFunction,
+            },
+          },
+          {
+            id: "sprinkler_offset_y",
+            title: "Sprinkler Offset Y",
+            desc: "Flowers to move the sprinkler up from the start location before placing it (negative moves it down)",
+            type: {
+              name: "textbox",
+              inputType: "float",
+              inputLimit: 6,
+              allowNegative: true,
+              triggerFunction: triggerFunction,
+            },
+          },
         ]
       );
 

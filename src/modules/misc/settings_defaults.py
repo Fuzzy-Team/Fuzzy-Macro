@@ -1659,6 +1659,8 @@ for _field_defaults in DEFAULT_FIELDS.values():
     _field_defaults.setdefault('goo', False)
     _field_defaults.setdefault('goo_interval', 3)
     _field_defaults.setdefault('pine_dupe_detection', 'Pixel')
+    _field_defaults.setdefault('sprinkler_offset_x', 0)
+    _field_defaults.setdefault('sprinkler_offset_y', 0)
 del _field_defaults
 
 DEFAULT_FUZZY_AI_TOKEN_RANKINGS = {'sunflower': {'preferred_tokens': 'Token Link,Focus,Melody,Blue Boost,Honey Mark Station,Honey Mark Token,Pollen Mark '
