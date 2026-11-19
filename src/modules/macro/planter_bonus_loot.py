@@ -203,26 +203,34 @@ def choosePicks(setdat, allowedPlanters, disallowedFields, numberToPlant, nectar
         others += [(p, f, [f]) for p, f, key, _ in WAXES if free(p, f, key)]
     if setdat.get("planter_bonus_loot"):
         others += [(p, f, [f]) for p, f, key, _ in SINGLES if free(p, f, key)]
-    if not others:
-        for p, fields, name, _ in chains:
-            if counter(state, name) == 0 and canFinish(p, fields) and free(p, fields[0], name + "_datetime"):
-                others.append((p, fields[0], fields))
+    chainStarts = [
+        (p, fields[0], fields) for p, fields, name, _ in chains
+        if counter(state, name) == 0 and canFinish(p, fields) and free(p, fields[0], name + "_datetime")
+    ]
 
     takenPlanters, takenFields = set(), set()
+    remainingNectarHours = dict(nectarHours)
 
     def take(p, f):
         picks.append((p, f))
         takenPlanters.add(p)
         takenFields.add(f)
+        multiplier, growth = GROWTH[(p, f)]
+        nectar = FIELD_NECTAR[f]
+        remainingNectarHours[nectar] = min(
+            NECTAR_FULL_HOURS, remainingNectarHours.get(nectar, 0) + growth * multiplier
+        )
 
     for p, f in candidates:
         if len(picks) == numberToPlant:
             break
         if p not in takenPlanters and f not in takenFields:
             take(p, f)
-    if len(picks) < numberToPlant:
-        others = [row for row in others if row[0] not in takenPlanters and row[1] not in takenFields]
-        for p, f in orderPicks(setdat, others, nectarHours, degradationHours):
+    for tier in (others, chainStarts):
+        if len(picks) == numberToPlant:
+            break
+        tier = [row for row in tier if row[0] not in takenPlanters and row[1] not in takenFields]
+        for p, f in orderPicks(setdat, tier, remainingNectarHours, degradationHours):
             if len(picks) == numberToPlant:
                 break
             if p not in takenPlanters and f not in takenFields:
