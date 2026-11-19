@@ -311,6 +311,22 @@ def locateTransparentImageOnScreen(target, x,y,w,h, threshold = 0):
     screen = mssScreenshotNP(x,y,w,h)
     return locateTransparentImage(target, screen, threshold)
 
+def locateMaskedImage(template, screen, scales, maxDiff):
+    """Best match of a BGRA template in a BGR screen, comparing only the template's opaque pixels so the
+    background behind it doesn't matter. Tries each scale and returns (x, y, w, h), or None when the
+    best normalised difference is above maxDiff (0 is identical)."""
+    best = None
+    for scale in scales:
+        resized = cv2.resize(template, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+        h, w = resized.shape[:2]
+        if h > screen.shape[0] or w > screen.shape[1]:
+            continue
+        mask = cv2.merge([(resized[:, :, 3] > 200).astype(np.uint8) * 255] * 3)
+        diff, _, loc, _ = cv2.minMaxLoc(cv2.matchTemplate(screen, resized[:, :, :3], cv2.TM_SQDIFF_NORMED, mask=mask))
+        if diff <= maxDiff and (best is None or diff < best[0]):
+            best = (diff, loc[0], loc[1], w, h)
+    return best[1:] if best else None
+
 
 def findColorObjectRGB(img, rgbTarget, variance=0, kernel=None, mode="point", best=1, draw=False):
     """

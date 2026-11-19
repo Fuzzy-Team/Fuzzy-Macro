@@ -2,6 +2,9 @@ const reportBuffAssetPath = "/hourly-report-assets/";
 
 window.hourlyReportUptimeBuffOptions = [
   { label: "Boost", value: "boost", image: `${reportBuffAssetPath}boost_buff.png` },
+  { label: "Pine Tree Boost", value: "pine_tree_boost", image: `${reportBuffAssetPath}pine_tree_boost_buff.png` },
+  { label: "Bamboo Boost", value: "bamboo_boost", image: `${reportBuffAssetPath}bamboo_boost_buff.png` },
+  { label: "Blue Flower Boost", value: "blue_flower_boost", image: `${reportBuffAssetPath}blue_flower_boost_buff.png` },
   { label: "Haste", value: "haste", image: `${reportBuffAssetPath}haste_buff.png` },
   { label: "Focus", value: "focus", image: `${reportBuffAssetPath}focus_buff.png` },
   { label: "Bomb Combo", value: "bomb_combo", image: `${reportBuffAssetPath}bomb_combo_buff.png` },

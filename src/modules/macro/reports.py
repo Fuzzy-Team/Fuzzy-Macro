@@ -1,13 +1,25 @@
 import cv2
 import traceback
 from datetime import datetime
+from functools import lru_cache
 import modules.logging.log as logModule
 import modules.misc.settingsManager as settingsManager
 import modules.screen.ocr as ocr
 from modules.controls.sleep import pause_aware_time as time
+from modules.screen.imageSearch import captureRegionBGR, locateMaskedImage
 from modules.screen.screenshot import mssScreenshot
-from modules.reports.buffs import BUFF_RENDER_CONFIG
+from modules.macro.events import BUFF_BAND_HEIGHT
+from modules.reports.buffs import BUFF_RENDER_CONFIG, FIELD_BOOST_BUFFS
 from modules.reports.live_gather import LiveGatherReport, LiveQuestProgressReport
+
+# The 70px field icons are about 38px on the buff bar. In a real buff bar the Pine Tree tile scored 0.03 against its icon, the other two icons scored 0.12 or more.
+FIELD_BOOST_ICON_SCALES = (0.5, 0.55, 0.6)
+FIELD_BOOST_ICON_MAX_DIFF = 0.06
+
+
+@lru_cache(maxsize=None)
+def fieldBoostIcon(key):
+    return cv2.imread(f"hourly_report/assets/{BUFF_RENDER_CONFIG[key][3]}.png", cv2.IMREAD_UNCHANGED)
 
 
 class ReportMixin:
@@ -234,6 +246,19 @@ class ReportMixin:
 
                         x -= 40*self.multi
                 
+                # Field boost tiles: find each field's icon in the buff band, then read the stack count on that tile.
+                # A tile with no number is one stack.
+                monitoredFieldBoosts = [key for key in FIELD_BOOST_BUFFS if key in monitoredBuffs]
+                if monitoredFieldBoosts:
+                    band = captureRegionBGR(self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw, BUFF_BAND_HEIGHT)
+                    for key in monitoredFieldBoosts:
+                        tile = locateMaskedImage(fieldBoostIcon(key), band, [s*self.multi for s in FIELD_BOOST_ICON_SCALES], FIELD_BOOST_ICON_MAX_DIFF)
+                        if tile:
+                            x, y, w, h = tile
+                            sampleValues[key] = parseOcrBuffValue(
+                                self.buffDetector.getBuffQuantityFromImgTight(band[y:y+h, max(0, x+w-25*self.multi):x+w])
+                            )
+
                 self.prevSec = currSec
 
                 isGathering = "gather_" in self.status.value
