@@ -111,5 +111,5 @@ Follow our [installation guide](https://fuzzy-team.gitbook.io/fuzzy-macro) to ge
 
 ## Notes
 
-- This Macro supports macOS and Windows. Linux support is not planned.
+- This release supports macOS. Windows support is in development.
 - Fuzzy Macro is built on top of Existance Macro, meaning you can easily transitition to Fuzzy Macro. The settings and config works the same, think of Fuzzy Macro as a continuation project of Existance Macro.
