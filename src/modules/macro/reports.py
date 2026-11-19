@@ -106,7 +106,10 @@ class ReportMixin:
                             self.logger.webhook("Item Monitor Error", traceback.format_exc(), "red", ping_category="ping_critical_errors")
 
                     #add to history
-                    history = settingsManager.loadUserLiteral("hourly_report_history.txt")
+                    try:
+                        history = settingsManager.loadUserLiteral("hourly_report_history.txt")
+                    except (SyntaxError, ValueError):
+                        history = []
                     if not isinstance(history, list):
                         history = []
 
