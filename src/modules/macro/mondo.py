@@ -138,13 +138,13 @@ class MondoMixin:
                         offsetX, offsetY = AIM[202]
                     elif loops in AIM:
                         offsetX, offsetY = AIM[loops]
-                        if loops == 202:
-                            loops = 0
                     self.mondoGoTo(*bar, offsetX, offsetY)
                 else:
                     misses += 1
                     keys = {1: ("a", "s"), 2: ("s", "d"), 3: ("d", "w"), 0: ("w", "a")}[misses % 4]
                     self.keyboard.multiWalk(keys, misses, False)
+                if loops >= 202:
+                    loops = 0
                 if misses % 4 == 0 and now.minute + now.second / 60 < 0.1:
                     misses = 0      # the hour has just started and mondo has not spawned yet
             return "stopped"
