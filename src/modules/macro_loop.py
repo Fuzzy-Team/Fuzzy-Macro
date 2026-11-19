@@ -776,16 +776,21 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                 blender = loadBlenderData()
                 if blender["collectTime"] > -1 and time.time() > blender["collectTime"]:
                     return True
-            elif (task == "planters" and mode == "normal" and macro.setdat.get("planters_mode", 0)
-                    and MAX_TASK_FAILURES not in taskFailures.values()):
-                # A capped planter task stays skipped until a gather ends, so it must not cut the gather short
+            elif task == "planters" and mode == "normal" and macro.setdat.get("planters_mode", 0):
+                # Only skip the capped planter; other due planters may still cut the gather short
                 if macro.setdat["planters_mode"] == 1:
                     try:
                         planters = normalizeManualPlanterData(settingsManager.loadUserLiteral("manualplanters.txt"))
                     except Exception:
                         planters = emptyManualPlanterData()
-                    if any(planter and time.time() > harvest for planter, harvest
-                           in zip(planters["planters"], planters["harvestTimes"])):
+                    if any(
+                        planter
+                        and time.time() > harvest
+                        and taskFailures.get(("collectPlanter", (planter, field)), 0) < MAX_TASK_FAILURES
+                        for planter, field, harvest in zip(
+                            planters["planters"], planters["fields"], planters["harvestTimes"]
+                        )
+                    ):
                         return True
                 else:
                     try:
@@ -799,6 +804,9 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                         isinstance(planter, dict)
                         and planter.get("planter")
                         and time.time() > planter.get("harvest_time", 0)
+                        and taskFailures.get(
+                            ("collectPlanter", (planter.get("planter"), planter.get("field"))), 0
+                        ) < MAX_TASK_FAILURES
                         for planter in planters
                     ):
                         return True
