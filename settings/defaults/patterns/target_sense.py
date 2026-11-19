@@ -1,6 +1,8 @@
 # target_sense: Precision, Scorching Star and X-Flame boosting. The pattern runs once per
 # gather cycle with its state in globals. Each cycle checks the buffs; a search thread looks
 # for targets on every frame, and the walk turns toward the newest one as soon as it is seen.
+# With no target on screen a cycle is one pass of the token octagons, which every few octagons
+# give way to a goo-spreading diamond (or to standing at the sprinkler while its timer runs).
 # The decision table, timers, colours and X-Flame spin follow the original pattern.
 # Timer lengths come from Windows timing and are unverified on macOS.
 import math
@@ -32,6 +34,21 @@ X_FLAME_COOLDOWN = 20
 NEW_X_FLAME_SECONDS = 3     # The original used 5.2 with Flame Fuel; that icon is not in the reference, so never
 BAG_FULL_SECONDS = 10
 TARGETS_GRACE_SECONDS = 8 / 60   # The original used 8 frames, and a timer of 8 / max framerate (default 60)
+
+# Lengths are in tiles, times in seconds. A token link restarts the octagon timer and makes the
+# 3rd and 7th octagons count; the goo diamond timer starts when the diamond does.
+GOO_SPREAD_LENGTH = 3.0
+TOKEN_FREQUENCY = 3.0
+SPREAD_GOO_FREQUENCY = 3.0
+TOKEN_LINK_SECONDS = 5          # a link message seen again inside this time is the same link
+TOKEN_LINK_NEW_ROW = 25         # unless it sits this many px below the last one
+OCTAGONS_BEFORE_GOO = 4
+TOKEN_DIAMETERS = (5.92, 2.96, 8.87, 11.83, 6.28, 3.33, 9.24, 12.2)
+# Screen-direction keys in a circle, and the point of each heading on an octagon of diameter 1
+# (x right, y down). The goo diamond uses every second heading, starting at the second.
+HEADINGS = (("D",), ("S", "D"), ("S",), ("A", "S"), ("A",), ("W", "A"), ("W",), ("W", "D"))
+CORNERS = ((0, -.5), (.354, -.354), (.5, 0), (.354, .354), (0, .5), (-.354, .354), (-.5, 0),
+           (-.354, -.354))
 
 # A cycle chasing targets ends after this long, so the gather can check its time limit and
 # backpack and the buffs are read again.
@@ -101,10 +118,14 @@ def target_priority():
         return "hits!o"
     if timer_running("get_hit"):
         return "marks"
+    restart_hit_cycle()
+    return "marks"
+
+
+def restart_hit_cycle():
     no_hits = self.setdat["target_sense_no_hits_until"]
     start_timer("no_hit", no_hits)
     start_timer("get_hit", no_hits + self.setdat["target_sense_hits_until"])
-    return "marks"
 
 
 def nearest(points, centre):
@@ -237,6 +258,12 @@ def find_targets(shot, search_all, fog, scorching):
 
 def sprinkler_colour_index(shot, yaw, beesmas, limit=3):
     """The first sprinkler colour (up to index limit) found on screen, or None."""
+    return sprinkler_hit(shot, yaw, beesmas, limit)[0]
+
+
+def sprinkler_hit(shot, yaw, beesmas, limit=3):
+    """(colour index, (x, y)) of the first sprinkler colour (up to index limit) found on
+    screen, or (None, None)."""
     height = shot.shape[0]
     sign = -1 if yaw in (2, 6) else 1   # source: the checks run the other way for yaw 2 and 6
     if beesmas:
@@ -248,10 +275,11 @@ def sprinkler_colour_index(shot, yaw, beesmas, limit=3):
                                             SPRINKLER_BLOB_SAFETIES)
         blob_length = SPRINKLER_BLOB_LENGTH
     for index, colour in enumerate(colours[:limit + 1]):
-        if pixel_search(shot, colour, sign * height * safeties[index], height * blob_length,
-                        height * 0.16, -sign * height * blob_safeties[index]):
-            return index
-    return None
+        point = pixel_search(shot, colour, sign * height * safeties[index], height * blob_length,
+                             height * 0.16, -sign * height * blob_safeties[index])
+        if point:
+            return index, point
+    return None, None
 
 
 def read_fog(shot, yaw, new_shot, beesmas):
@@ -330,9 +358,10 @@ class TargetSense(SensePattern):
                 boost["last_fog"] = seen
             self.start_search()
             if self.found[1]:
+                route["after_target"] = True
                 self.chase()
             else:
-                self.search_step()
+                self.sweep()
             self.hold()
         except SenseStopped:
             self.finish()
@@ -396,6 +425,18 @@ class TargetSense(SensePattern):
             boost["x_flame_ready"] = False
             start_timer("x_flame_cd", X_FLAME_COOLDOWN)
             start_timer("new_x_flame", NEW_X_FLAME_SECONDS)
+
+        # A new Token Link message restarts the octagon timers and the red hit cycle. The same
+        # message seen again is told apart by its row: a newer one sits lower on screen.
+        link = self.macro.blueTextImageSearch("tokenlink", 0.8)
+        if link:
+            row = link[1][1] / self.macro.robloxWindow.multi
+            if not timer_running("token_link_found") or row > boost["link_row"] + TOKEN_LINK_NEW_ROW:
+                start_timer("token_link_found", TOKEN_LINK_SECONDS)
+                start_timer("token_link_found_recently", TOKEN_FREQUENCY * 1.5)
+                start_timer("recollect_tokens", TOKEN_FREQUENCY)
+                restart_hit_cycle()
+            boost["link_row"] = row
 
         # The original restarts the Precision timer on every look that finds the icon.
         if any(self.icon_visible(path, ICON_THRESHOLD) for path in PRECISION_ICONS):
@@ -493,7 +534,10 @@ class TargetSense(SensePattern):
     def go_to(self, target, avoid, until=None):
         """Short walk: the diagonal and the straight part, in the order the original picks,
         steering around the points to avoid. until() ends it early; returns False when it did."""
-        goal = self.tiles(*target)
+        return self.walk_to(self.tiles(*target), avoid, until)
+
+    def walk_to(self, goal, avoid, until=None):
+        """go_to for a point already in tiles from the player."""
         if abs(goal[0]) < 0.1 and abs(goal[1]) < 0.1:
             return True
         waypoints = [goal]
@@ -522,16 +566,126 @@ class TargetSense(SensePattern):
                     return False
         return True
 
-    def search_step(self):
-        """No target: one leg of Fuzzy's small search loop per cycle, cut short when the search
-        thread sees a target."""
-        steps = ((tcfbkey, 0.45), (tclrkey, 0.12), (afcfbkey, 0.45), (tclrkey, 0.12),
-                 (afcfbkey, 0.45), (afclrkey, 0.12), (tcfbkey, 0.45), (afclrkey, 0.12))
-        key, seconds = steps[boost["search_step"] % len(steps)]
-        boost["search_step"] += 1
+    # --- no target: octagons for tokens, a diamond for goo ---
+
+    def sweep(self):
+        """One pass of the no-target route. Tokens are the default; once enough octagons are
+        done inside the token timer it spreads goo (when its timer allows it) or, if not, goes
+        back to the sprinkler. Each pass walks a corner of the shape or two legs of it."""
+        if route["octagons"] >= OCTAGONS_BEFORE_GOO and timer_running("recollect_tokens"):
+            route["token_active"] = False
+            route["token_pass"] = 0
+            if route["goo_pass"] or not timer_running("respread_goo"):
+                self.spread_goo()
+            else:
+                self.stand_at_sprinkler()
+        else:
+            route["goo_active"] = False
+            route["goo_pass"] = 0
+            self.collect_tokens()
+
+    def sprinkler_point(self):
+        """The sprinkler's position on screen, or None. A miss lets go of the keys."""
+        for _ in range(2):
+            point = sprinkler_hit(self.screenshot(), self.yaw, self.macro.beesmas)[1]
+            if point:
+                return point
         self.hold()
-        self.idle()
-        self.macro.keyboard.walk(key, seconds, until=lambda: self.found[1] is not None)
+        return None
+
+    def walk_from_sprinkler(self, point, offset, avoid):
+        """Walk to the spot offset (tiles) from the sprinkler seen at point."""
+        goal = self.tiles(*point)
+        self.walk_to((goal[0] + offset[0], goal[1] + offset[1]), avoid)
+
+    def legs(self, first, second, tiles):
+        """Two straight legs; a target seen after the first skips the second."""
+        self.hold(*first)
+        self.walk(tiles)
+        if self.found[1] is None:
+            self.hold(*second)
+            self.walk(tiles)
+
+    def stand_at_sprinkler(self):
+        route["goo_active"] = False
+        route["goo_pass"] = 0
+        route["after_target"] = False
+        point = self.sprinkler_point()
+        if point:
+            self.walk_from_sprinkler(point, (0, 0), [])
+
+    def spread_goo(self):
+        """One pass of the goo diamond. Every fourth pass (and the first one after chasing a
+        target) goes to the next corner of the diamond around the sprinkler instead of walking
+        two of its edges. Without a sprinkler in sight it walks the edges from where it is."""
+        if not route["goo_active"]:
+            start_timer("respread_goo", SPREAD_GOO_FREQUENCY)
+        if route["goo_pass"] == 4:
+            route["goo_pass"] = 0
+        found = None
+        if route["after_target"] or not route["goo_pass"]:
+            route["after_target"] = False
+            found = self.sprinkler_point()
+            corner = CORNERS[route["goo_heading"] * 2 + 1]
+            offset = (GOO_SPREAD_LENGTH * corner[0], GOO_SPREAD_LENGTH * corner[1])
+            route["goo_heading"] = (route["goo_heading"] + 1) % 4
+            if found:
+                self.walk_from_sprinkler(found, offset, self.found[2])
+            elif not route["goo_active"]:
+                self.walk_to(offset, [])
+        if route["goo_pass"] or not found:
+            heading = route["goo_heading"] * 2 + 1
+            route["goo_heading"] = (route["goo_heading"] + 1) % 4
+            self.legs(HEADINGS[heading], HEADINGS[(heading + 2) % 8], GOO_SPREAD_LENGTH * 0.5)
+        route["goo_active"] = True
+        route["goo_pass"] += 1
+
+    def collect_tokens(self):
+        """One pass of a token octagon. The first pass of each octagon picks its size and goes
+        to its next corner around the sprinkler; the other seven walk two edges each."""
+        if not route["token_active"]:
+            start_timer("recollect_tokens", TOKEN_FREQUENCY)
+            route["octagons"] = 0
+        if route["token_pass"] == 8:
+            route["token_pass"] = 0
+        if route["token_pass"] == 0:
+            route["last_diameter"] = route["diameter"]
+            route["diameter"] += 1
+            route["octagons"] += 1
+            linked = timer_running("token_link_found_recently")
+            if route["diameter"] == 3 and not linked:
+                route["diameter"] = 4
+                route["octagons"] += 1
+            if route["diameter"] == 7 and not linked:
+                route["diameter"] = 0
+                route["octagons"] += 1
+            if route["diameter"] == 8:
+                route["diameter"] = 0
+        found = None
+        if route["after_target"] or not route["token_pass"]:
+            route["after_target"] = False
+            found = self.sprinkler_point()
+            diameter = TOKEN_DIAMETERS[route["diameter"]]
+            if found:
+                route["token_heading"] = (route["token_heading"] + 1) % 8
+                corner = CORNERS[route["token_heading"]]
+                route["token_x"], route["token_y"] = corner[0] * diameter, corner[1] * diameter
+                self.walk_from_sprinkler(found, (route["token_x"], route["token_y"]), self.found[2])
+            elif not route["token_active"]:
+                self.walk_to((route["token_x"], route["token_y"]), self.found[2])
+            else:
+                # no sprinkler: move by what the corner changes by when the size changes
+                corner = CORNERS[route["token_heading"]]
+                last = TOKEN_DIAMETERS[route["last_diameter"]]
+                route["token_heading"] = (route["token_heading"] + 1) % 8
+                self.walk_to((route["token_x"] - corner[0] * last, route["token_y"] - corner[1] * last), [])
+        if route["token_pass"] or not found:
+            heading = route["token_heading"]
+            route["token_heading"] = (heading + 1) % 8
+            self.legs(HEADINGS[heading], HEADINGS[(heading + 1) % 8],
+                      TOKEN_DIAMETERS[route["diameter"]] * 0.202)
+        route["token_active"] = True
+        route["token_pass"] += 1
 
     def x_flame(self):
         """X-Flame move: the camera turns left eight times (one full circle) in
@@ -565,7 +719,15 @@ class TargetSense(SensePattern):
 if "boost" not in globals():
     boost = {"timers": {}, "bag_timer_started": False, "scorching_ready": True,
              "x_flame_ready": True, "x_flame_window": None, "fog": 0, "last_fog": 0,
-             "targets_until": 0, "hit_wait_started": False, "search_step": 0}
+             "targets_until": 0, "hit_wait_started": False, "link_row": 0}
+if "route" not in globals():
+    # The route's state. A pass count of 0 is the pass that goes to the sprinkler; "heading"
+    # is the corner of the shape the next pass uses. The first octagon offset is (1, 1) until
+    # a sprinkler sets it.
+    route = {"goo_heading": 0, "goo_pass": 0, "goo_active": False,
+             "token_heading": 0, "token_pass": 0, "token_active": False,
+             "diameter": 0, "last_diameter": 0, "octagons": 0, "token_x": 1, "token_y": 1,
+             "after_target": False}
 
 yaw = field_yaws.get(str(field).replace("_", " ").lower(), 0)
 setPatternYaw(yaw)
