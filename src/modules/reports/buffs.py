@@ -59,13 +59,9 @@ BUFF_RENDER_CONFIG = {
 }
 
 
-# Uptime rows that split the blue field boost tiles by field. Each row reads the same stack count as the
-# "boost" row, for the tile whose icon matches the field (row key -> field name in BUFF_BAR_BOOST_FIELDS).
-FIELD_BOOST_BUFFS = {
-    "pine_tree_boost": "pine tree",
-    "bamboo_boost": "bamboo",
-    "blue_flower_boost": "blue flower",
-}
+# Uptime rows for the per-field boost tiles on the buff bar. Each is found by its field icon (the row's asset)
+# and charts the stack count shown on that tile.
+FIELD_BOOST_BUFFS = ("pine_tree_boost", "bamboo_boost", "blue_flower_boost")
 
 
 # Asset names for hourly snapshot buffs (point-in-time, shown in sidebar grid)
