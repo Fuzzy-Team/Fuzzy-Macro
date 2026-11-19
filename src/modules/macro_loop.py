@@ -345,7 +345,8 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                 processPlanterCommandQueue()
                 return None
             if action == INTERRUPT_STICKER_SPROUT:
-                return runTask(macro.collectStickerSprout, resetAfter=False)
+                runTask(macro.collectStickerSprout, resetAfter=False)
+                return None
             if action == INTERRUPT_AFB_REROLL:
                 macro.AFBLIMIT = False
                 macro.AFBglitter = False
