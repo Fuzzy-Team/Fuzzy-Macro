@@ -427,13 +427,17 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                 macro.closeQuestMenu()
                 macro.collectMondoBuff()
                 taskCompleted = True
+            #hopped to find mondos and none is left this hour: go back to the private server
+            if not is_stopped() and macro.mondoHopped and not macro.hasMondoRespawned():
+                macro.mondoHopReturn()
+                taskCompleted = True
             if not is_stopped() and macro.stumpTapDue():
                 macro.closeQuestMenu()
                 macro.tapField("stump")
                 if not is_stopped():
                     macro.reset(convert=True)
                 taskCompleted = True
-            if not is_stopped() and macro.setdat.get("macro_mode", "normal") not in ("alt", "vic") and macro.hasScheduledRejoinArrived():
+            if not is_stopped() and macro.setdat.get("macro_mode", "normal") not in ("alt", "vic") and not macro.mondoHopped and macro.hasScheduledRejoinArrived():
                 if macro.rejoin("Rejoining (Scheduled)"):
                     macro.saveTiming("rejoin_every")
                 taskCompleted = True

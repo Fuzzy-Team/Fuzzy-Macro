@@ -273,6 +273,7 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'honey_bee_quest': False,
  'coconut_dispenser': False,
  'mondo_buff_loot': True,
+ 'mondo_buff_hop': False,
  'mondo_collect_token': False,
  'mondo_loot_times': 1,
  'honeystorm': False,

@@ -1,6 +1,6 @@
 import threading
 import traceback
-from datetime import datetime
+from datetime import datetime, timedelta
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
 from modules.controls.sleep import InterruptRequested, is_paused, is_stopped, pause_aware_time as time, paused_seconds, sleep, wait_while_paused
@@ -14,7 +14,18 @@ from modules.macro.game_data import (
 from modules.screen.imageSearch import locateImageOnScreen
 
 
+#hopping stops starting new mondos at this minute of the hour
+MONDO_HOP_UNTIL = 14.75
+
+
 class MobMixin:
+    mondoHopped = False
+
+    def isMondoHopOn(self):
+        return bool(self.setdat.get("mondo_buff_hop") and self.setdat["mondo_buff_loot"]
+                    and not self.setdat["mondo_buff_damage"]
+                    and self.setdat.get("macro_mode", "normal") not in ("quest", "alt", "vic"))
+
     def isMondoPrepWindow(self):
         #the last "mondo_prep_time" seconds before the hour, when mondo is about to spawn
         now = datetime.now()
@@ -24,9 +35,33 @@ class MobMixin:
     def hasMondoRespawned(self):
         #check if mondo can be collected (prep window before the hour, then the first 10mins)
         minute = self.getCurrentMinute()
+        if self.isMondoHopOn():
+            #hopping keeps looking for mondos until MONDO_HOP_UNTIL, and a mondo that was just done doesn't block the next server
+            now = datetime.now()
+            return (now.minute + now.second/60 < MONDO_HOP_UNTIL or self.isMondoPrepWindow()) and self.hasRespawned("mondo", 20*60)
         #set respawn time to 20mins
         #mostly just to prevent the macro from going to mondo over and over again for the 10mins
         return (minute <= 10 or self.isMondoPrepWindow()) and self.hasRespawned("mondo", 20*60)
+
+    #join a new public server and stay in it until the next mondo is done
+    def mondoHop(self):
+        self.mondoHopped = True
+        servers = 0
+        while not is_stopped():
+            now = datetime.now()
+            if now.minute + now.second/60 >= MONDO_HOP_UNTIL:
+                return False    #too late; the main loop takes us back to the private server
+            servers += 1
+            if self.rejoin(rejoinMsg=f"Mondo hop: joining a new public server ({servers})", usePrivateServer=False, keepOpen=True):
+                return True
+        return False
+
+    #after the last hopped mondo, go back to the private server (if there is one; otherwise stay where we are)
+    def mondoHopReturn(self):
+        self.mondoHopped = False
+        if self.setdat.get("macro_mode", "normal") == "vic" or not self._getRejoinServerLinks(True):
+            return False
+        return self.rejoin(rejoinMsg="Mondo hop: over, going back to the private server")
 
     def collectMondoBuff(self, gatherInterrupt = False):
         self.set_task_status("mondo_buff", activity="mondo")
@@ -51,101 +86,98 @@ class MobMixin:
             return False
         if self.setdat["mondo_buff_damage"]:
             mondo_buff_wait = self.setdat["mondo_buff_wait"]
-            end_time = time.perf_counter() + mondo_buff_wait * 60
             self.logger.webhook("", f"Damaging Mondo for {mondo_buff_wait:g} minutes", "yellow")
             self.enableShiftLock()
-            while time.perf_counter() < end_time and self.getCurrentMinute() < 15 and not is_stopped():
-                screen = self.blueTextScreen()
-                if self.blueTextImageSearch("defeated", screen=screen) and self.blueTextImageSearch("mondo", screen=screen):
-                    break
-                if self.setdat["mondo_collect_token"]:
-                    self.keyboard.walk("a", 0.45)
-                    for slowmove in range(9):
-                        self.keyboard.walk("d", 0.048, False)
-                        time.sleep(0.035)
-                mouse.click()
-                time.sleep(1.5)
+            result = self.mondoFight(datetime.now() + timedelta(minutes=mondo_buff_wait))
             if is_stopped():
                 self.clear_task_status()
                 return False
             self.saveTiming("mondo")
-            self.logger.webhook("","Collected: Mondo Buff","light green", ping_category="ping_mondo_buff")
+            if result == "died":
+                self.died = True
+                self.logger.webhook("", "Player Died", "red", "screen", ping_category="ping_character_deaths")
+            elif self.mondoSeen:
+                self.logger.webhook("","Collected: Mondo Buff","light green", ping_category="ping_mondo_buff")
+            else:
+                self.logger.webhook("", "Mondo: the mondo was never found", "red", "screen")
         elif self.setdat["mondo_buff_loot"]: # If looting is enabled, wait until mondo is defeated
             self.logger.webhook("", "Waiting for Mondo to be defeated", "light green")
             self.enableShiftLock() #moves slightly up (or down) when hitting wall, so this reduces that
-            while not is_stopped():
-                screen = self.blueTextScreen()
-                #defeat
-                if self.blueTextImageSearch("defeated", screen=screen) and self.blueTextImageSearch("mondo", screen=screen):
-                    self.saveTiming("mondo") 
-                    break
-                #died
-                if self.blueTextImageSearch("died", screen=screen):
-                    self.died = True
-                    self.keyboard.press("shift")
-                    self.logger.webhook("", "Player Died", "red", "screen", ping_category="ping_character_deaths")
-                    self.reset(convert=False)
-                    if is_stopped():
-                        self.clear_task_status()
-                        return
-                    #sev recursion here is pretty weird
-                    #TODO: not make it recursive
-                    self.collectMondoBuff()
+            result = self.mondoFight()
+            if result == "died":
+                self.died = True
+                self.keyboard.press("shift")
+                self.logger.webhook("", "Player Died", "red", "screen", ping_category="ping_character_deaths")
+                self.reset(convert=False)
+                if is_stopped():
+                    self.clear_task_status()
                     return
-                #time limit
-                if self.getCurrentMinute() >= 15: #mondo despawns after 15 minutes if not defeated in time
-                    self.keyboard.walk("s",1, False)
-                    self.keyboard.press(",")
-                    time.sleep(0.5)
-                    self.logger.webhook("", "Time Limit (15 minutes)\n Mondo may have despawned. Resetting", "light green", "screen")
-                    self.keyboard.press("shift")
-                    self.saveTiming("mondo") 
-                    self.reset(convert=True)
-                    return False
-                #collect tokens by bees
-                if self.setdat["mondo_collect_token"]: 
-                    self.keyboard.walk("a", 0.45)
-                    for slowmove in range(9):
-                        self.keyboard.walk("d", 0.048, False) #move JUST EVER SO SLIGHTLY, maybe bumps in to wall less
-                        time.sleep(0.035)
-                mouse.click()
-                time.sleep(1.5)
-
+                #sev recursion here is pretty weird
+                #TODO: not make it recursive
+                self.collectMondoBuff()
+                return
+            if result == "time": #mondo despawns after 15 minutes if not defeated in time
+                self.keyboard.walk("s",1, False)
+                self.keyboard.press(",")
+                time.sleep(0.5)
+                self.logger.webhook("", "Time Limit (15 minutes)\n Mondo may have despawned. Resetting", "light green", "screen")
+                self.keyboard.press("shift")
+                self.saveTiming("mondo")
+                self.reset(convert=True)
+                return False
             if is_stopped():
                 self.clear_task_status()
                 return False
-            #loot
-            mondo_loot_times = self.setdat["mondo_loot_times"] #how many loops based on what the user inputted
-            time.sleep(0.1)
-            self.keyboard.walk("d",1,False)
-            time.sleep(0.1)
-            self.keyboard.press("shift")
-            self.keyboard.walk("s",3.15,False)
-            self.logger.webhook("", "Looting: Mondo Chick", "yellow", "screen")
-            if mondo_loot_times == 1:
-                self.logger.webhook("", "Looping 1 time", "light green")
+            if result == "defeated":
+                if not self.isMondoHopOn():
+                    self.saveTiming("mondo")
+                #loot
+                mondo_loot_times = self.setdat["mondo_loot_times"] #how many loops based on what the user inputted
+                time.sleep(0.1)
+                self.keyboard.walk("d",1,False)
+                time.sleep(0.1)
+                self.keyboard.press("shift")
+                self.keyboard.walk("s",3.15,False)
+                self.logger.webhook("", "Looting: Mondo Chick", "yellow", "screen")
+                if mondo_loot_times == 1:
+                    self.logger.webhook("", "Looping 1 time", "light green")
+                else:
+                    self.logger.webhook("", f"Looping {mondo_loot_times} times", "light green")
+                self.keyboard.walk("a",3.55)
+                for loops in range(mondo_loot_times):
+                    if is_stopped():
+                        break
+                    for looting in range(6):
+                        if is_stopped():
+                            break
+                        self.keyboard.walk("w",0.20)
+                        self.keyboard.walk("d",2.65)
+                        self.keyboard.walk("w",0.20)
+                        self.keyboard.walk("a",2.65)
+                    if is_stopped():
+                        break
+                    for looting in range(6):
+                        if is_stopped():
+                            break
+                        self.keyboard.walk("s",0.20)
+                        self.keyboard.walk("d",2.65)
+                        self.keyboard.walk("s",0.20)
+                        self.keyboard.walk("a",2.65)
             else:
-                self.logger.webhook("", f"Looping {mondo_loot_times} times", "light green")
-            self.keyboard.walk("a",3.55)
-            for loops in range(mondo_loot_times): 
-                if is_stopped():
-                    break
-                for looting in range(6):
-                    if is_stopped():
-                        break
-                    self.keyboard.walk("w",0.20)
-                    self.keyboard.walk("d",2.65)
-                    self.keyboard.walk("w",0.20)
-                    self.keyboard.walk("a",2.65)
-                if is_stopped():
-                    break
-                for looting in range(6):
-                    if is_stopped():
-                        break
-                    self.keyboard.walk("s",0.20)
-                    self.keyboard.walk("d",2.65)
-                    self.keyboard.walk("s",0.20)
-                    self.keyboard.walk("a",2.65)
+                self.logger.webhook("", "Mondo: the fight ended without a confirmed defeat, skipping the loot", "red", "screen")
+                if not self.isMondoHopOn():
+                    self.saveTiming("mondo")
+            if self.isMondoHopOn() and not is_stopped():
+                now = datetime.now()
+                if now.minute + now.second/60 < MONDO_HOP_UNTIL:
+                    self.logger.webhook("", "Mondo hop: this mondo is done, hopping to another server", "light blue")
+                    self.clear_task_status()
+                    return self.mondoHop()
+                #too late for another mondo this hour
+                self.saveTiming("mondo")
+                if self.mondoHopped and self._getRejoinServerLinks(True):
+                    self.clear_task_status()
+                    return self.mondoHopReturn()
         else: #if loot off, just idle
             mondo_buff_wait = self.setdat["mondo_buff_wait"]
             mondo_buff_wait_label = f"{mondo_buff_wait:g}" if isinstance(mondo_buff_wait, float) else str(mondo_buff_wait)
