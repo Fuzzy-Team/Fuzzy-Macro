@@ -61,6 +61,7 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'stinger_rose': True,
  'stinger_mountain_top': True,
  'stinger_pepper': True,
+ 'mob_target_sense': False,
  'coconut_crab': False,
  'king_beetle': False,
  'tunnel_bear': False,
