@@ -179,7 +179,7 @@ class RejoinMixin:
         text = " ".join(result[1][0] for result in ocr.ocrRead(dialog))
         return self._joinErrorFromText(text)
 
-    def rejoin(self, rejoinMsg = "Rejoining", placeId = MAIN_GAME_PLACE_ID, claimHive = True, usePrivateServer = True, nightOnly = False, keepOpen = False):
+    def rejoin(self, rejoinMsg = "Rejoining", placeId = MAIN_GAME_PLACE_ID, claimHive = True, usePrivateServer = True, nightOnly = False, keepOpen = False, allowPublicFallback = True):
         if self.skipServer is not None:
             self.skipServer.value = 0
         self.canDetectNight = False
@@ -224,7 +224,8 @@ class RejoinMixin:
         except (TypeError, ValueError):
             privateAttempts = 5
         attempts = [server for server in privateServerLinks for _ in range(privateAttempts)]
-        attempts.extend([("public", "")] * (5 if privateServerLinks else 10))
+        if allowPublicFallback or not privateServerLinks:
+            attempts.extend([("public", "")] * (5 if privateServerLinks else 10))
         firstPublicAttempt = len(privateServerLinks) * privateAttempts
         invalidServerLinks = set()
         launchedAttempts = 0

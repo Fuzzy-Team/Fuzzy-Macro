@@ -58,10 +58,14 @@ class MobMixin:
 
     #after the last hopped mondo, go back to the private server (if there is one; otherwise stay where we are)
     def mondoHopReturn(self):
-        self.mondoHopped = False
         if self.setdat.get("macro_mode", "normal") == "vic" or not self._getRejoinServerLinks(True):
+            self.mondoHopped = False
             return False
-        return self.rejoin(rejoinMsg="Mondo hop: over, going back to the private server")
+        # Keep the hop state on a failed return, so the main loop retries it (macro_loop.py:431).
+        if not self.rejoin(rejoinMsg="Mondo hop: over, going back to the private server", allowPublicFallback=False):
+            return False
+        self.mondoHopped = False
+        return True
 
     def collectMondoBuff(self, gatherInterrupt = False):
         self.set_task_status("mondo_buff", activity="mondo")
