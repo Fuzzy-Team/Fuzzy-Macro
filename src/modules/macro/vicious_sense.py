@@ -423,9 +423,11 @@ class SenseFight:
         found = None
         for attempt in range(2):
             frame = macro.mondoFrame()
-            bar, red = macro.mondoHealthBar(frame, time.monotonic() < self.greenUntil)
-            if red:
-                self.greenUntil = 0
+            bar = macro.mondoHealthBar(frame, False)
+            if bar:
+                self.greenUntil = 0     # red is showing: green is no longer looked for
+            elif time.monotonic() < self.greenUntil:
+                bar = macro.mondoHealthBar(frame, True)
             if bar:
                 h = frame.shape[0]
                 found = (bar[0], bar[1] + 0.01 * h)

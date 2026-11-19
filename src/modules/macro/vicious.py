@@ -54,6 +54,11 @@ class ViciousMixin:
                 return False
 
 
+    def viciousFight(self):
+        """The fight in self.viciousField: target sense when it is turned on, else the fixed pattern."""
+        return self.viciousSenseFight() if self.setdat.get("mob_target_sense") else self.viciousKillPattern()
+
+
     def viciousRecordDefeat(self):
         self.hourlyReport.addHourlyStat("vicious_bees", 1)
         self.recordVicStat("defeats")
@@ -162,7 +167,7 @@ class ViciousMixin:
             return False
         if not self.goToField(field, "north"):
             return False
-        result = self.viciousSenseFight() if self.setdat.get("mob_target_sense") else self.viciousKillPattern()
+        result = self.viciousFight()
         self.logger.webhook("Vicious Bee", "Vicious Bee defeated" if result else "Vicious Bee hunt ended without a confirmed defeat", "light green" if result else "orange", "screen", ping_category="ping_vicious_bee")
         return result
 
