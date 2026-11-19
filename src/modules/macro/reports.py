@@ -142,7 +142,7 @@ class ReportMixin:
                     backpack = self.getBackpack()
 
                     self.prevMin = currMin
-                    self.hourlyReport.addHourlyStat("honey_per_min", honey)
+                    self.hourlyReport.addHourlyStat("honey_per_min", honey, save=False)
                     self.hourlyReport.addHourlyStat("backpack_per_min", backpack)
 
             # Item monitor: loot toast detection
