@@ -78,6 +78,7 @@ class ViciousMixin:
                 self.keyboard.releaseMovement()
                 if self.checkIfViciousDied():
                     return "defeated"
+            return None
 
         try:
             while True:
