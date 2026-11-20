@@ -266,7 +266,7 @@ install_pip_package "$packages" || pip_failed
 # no longer used; ocrmac imports matplotlib whenever it is installed, slowing startup
 venv_pip uninstall -y matplotlib html2image httpx ImageHash
 
-"$VENV_PATH/bin/python" << "EOF"
+"$VENV_PATH/bin/python" << "EOF" || exit 1
 
 # install_certifi.py
 #
