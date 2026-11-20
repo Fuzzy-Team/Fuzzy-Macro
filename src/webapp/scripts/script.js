@@ -1116,7 +1116,7 @@ function textboxRestriction(ele, evt) {
 }
 
 // Custom theme colours: each is a hex textbox with a picker beside it. The boxes show the colours of the
-// theme in use and only unlock on Custom, where they show the last custom colours.
+// theme in use, or the last custom colours when Custom is on. Editing one on another theme switches to Custom.
 function showThemeColors() {
   const custom = document.documentElement.dataset.theme === "custom";
   const colors = custom ? readCustomColors() : currentThemeColors();
@@ -1125,7 +1125,6 @@ function showThemeColors() {
     if (!box) return; // the config tab isn't built yet
     const picker = document.querySelector(`[data-color-for="${id}"]`);
     box.value = picker.value = colors[id];
-    box.disabled = picker.disabled = !custom;
     box.setAttribute("aria-invalid", "false");
     box.title = "";
   }
@@ -1142,15 +1141,25 @@ function loadCustomColors(settings) {
 }
 
 // Save a typed colour once it is six hex digits. Until then the last saved colour stays in use.
-function saveCustomColor(box) {
+// On another theme, that theme's colours with this edit become the Custom theme.
+async function saveCustomColor(box) {
   const valid = HEX_COLOR.test(box.value.trim());
   box.setAttribute("aria-invalid", String(!valid));
   box.title = valid ? "" : "Enter six hex digits, like #00FF00";
   if (!valid) return;
   box.value = normalizeHex(box.value);
-  document.querySelector(`[data-color-for="${box.id}"]`).value = box.value;
-  setCustomColors({ ...readCustomColors(), [box.id]: box.value });
-  saveSetting(box, "general");
+  const custom = document.documentElement.dataset.theme === "custom";
+  setCustomColors({ ...(custom ? readCustomColors() : currentThemeColors()), [box.id]: box.value });
+  if (custom) {
+    document.querySelector(`[data-color-for="${box.id}"]`).value = box.value;
+    return saveSetting(box, "general");
+  }
+  const dropdown = document.getElementById("gui_theme");
+  setDropdownValue(dropdown, "Custom");
+  applyTheme(getDropdownValue(dropdown));
+  showThemeColors();
+  await saveSetting(dropdown, "general");
+  for (const id of Object.keys(CUSTOM_THEME_COLORS)) await saveSetting(document.getElementById(id), "general");
 }
 
 function pickCustomColor(picker) {
