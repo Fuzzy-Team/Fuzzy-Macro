@@ -119,6 +119,7 @@ _DEBUG_LOG_TIMES = {}
     RECORD_VIDEO,
     RECORD_VIDEO_FPS,
 )
+LIVE_OVERLAY = agc.coerce_bool(globals().get("pattern_live_overlay"), False)
 MIN_TOKEN_DISTANCE = agc.coerce_float(globals().get("pattern_min_token_distance"), MIN_TOKEN_DISTANCE)
 BLOOM_MODEL_SELECTION = agc.coerce_text(
     globals().get("pattern_blooms_ai_model"),
@@ -168,15 +169,15 @@ def onGatherEnd():
     agc.shutdown_runtime(_runtime_state(), _debug_log)
 
 
+def _bloom_detections(detections):
+    return [detection for detection in detections if LABELS_BLOOMS.get(detection[1]) == BLOOM_LABEL]
+
+
 def _record_debug_frame(runtime, frame, detections, target):
     if not agc.prepare_recording(runtime, frame, "blooms_ai", RECORD_VIDEO, RECORD_VIDEO_FPS, _debug_log):
         return
 
-    bloom_detections = [
-        detection
-        for detection in detections
-        if LABELS_BLOOMS.get(detection[1]) == BLOOM_LABEL
-    ]
+    bloom_detections = _bloom_detections(detections)
     now = time.time()
     petal_detection_age = now - float(runtime.get("latest_petal_detection_time", 0.0))
     petal_detections = runtime.get("latest_petal_detections", [])
@@ -297,6 +298,7 @@ def _scan_tokens_once(runtime):
         postprocess_elapsed, scoring_elapsed, total_elapsed,
     )
     _record_debug_frame(runtime, frame, detections, target)
+    agc.publish_live_overlay(runtime, LIVE_OVERLAY, _bloom_detections(detections), target, LABELS_BLOOMS, IGNORED_TOKENS)
 
     if scan_stale:
         runtime["latest_bloom_candidates"] = []

@@ -156,6 +156,7 @@ TOKEN_MODEL_OPTIONS = {
     RECORD_VIDEO,
     RECORD_VIDEO_FPS,
 )
+LIVE_OVERLAY = agc.coerce_bool(globals().get("pattern_live_overlay"), False)
 CONFIDENCE_THRESHOLD = agc.coerce_float(globals().get("pattern_confidence_threshold"), CONFIDENCE_THRESHOLD)
 IDLE_RETURN_INTERVAL = agc.coerce_float(globals().get("pattern_idle_return_interval"), IDLE_RETURN_INTERVAL)
 NO_TARGET_SWEEP_INTERVAL = agc.coerce_float(
@@ -336,6 +337,7 @@ def _scan_tokens_once(runtime):
         postprocess_elapsed, scoring_elapsed, total_elapsed,
     )
     _record_debug_frame(runtime, full_frame, detections, target)
+    agc.publish_live_overlay(runtime, LIVE_OVERLAY, detections, target, runtime.get("token_labels", LABELS_TOKENS), IGNORED_TOKENS)
 
     now = time.time()
     with agc.scan_lock_for(runtime):
