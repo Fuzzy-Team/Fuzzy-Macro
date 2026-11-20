@@ -1024,13 +1024,14 @@ class CollectiblesMixin:
             return False
         if finalTime is not None:
             if stickerUsed: finalTime += 10
+            finalTime = min(finalTime, 60*60)
             self.logger.webhook("", f"Activated Sticker Stack, Buff Duration: {timedelta(seconds=finalTime)}", "bright green")
         else:
             with open(settingsManager.ensureUserFile("sticker_stack.txt"), "r") as f: #get the cooldown from the prev detection
                 stickerStackCD = int(f.read())
             f.close()
             if stickerStackCD > 15*60: #make sure the time is valid
-                finalTime = stickerStackCD + 10
+                finalTime = min(stickerStackCD + 10, 60*60)
             else:
                 finalTime = 60*60 #default to 1hr
             self.logger.webhook("", f"Activated Sticker Stack, Buff Duration: {timedelta(seconds=finalTime)} (Defaulted to 1hr)", "bright green")
