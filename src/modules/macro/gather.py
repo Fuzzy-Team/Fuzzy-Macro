@@ -269,7 +269,7 @@ class GatherMixin:
 
             fields_enabled = list(self.setdat.get("fields_enabled", []))
             configured_fields = list(self.setdat.get("fields", []))
-            for index, enabled in enumerate(fields_enabled[:5]):
+            for index, enabled in enumerate(fields_enabled):
                 if not enabled or index >= len(configured_fields):
                     continue
                 configured_field = str(configured_fields[index]).replace("_", " ").strip().lower()

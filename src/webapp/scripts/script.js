@@ -147,22 +147,7 @@ async function startUpdate() {
   }
 }
 
-// Ensure sidebar update button always works
 document.addEventListener("DOMContentLoaded", function () {
-  const updateBtn = document.getElementById("update-btn");
-  if (updateBtn) {
-    updateBtn.addEventListener("click", async function (event) {
-      if (!event.currentTarget.classList.contains("active")) {
-        purpleButtonToggle(event.currentTarget, ["Update", "Updating"]);
-        event.currentTarget.disabled = true;
-        window.updateProgress(0, "Starting update");
-        if (window.eel && typeof eel.update === "function") {
-          await eel.update();
-        }
-      }
-    });
-  }
-
   // Check for updates on startup (with a small delay to ensure eel is ready)
   setTimeout(() => {
     checkForUpdatesOnStartup();
@@ -239,9 +224,9 @@ async function loadAllSettings() {
 // Refresh the currently visible tab content after backend-triggered profile swaps
 window.refreshCurrentTabContent = async function () {
   try {
-    const activeSidebarTab = document.querySelector(".sidebar-item.active");
-    const activeMainTab = activeSidebarTab
-      ? activeSidebarTab.id.split("-")[0]
+    const activeNavTab = document.querySelector(".nav-item.active");
+    const activeMainTab = activeNavTab
+      ? activeNavTab.id.split("-")[0]
       : "home";
 
     if (activeMainTab === "home" && typeof loadTasks === "function") {
@@ -265,25 +250,13 @@ window.refreshCurrentTabContent = async function () {
       return true;
     }
 
-    if (activeMainTab === "boost" && typeof switchBoostTab === "function") {
-      const activeBoostTab = document.querySelector(".boost-tab-item.active");
-      if (activeBoostTab) {
-        switchBoostTab(activeBoostTab);
-      } else {
-        const defaultBoostTab = document.getElementById("boost-hotbar");
-        if (defaultBoostTab) switchBoostTab(defaultBoostTab);
-      }
+    if (activeMainTab === "boost" && typeof loadBoost === "function") {
+      await loadBoost();
       return true;
     }
 
-    if (activeMainTab === "kill" && typeof switchKillTab === "function") {
-      const activeKillTab = document.querySelector(".kill-tab-item.active");
-      if (activeKillTab) {
-        switchKillTab(activeKillTab);
-      } else {
-        const defaultKillTab = document.getElementById("kill-settings");
-        if (defaultKillTab) switchKillTab(defaultKillTab);
-      }
+    if (activeMainTab === "kill" && typeof loadKill === "function") {
+      await loadKill();
       return true;
     }
 

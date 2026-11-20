@@ -743,51 +743,6 @@ $("#home-placeholder")
     // Start checking button state every 500ms
     if (!buttonStateInterval) buttonStateInterval = setInterval(checkAndUpdateButtonState, 500);
   }) //load home tab
-  .on("click", "#start-btn", async (event) => {
-    const settings = await loadAllSettings();
-    const pauseKey = settings.pause_keybind || "F2";
-    const stopKey = settings.stop_keybind || "F3";
-    const runState = await eel.getRunState()();
-    const startBtn = document.getElementById("start-btn");
-    const stopBtn = document.getElementById("stop-btn");
-
-    if (runState === 6) {
-      // Paused -> resume
-      await eel.resume()();
-      // Update button state optimistically (show stop button immediately)
-      if (startBtn) startBtn.classList.add("d-none");
-      if (stopBtn) {
-        stopBtn.classList.remove("d-none");
-        stopBtn.disabled = false;
-        stopBtn.textContent = `Stop [${stopKey}]`;
-      }
-    } else {
-      // Stopped -> start
-      const result = await eel.start()();
-      if (result && result.ok === false) {
-        return;
-      }
-      // Update button state optimistically (show stop button immediately)
-      if (startBtn) startBtn.classList.add("d-none");
-      if (stopBtn) {
-        stopBtn.classList.remove("d-none");
-        stopBtn.disabled = false;
-        stopBtn.textContent = `Stop [${stopKey}]`;
-      }
-    }
-  })
-  .on("click", "#stop-btn", async (event) => {
-    //stop button - stops the macro completely
-    const startBtn = document.getElementById("start-btn");
-    const stopBtn = document.getElementById("stop-btn");
-    if (startBtn) startBtn.classList.add("d-none");
-    if (stopBtn) {
-      stopBtn.classList.remove("d-none");
-      stopBtn.disabled = true;
-      stopBtn.textContent = "Stopping...";
-    }
-    await eel.stop()();
-  })
   // .on("click", "#pause-btn", async (event) => {
   //   //pause/resume button - toggle between pause and resume
   //   const runState = await eel.getRunState()();
@@ -840,26 +795,6 @@ $("#home-placeholder")
       btn.classList.remove("active");
     }, 700);
   })
-  .on("change", "#macro_mode", async (event) => {
-    // Set flag to prevent updates during user interaction
-    isUserChangingMode = true;
-
-    try {
-      // Handle macro mode dropdown
-      const selectedValue = event.currentTarget.value;
-
-      await eel.saveGeneralSetting("macro_mode", selectedValue)();
-
-      // Reload tasks to reflect the change
-      await loadTasks();
-      await refreshVicHopStats();
-    } finally {
-      // Clear the flag after a short delay to allow any pending updates
-      setTimeout(() => {
-        isUserChangingMode = false;
-      }, 100);
-    }
-  })
   .on("click", "#clear-logs-btn", async (event) => {
     if (confirm("Are you sure you want to clear all logs?")) {
       await eel.clearRecentLogs()();
@@ -901,6 +836,74 @@ $("#home-placeholder")
     } catch (error) {
       console.error("Error exporting logs:", error);
       alert("Failed to export logs.");
+    }
+  });
+
+//start/stop and the mode picker live in the top bar, outside the home tab
+$(".run-controls")
+  .on("click", "#start-btn", async (event) => {
+    const settings = await loadAllSettings();
+    const pauseKey = settings.pause_keybind || "F2";
+    const stopKey = settings.stop_keybind || "F3";
+    const runState = await eel.getRunState()();
+    const startBtn = document.getElementById("start-btn");
+    const stopBtn = document.getElementById("stop-btn");
+
+    if (runState === 6) {
+      // Paused -> resume
+      await eel.resume()();
+      // Update button state optimistically (show stop button immediately)
+      if (startBtn) startBtn.classList.add("d-none");
+      if (stopBtn) {
+        stopBtn.classList.remove("d-none");
+        stopBtn.disabled = false;
+        stopBtn.textContent = `Stop [${stopKey}]`;
+      }
+    } else {
+      // Stopped -> start
+      const result = await eel.start()();
+      if (result && result.ok === false) {
+        return;
+      }
+      // Update button state optimistically (show stop button immediately)
+      if (startBtn) startBtn.classList.add("d-none");
+      if (stopBtn) {
+        stopBtn.classList.remove("d-none");
+        stopBtn.disabled = false;
+        stopBtn.textContent = `Stop [${stopKey}]`;
+      }
+    }
+  })
+  .on("click", "#stop-btn", async (event) => {
+    //stop button - stops the macro completely
+    const startBtn = document.getElementById("start-btn");
+    const stopBtn = document.getElementById("stop-btn");
+    if (startBtn) startBtn.classList.add("d-none");
+    if (stopBtn) {
+      stopBtn.classList.remove("d-none");
+      stopBtn.disabled = true;
+      stopBtn.textContent = "Stopping...";
+    }
+    await eel.stop()();
+  })
+  .on("change", "#macro_mode", async (event) => {
+    // Set flag to prevent updates during user interaction
+    isUserChangingMode = true;
+
+    try {
+      // Handle macro mode dropdown
+      const selectedValue = event.currentTarget.value;
+
+      await eel.saveGeneralSetting("macro_mode", selectedValue)();
+
+      // Reload tasks to reflect the change
+      await loadTasks();
+      await refreshVicHopStats();
+    } finally {
+      // Clear the flag after a short delay to allow any pending updates
+      setTimeout(() => {
+        isUserChangingMode = false;
+      }, 100);
     }
   });
 
