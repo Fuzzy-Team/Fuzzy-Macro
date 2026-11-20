@@ -568,14 +568,14 @@ select:focus {
   width: 20px;
   height: 20px;
   object-fit: contain;
-  filter: grayscale(100%);
+  filter: var(--icon-filter, none) grayscale(100%);
   opacity: 0.7;
   transition: all 0.2s;
 }
 
 .sidebar-item:hover img,
 .sidebar-item.active img {
-  filter: none;
+  filter: var(--icon-filter, none);
   opacity: 1;
 }
 

@@ -73,6 +73,14 @@ function mixHex(a, b, ratio) {
   return ra.map((channel, i) => Math.round(channel * (1 - ratio) + rb[i] * ratio));
 }
 
+const luminance = (hex) => {
+  const [r, g, b] = hexToRgb(hex).map((c) => {
+    c /= 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+
 const toHex = (rgb) => "#" + rgb.map((c) => c.toString(16).padStart(2, "0")).join("");
 
 // Turn the six colours into the same :root tokens a built-in theme overrides.
@@ -93,6 +101,8 @@ function customThemeTokens(colors) {
     "--text-dim": toHex(mixHex(c.gui_color_text, c.gui_color_background, 0.35)),
     "--border": toHex(mixHex(c.gui_color_section, c.gui_color_text, 0.15)),
     "--active-text": c.gui_color_accent_text,
+    // The sidebar icons are white, so they turn black on a light background.
+    "--icon-filter": luminance(c.gui_color_background) > 0.4 ? "invert(1)" : "none",
   };
 }
 

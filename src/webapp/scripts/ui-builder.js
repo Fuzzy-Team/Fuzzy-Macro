@@ -196,7 +196,7 @@ function buildInput(id, type) {
   } else if (type.name == "keybind") {
     const keybindWidth = type.length ? type.length : 10;
     let html = `<div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.6rem;">
-        <div id="${id}" class="keybind-input poppins-regular" style="width: ${keybindWidth}rem; padding: 0.5rem; border: 2px solid var(--primary); border-radius: 4px; background: var(--textbox-bg); color: #d2d3d2; cursor: pointer; text-align: center; user-select: none; font-size: 1rem; transition: all 0.2s ease;" onclick="startKeybindRecording('${id}')" data-recording="false" data-trigger-function="${type.triggerFunction}">
+        <div id="${id}" class="keybind-input poppins-regular" style="width: ${keybindWidth}rem; padding: 0.5rem; border: 2px solid var(--primary); border-radius: 4px; background: var(--textbox-bg); color: var(--text-main); cursor: pointer; text-align: center; user-select: none; font-size: 1rem; transition: all 0.2s ease;" onclick="startKeybindRecording('${id}')" data-recording="false" data-trigger-function="${type.triggerFunction}">
             <span class="keybind-display">Click to record</span>
         </div>
         <button type="button" class="purple-button keybind-clear-button" onclick="clearKeybind('${id}', event)" title="Clear this keybind">Clear</button>
