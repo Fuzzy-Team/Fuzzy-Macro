@@ -1019,6 +1019,13 @@ select:focus {
   outline-offset: 2px;
 }
 
+/* Colour rows show the theme in use and only unlock on Custom */
+.textbox:disabled,
+.color-swatch:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* Custom Select */
 .custom-select {
   cursor: pointer;

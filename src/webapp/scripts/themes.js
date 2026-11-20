@@ -46,6 +46,26 @@ function readCustomColors() {
   return colors;
 }
 
+// The :root token each colour setting maps to, to read the colours of whichever theme is on.
+const THEME_COLOR_TOKENS = {
+  gui_color_background: "--background",
+  gui_color_section: "--surface",
+  gui_color_object: "--textbox-bg",
+  gui_color_text: "--text-main",
+  gui_color_accent: "--primary",
+  gui_color_accent_text: "--on-primary",
+};
+
+function currentThemeColors() {
+  const style = getComputedStyle(document.documentElement);
+  const colors = {};
+  for (const [key, token] of Object.entries(THEME_COLOR_TOKENS)) {
+    const value = style.getPropertyValue(token).trim();
+    colors[key] = HEX_COLOR.test(value) ? normalizeHex(value) : CUSTOM_THEME_COLORS[key];
+  }
+  return colors;
+}
+
 const hexToRgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
 
 function mixHex(a, b, ratio) {
