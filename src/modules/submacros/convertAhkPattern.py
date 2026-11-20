@@ -34,6 +34,17 @@ def splitTopLevel(text):
     parts.append(text[start:].strip())
     return parts
 
+def splitComment(text):
+    """Split a line at the first # that is outside quotes into (code, comment)."""
+    quoted = False
+    for pos, char in enumerate(text):
+        if char == '"':
+            quoted = not quoted
+        elif char == "#" and not quoted:
+            code = text[:pos].rstrip()
+            return code, ("  " + text[pos:]) if code else text[pos:]
+    return text, ""
+
 def convertCall(statement):
     """Python lines for one nm_walk, nm_camerarotation or sleep call. None for any other statement."""
     match = re.fullmatch(r"(nm_walk|nm_camerarotation|sleep)\((.*)\)", statement)
@@ -86,14 +97,15 @@ def ahkPatternToPython(ahk):
     out = []
     level = 0
     for line in ahkCleaned:
-        if line == "}":
+        code, _ = splitComment(line)
+        if code == "}":
             level -= 1
-        else:
-            if line[-1] == "{" and line[0] == "}":
-                level -=1
-            out.append("{}{}".format("\t"*level, line))
-            if line[-1] == "{":
-                level += 1
+            continue
+        if code.startswith("}"):
+            level -= 1
+        out.append("{}{}".format("\t"*level, line))
+        if code.endswith("{"):
+            level += 1
     #extract out only the pattern code
     start = None
     end = None
@@ -106,44 +118,87 @@ def ahkPatternToPython(ahk):
         out = out[start:end]
     
     #convert ahk to python
-    indentLine = False
+    #a stack of control frames tracks braced and unbraced conditionals/loops, so an
+    #else or else if can continue a chain that is still open at the same level
+    #tabs: indentation this frame adds, mode: need_stmt -> child -> done, or block while a brace is open
+    stack = []
     for i,e in enumerate(out[:]):
-        if indentLine:
-            e = "\t" + e
-            out[i] = e
-            #a comment line leaves the indent pending for the statement after it
-            indentLine = e.strip().startswith("#")
-            
+        baseLevel = len(e) - len(e.lstrip("\t"))
         line = e.strip()
-        noSpaces = line.replace(" ","")
+        code, comment = splitComment(line)
+
+        if code:
+            isElseHeader = bool(re.match(r"^\}?\s*(?:else\s+if|elseif|else)\b", code))
+            isIfHeader = bool(re.match(r"^\}?\s*(?:if|else\s+if|elseif)\b", code))
+            isLoopHeader = bool(re.match(r"^loop\b", code))
+            isHeader = isIfHeader or isElseHeader or isLoopHeader
+            hasOpenBrace = code.endswith("{")
+
+            #close the frames this line has dedented out of
+            while stack and baseLevel < stack[-1]["base"]:
+                stack.pop()
+                while stack and stack[-1]["mode"] == "child":
+                    if baseLevel < stack[-1]["base"]:
+                        stack.pop()
+                    else:
+                        stack[-1]["mode"] = "done"
+            for frame in stack:
+                if frame["mode"] == "block" and baseLevel <= frame["base"]:
+                    frame["mode"] = "done"
+
+            #a done frame can still be continued by an else at its own level, otherwise it ends
+            if isElseHeader:
+                while stack and stack[-1]["mode"] == "done" and not (stack[-1]["can_else"] and stack[-1]["base"] == baseLevel):
+                    stack.pop()
+                    if stack and stack[-1]["mode"] == "child":
+                        stack[-1]["mode"] = "done"
+                if stack and stack[-1]["mode"] == "done" and stack[-1]["can_else"] and stack[-1]["base"] == baseLevel:
+                    #consumed by this else/else if continuation, its parent stays in mode == "child"
+                    stack.pop()
+            else:
+                while stack and stack[-1]["mode"] == "done":
+                    stack.pop()
+                    if stack and stack[-1]["mode"] == "child":
+                        stack[-1]["mode"] = "done"
+
+        extraTabs = sum(f["tabs"] for f in stack if f["mode"] != "done")
+        if extraTabs:
+            e = "\t"*extraTabs + e
+            out[i] = e
+        indent = e[:len(e) - len(e.lstrip("\t"))]
+
+        if code:
+            #the statement controlled by an unbraced header is this line, or the header itself
+            if stack and stack[-1]["mode"] == "need_stmt":
+                if isHeader or hasOpenBrace:
+                    stack[-1]["mode"] = "child"
+                else:
+                    stack[-1]["mode"] = "done"
+            #an unbraced header indents its whole statement, even a braced block
+            if isHeader or hasOpenBrace:
+                stack.append({
+                    "base": baseLevel,
+                    "tabs": 0 if hasOpenBrace else 1,
+                    "mode": "block" if hasOpenBrace else "need_stmt",
+                    "can_else": isIfHeader,
+                })
+
+        noSpaces = code.replace(" ","")
         
         #replace loop
         if noSpaces == 'loop"width"{' or noSpaces == 'loopwidth{':
-            out[i] = e.replace(line, 'for i in range(width):')
-        elif line.startswith("loop"):
+            out[i] = indent + 'for i in range(width):' + comment
+        elif code.startswith("loop"):
             #loop number of times
-            digits = ''.join([x for x in line if x.isdigit()])
-            if digits: 
-                out[i] = e.replace(line, f'for i in range({int(digits)}):')
-                #a loop without braces repeats only the next line
-                if not line.endswith("{"):
-                    indentLine = True
+            digits = ''.join([x for x in code if x.isdigit()])
+            if digits:
+                out[i] = indent + f'for i in range({int(digits)}):' + comment
         #convert nm_walk, nm_cameraRotation and sleep, including several on one line separated by commas
-        elif re.match(r"(nm_walk|nm_camerarotation|sleep)\(", line):
-            indent = e[:len(e) - len(e.lstrip())]
-            #keep a trailing comment out of the call match
-            code, comment = line, ""
-            quoted = False
-            for pos, char in enumerate(line):
-                if char == '"':
-                    quoted = not quoted
-                elif char == "#" and not quoted:
-                    code, comment = line[:pos].rstrip(), "  " + line[pos:]
-                    break
+        elif re.match(r"(nm_walk|nm_camerarotation|sleep)\(", code):
             converted = []
             for statement in splitTopLevel(code):
                 converted += convertCall(statement) or [statement]
-            out[i] = e.replace(line, ("\n" + indent).join(converted) + comment)
+            out[i] = indent + ("\n" + indent).join(converted) + comment
         #convert send
         elif line.startswith("send"):
             cmds = []
@@ -197,16 +252,19 @@ def ahkPatternToPython(ahk):
         elif line.startswith("walk"):
             out[i] = e.replace("walk", "self.keyboard.tileWait").replace('"',"")
         #if/else statements
-        elif line.startswith("if"):
-            if "{" in line: #regular nested if statement
-                out[i] = e.replace("{",":")
-            #one line if statement
-            else:
-                out[i] = e + ":"
-                indentLine = True
-                
-        elif "else" in line and not "if" in line:
-            out[i] = e.replace(line, "else:")
+        elif code.startswith("if"):
+            #a braced if drops its brace, an unbraced one controls the next statement
+            head = code[:-1].rstrip() if code.endswith("{") else code
+            out[i] = indent + head + ":" + comment
+
+        elif re.match(r"^\}?\s*(?:else\s+if|elseif)\b", code):
+            elifLine = re.sub(r"^\}?\s*(?:else\s+if|elseif)\b", "elif", code, count=1)
+            if elifLine.endswith("{"):
+                elifLine = elifLine[:-1].rstrip()
+            out[i] = indent + elifLine + ":" + comment
+
+        elif "else" in code and not "if" in code:
+            out[i] = indent + "else:" + comment
         #one line if/else statements
         elif checkOrder(line, "?:"):
             if "𑑛" in line:
