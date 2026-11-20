@@ -426,11 +426,6 @@ class HourlyReport():
 
         planterData = loadReportPlanterData(setdat)
 
-        #get history
-        historyData = settingsManager.loadUserLiteral("hourly_report_history.txt")
-        if not isinstance(historyData, list):
-            historyData = []
-
         if len(self.hourlyReportStats["honey_per_min"]) < 3:
             self.hourlyReportStats["honey_per_min"] = [0]*3 + self.hourlyReportStats["honey_per_min"]
         #failed reads (0) repeat the previous value so they cannot create a gain spike
