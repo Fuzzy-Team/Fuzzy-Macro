@@ -38,6 +38,8 @@ class HourlyReportDrawer:
         self.graphBgColor   = t["graph_bg"]
         self.graphGridColor = t["graph_grid"]
         self.graphTickColor = t["graph_tick"]
+        self.itemCardColor = t["item_card"]
+        self.itemCardTopColor = t["item_card_top"]
 
         # canvas width is fixed; height is dynamic (cropped to content at the end)
         self.canvasW = 5800

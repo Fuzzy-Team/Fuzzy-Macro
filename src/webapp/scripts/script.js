@@ -1030,6 +1030,7 @@ function loadInputs(obj, save = "") {
   if (save == "profile") {
     eel.saveDictProfileSettings(obj);
   }
+  loadCustomColors(obj);
   // Update visibility of any dependent fields after loading inputs
   try { updateDependentFields(); } catch (e) { /* ignore */ }
 
@@ -1112,6 +1113,50 @@ function textboxRestriction(ele, evt) {
   } else if (ele.dataset.inputType == "int") {
     return !(charCode > 31 && (charCode < 48 || charCode > 57));
   }
+}
+
+// Custom theme colours: each is a hex textbox with a picker beside it. The boxes show the colours of the
+// theme in use and only unlock on Custom, where they show the last custom colours.
+function showThemeColors() {
+  const custom = document.documentElement.dataset.theme === "custom";
+  const colors = custom ? readCustomColors() : currentThemeColors();
+  for (const id of Object.keys(CUSTOM_THEME_COLORS)) {
+    const box = document.getElementById(id);
+    if (!box) return; // the config tab isn't built yet
+    const picker = document.querySelector(`[data-color-for="${id}"]`);
+    box.value = picker.value = colors[id];
+    box.disabled = picker.disabled = !custom;
+    box.setAttribute("aria-invalid", "false");
+    box.title = "";
+  }
+}
+
+// Settings that were just loaded become the remembered custom colours.
+function loadCustomColors(settings) {
+  const colors = readCustomColors();
+  for (const id of Object.keys(CUSTOM_THEME_COLORS)) {
+    if (HEX_COLOR.test(settings[id])) colors[id] = normalizeHex(settings[id]);
+  }
+  setCustomColors(colors);
+  showThemeColors();
+}
+
+// Save a typed colour once it is six hex digits. Until then the last saved colour stays in use.
+function saveCustomColor(box) {
+  const valid = HEX_COLOR.test(box.value.trim());
+  box.setAttribute("aria-invalid", String(!valid));
+  box.title = valid ? "" : "Enter six hex digits, like #00FF00";
+  if (!valid) return;
+  box.value = normalizeHex(box.value);
+  document.querySelector(`[data-color-for="${box.id}"]`).value = box.value;
+  setCustomColors({ ...readCustomColors(), [box.id]: box.value });
+  saveSetting(box, "general");
+}
+
+function pickCustomColor(picker) {
+  const box = document.getElementById(picker.dataset.colorFor);
+  box.value = picker.value;
+  saveCustomColor(box);
 }
 
 //disable browser actions
@@ -1525,6 +1570,7 @@ function dropdownClicked(event) {
     updateDropDownDisplay(dropdownOption);
     if (parentEle.id === "gui_theme") {
       applyTheme(getDropdownValue(parentEle));
+      showThemeColors();
     }
     let funcParams = parentEle.dataset.onchange.replace("this", "parentEle");
     eval(funcParams);

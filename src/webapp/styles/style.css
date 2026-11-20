@@ -568,14 +568,14 @@ select:focus {
   width: 20px;
   height: 20px;
   object-fit: contain;
-  filter: grayscale(100%);
+  filter: var(--icon-filter, none) grayscale(100%);
   opacity: 0.7;
   transition: all 0.2s;
 }
 
 .sidebar-item:hover img,
 .sidebar-item.active img {
-  filter: none;
+  filter: var(--icon-filter, none);
   opacity: 1;
 }
 
@@ -997,6 +997,33 @@ select:focus {
 
 .textbox:focus {
   border-color: var(--primary);
+}
+
+.textbox[aria-invalid="true"] {
+  border-color: #cf2013;
+}
+
+/* Custom theme colour picker, beside its hex textbox */
+.color-swatch {
+  width: 2.2rem;
+  height: 2.2rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+}
+
+.color-swatch:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Colour rows show the theme in use and only unlock on Custom */
+.textbox:disabled,
+.color-swatch:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* Custom Select */
