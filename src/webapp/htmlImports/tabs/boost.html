@@ -1,10 +1,10 @@
-<div class="main-content-container">
+<div class="page">
   <div id="boost-nav" class="sub-nav-bar">
     <div id="boost-hotbar" class="boost-tab-item">Hotbar</div>
     <div id="boost-buffs" class="boost-tab-item">Buffs</div>
     <div id="boost-tad-alt-sync" class="boost-tab-item">TAD Alt Sync</div>
   </div>
-  <div id="boost-hotbar-tab" class="standard-container sub-tab-panel active">
+  <div id="boost-hotbar-tab" class="sub-tab-panel active">
     <script>
       const hotbarParent = document.getElementById("boost-hotbar-tab");
       const boostHotbarSlots = [
@@ -99,9 +99,52 @@
           </div>
         `;
       });
+
+      buildStandardContainer(hotbarParent, "Hotbar Item Slots", "", [
+        {
+          id: "sprinkler_type",
+          title: "Sprinkler Type",
+          desc: "The type of sprinkler that you use. Silver, Golden and Diamond sprinklers are spread out across the field when gathering",
+          type: {
+            name: "dropdown",
+            data: ["Basic", "Silver", "Golden", "Diamond", "Saturator"],
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "sprinkler_slot",
+          title: "Sprinkler Slot",
+          desc: "The hotbar slot of the sprinkler",
+          type: {
+            name: "dropdown",
+            data: [1, 2, 3, 4, 5, 6],
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "goo_slot",
+          title: "Gumdrop Slot",
+          desc: "The hotbar slot of your gumdrops, used for goo in fields, goo quests, and the glue dispenser",
+          type: {
+            name: "dropdown",
+            data: [1, 2, 3, 4, 5, 6, 7],
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
+          id: "glitter_slot",
+          title: "Glitter Slot",
+          desc: "The hotbar slot of your Glitter, used by field booster extending. Set to 0 to find Glitter in the inventory. Auto Field Boost and TAD alts have their own Glitter slots.",
+          type: {
+            name: "dropdown",
+            data: [0, 1, 2, 3, 4, 5, 6, 7],
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+      ]);
     </script>
   </div>
-  <div id="boost-buffs-tab" class="standard-container sub-tab-panel">
+  <div id="boost-buffs-tab" class="sub-tab-panel">
     <script>
       const buffsParent = document.getElementById("boost-buffs-tab");
       buildStandardContainer(buffsParent, "Field Boosters", "", [
@@ -128,7 +171,7 @@
         {
           id: "field_booster_glitter_extend_enabled",
           title: "Glitter Extending",
-          desc: "Use Glitter at 14:30 to extend each detected field booster. Uses the Glitter Slot in Config.",
+          desc: "Use Glitter at 14:30 to extend each detected field booster. Uses the Glitter Slot under Hotbar Item Slots.",
           type: {
             name: "checkbox",
             triggerFunction: saveProfileTriggerFunction,
@@ -370,7 +413,7 @@
       ]);
     </script>
   </div>
-  <div id="boost-tad-alt-sync-tab" class="standard-container sub-tab-panel">
+  <div id="boost-tad-alt-sync-tab" class="sub-tab-panel">
     <script>
       const tadAltSyncParent = document.getElementById("boost-tad-alt-sync-tab");
       buildStandardContainer(tadAltSyncParent, "TAD Alt Sync", "Start up to two Alt Mode accounts in the default field, then move them with detected field boosts.", [

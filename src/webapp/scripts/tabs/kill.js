@@ -4,8 +4,9 @@ function switchKillTab(target){
     switchSubtab("kill", target)
 }
 
-function loadKill(){
-    switchKillTab(document.getElementById(getActiveSubtab("activeKillSubtab", "kill-settings")))
+async function loadKill(){
+    switchKillTab(document.getElementById(getActiveSubtab("activeKillSubtab", "kill-regular")))
+    loadInputs(await loadAllSettings())
 }
 
 $("#kill-placeholder")

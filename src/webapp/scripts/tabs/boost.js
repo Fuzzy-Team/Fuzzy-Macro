@@ -94,6 +94,7 @@ async function loadBoost(){
         const patterns = await eel.getDefaultPatterns()();
         setDropdownData("tad_alt_gather_shape", patterns);
         const settings = await loadAllSettings();
+        loadInputs(settings);
         const patternDropdown = document.getElementById("tad_alt_gather_shape");
         if (patternDropdown) setDropdownValue(patternDropdown, settings.tad_alt_gather_shape || "e_lol");
     } catch (error) {

@@ -13,7 +13,7 @@ function switchTab(event) {
     Array.from(document.getElementsByClassName("content")).forEach(x => {
         x.style.display = "none"
     })
-    Array.from(document.getElementsByClassName("sidebar-item")).forEach(x => {
+    Array.from(document.getElementsByClassName("nav-item")).forEach(x => {
         x.classList.remove("active")
     })
     //add and show
@@ -29,22 +29,21 @@ function setActiveSubtab(storageKey, tabId) {
     localStorage.setItem(storageKey, tabId)
 }
 
+//falls back when the saved subtab no longer exists (renamed or merged)
 function getActiveSubtab(storageKey, fallbackTabId) {
-    return localStorage.getItem(storageKey) || fallbackTabId
+    const saved = localStorage.getItem(storageKey)
+    return saved && document.getElementById(saved) ? saved : fallbackTabId
 }
 
 //subtab bar: items are ".{prefix}-tab-item" and each shows the panel "#{item id}-tab"
 function switchSubtab(prefix, target) {
     setActiveSubtab(`active${prefix[0].toUpperCase()}${prefix.slice(1)}Subtab`, target.id)
-    const selector = document.getElementById(`${prefix}-select`)
-    if (selector) selector.remove()
     Array.from(document.getElementsByClassName(`${prefix}-tab-item`)).forEach(x => {
         x.classList.remove("active")
         const panel = document.getElementById(`${x.id}-tab`)
         if (panel) panel.style.display = "none"
     })
     target.classList.add("active")
-    target.innerHTML = `<div class = "select-indicator" id = "${prefix}-select"></div>` + target.innerHTML
     const tab = document.getElementById(`${target.id}-tab`)
     if (tab) {
         tab.style.display = "block"
@@ -71,4 +70,4 @@ $("#tabs-placeholder")
             }
         }
     })
-    .on("click", ".sidebar-item", switchTab)
+    .on("click", ".nav-item", switchTab)

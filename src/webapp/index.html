@@ -2,6 +2,7 @@
 <html>
 
 <head>
+  <meta charset="utf-8" />
   <title>Fuzzy Macro</title>
   <link rel="stylesheet" href="styles/style.css" />
   <link rel="shortcut icon" type="image/x-icon" href="assets/general/icon.png" />
@@ -15,30 +16,36 @@
 
 <body>
   <div class="app-container">
-    <!-- Sidebar -->
-    <div class="sidebar-container">
-      <div class="app-title">
-        Fuzzy Macro
-      </div>
-      <div id="tabs-placeholder">
+    <header class="topbar">
+      <div class="app-title">Fuzzy Macro <span id="version" class="app-version"></span></div>
+      <nav id="tabs-placeholder" aria-label="Main">
         <!-- Tabs loaded via JS -->
+      </nav>
+      <div class="run-controls">
+        <select id="macro_mode" aria-label="Macro Mode">
+          <option value="normal">Normal Mode</option>
+          <option value="alt">Alt Mode</option>
+          <option value="field">Field Mode</option>
+          <option value="quest">Quest Mode</option>
+          <option value="bug">Bug Run Mode</option>
+          <option value="boost">Boost Mode</option>
+          <option value="resources">Resources Mode</option>
+          <option value="vic">Vic Hop Mode</option>
+        </select>
+        <button class="purple-button d-none" id="stop-btn">Stop [F3]</button>
+        <button class="purple-button" id="start-btn">Start [F1]</button>
       </div>
-      <div class="credits">
-        <span id="version">Loading version...</span><br>
-        <button id="update-btn" class="purple-button">Check for Updates</button>
-        <div id="update-progress" class="update-progress d-none" aria-live="polite">
-          <div class="update-progress-row">
-            <span id="update-progress-label">Preparing update</span>
-            <span id="update-progress-percent">0%</span>
-          </div>
-          <div class="update-progress-track">
-            <div id="update-progress-bar" class="update-progress-bar"></div>
-          </div>
-        </div>
+    </header>
+    <div id="update-progress" class="update-progress d-none" aria-live="polite">
+      <div class="update-progress-row">
+        <span id="update-progress-label">Preparing update</span>
+        <span id="update-progress-percent">0%</span>
+      </div>
+      <div class="update-progress-track">
+        <div id="update-progress-bar" class="update-progress-bar"></div>
       </div>
     </div>
 
-    <!-- Main Content -->
     <main class="main-content-container">
       <div id="home-placeholder" class="content" style="display: flex;"></div>
       <div id="gather-placeholder" class="content"></div>
@@ -49,7 +56,6 @@
       <div id="boost-placeholder" class="content"></div>
       <div id="quests-placeholder" class="content"></div>
       <div id="tools-placeholder" class="content"></div>
-
     </main>
   </div>
 

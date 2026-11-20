@@ -567,17 +567,10 @@ async function loadAndSaveField(ele) {
 async function switchGatherTab(target) {
   setActiveSubtab("activeGatherSubtab", target.id);
   fieldNo = target.id.split("-")[1];
-  //remove the arrow indicator
-  const selector = document.getElementById("gather-select");
-  if (selector) selector.remove();
   Array.from(document.getElementsByClassName("gather-tab-item")).forEach((x) =>
     x.classList.remove("active")
-  ); //remove the active class
-  //add indicator + active class
+  );
   target.classList.add("active");
-  target.innerHTML =
-    `<div class = "select-indicator" id = "gather-select"></div>` +
-    target.innerHTML;
   document.getElementById("gather-field").innerText = `Gather Field ${fieldNo}`;
   //scroll back to top
   document.getElementById("gather").scrollTo(0, 0);
