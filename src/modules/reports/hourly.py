@@ -17,7 +17,7 @@ from modules.reports.buffs import (
     normalizeUptimeBuffSelection,
 )
 from modules.reports.drawer import HourlyReportDrawer
-from modules.reports.theme import resolveReportTheme
+from modules.reports.theme import THEMES, resolveReportTheme
 
 # session uptime history is halved in resolution whenever it grows past this many samples
 MAX_SESSION_UPTIME_SAMPLES = 3600
@@ -171,6 +171,7 @@ class HourlyReport():
 
         # store theme for re-applying when settings change
         self._theme = theme
+        self._palette = THEMES.get(theme)
 
         # setup stats; loadHourlyReportData replaces these when saved stats exist
         self.hourlyReportStats = {**self._defaultSessionReportStats(), "start_time": 0, "start_honey": 0}
@@ -468,9 +469,11 @@ class HourlyReport():
         displayBuffQuantity = [detectedBuffByKey.get(key, 0) for key in hourly_buffs]
 
         time_format = setdat.get("hourly_report_time_format", self.hourlyReportDrawer.time_format) if isinstance(setdat, dict) else self.hourlyReportDrawer.time_format
-        if theme != self._theme or time_format != self.hourlyReportDrawer.time_format:
+        # the Custom theme keeps its name while its colours change, so compare the colours too
+        if theme != self._theme or THEMES.get(theme) != self._palette or time_format != self.hourlyReportDrawer.time_format:
             self.hourlyReportDrawer = HourlyReportDrawer(time_format, theme=theme)
             self._theme = theme
+            self._palette = THEMES.get(theme)
 
         canvas = self.hourlyReportDrawer.drawHourlyReport(hourlyReportStats, sessionTime, honeyPerMin,
                                                           sessionHoney, honeyThisHour, onlyValidHourlyHoney,

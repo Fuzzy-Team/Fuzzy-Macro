@@ -26,6 +26,8 @@ _REPORT_BASE = {
     "graph_bg":       (20, 20, 20),
     "graph_grid":     (47, 47, 55),
     "graph_tick":     (64, 60, 78),
+    "item_card":      (50, 50, 50),    # item report cards
+    "item_card_top":  (42, 42, 42),    # item report top-three cards
 }
 
 
@@ -52,6 +54,8 @@ _MIX_RATIOS = {
     "graph_bg":       0.10,
     "graph_grid":     0.22,
     "graph_tick":     0.22,
+    "item_card":      0.0,
+    "item_card_top":  0.0,
 }
 
 
@@ -140,7 +144,7 @@ def customThemeSpec(setdat):
     def color(name):
         raw = str(setdat.get(name, "")).strip().lstrip("#")
         if not re.fullmatch(r"[0-9a-fA-F]{6}", raw):
-            raw = DEFAULT_GENERAL_SETTINGS[name]
+            raw = DEFAULT_GENERAL_SETTINGS[name].lstrip("#")
         return tuple(int(raw[i:i + 2], 16) for i in (0, 2, 4))
 
     bg, section, text = color("gui_color_background"), color("gui_color_section"), color("gui_color_text")
@@ -153,6 +157,8 @@ def customThemeSpec(setdat):
         "panel":          section,
         "panel_outline":  mixColor(section, text, 0.15),
         "graph_bg":       mixColor(bg, (0, 0, 0), 0.15),
+        "item_card":      mixColor(section, text, 0.10),
+        "item_card_top":  mixColor(section, text, 0.06),
         "text_primary":   text,
         "text_secondary": mixColor(text, bg, 0.35),
     }

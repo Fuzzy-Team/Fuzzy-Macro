@@ -1118,33 +1118,31 @@ function textboxRestriction(ele, evt) {
 // Custom theme colours: each is an RRGGBB textbox with a picker beside it.
 // Repaint the theme from the six textboxes and keep the pickers in step.
 function syncCustomColors() {
-  const colors = {};
+  const colors = readCustomColors(); // an invalid box keeps its last good colour
   for (const id of Object.keys(CUSTOM_THEME_COLORS)) {
     const box = document.getElementById(id);
     if (!box) return; // the config tab isn't built yet
-    const hex = box.value.replace(/^#/, "");
-    if (!HEX_COLOR.test(hex)) continue;
-    colors[id] = hex.toUpperCase();
-    document.querySelector(`[data-color-for="${id}"]`).value = "#" + hex;
+    if (!HEX_COLOR.test(box.value)) continue;
+    colors[id] = normalizeHex(box.value);
+    document.querySelector(`[data-color-for="${id}"]`).value = colors[id];
   }
   setCustomColors(colors);
 }
 
 // Save a typed colour once it is six hex digits. Until then the last saved colour stays in use.
 function saveCustomColor(box) {
-  const hex = box.value.trim().replace(/^#/, "");
-  const valid = HEX_COLOR.test(hex);
+  const valid = HEX_COLOR.test(box.value.trim());
   box.setAttribute("aria-invalid", String(!valid));
-  box.title = valid ? "" : "Enter six hex digits, like 00FF00";
+  box.title = valid ? "" : "Enter six hex digits, like #00FF00";
   if (!valid) return;
-  box.value = hex.toUpperCase();
+  box.value = normalizeHex(box.value);
   syncCustomColors();
   saveSetting(box, "general");
 }
 
 function pickCustomColor(picker) {
   const box = document.getElementById(picker.dataset.colorFor);
-  box.value = picker.value.slice(1);
+  box.value = picker.value;
   saveCustomColor(box);
 }
 

@@ -382,6 +382,8 @@ class ItemReportDrawer:
         self.graphBgColor = base.graphBgColor
         self.graphGridColor = base.graphGridColor
         self.graphTickColor = base.graphTickColor
+        self.itemCardColor = base.itemCardColor
+        self.itemCardTopColor = base.itemCardTopColor
         self.accentColor = base.accentColor
         self.time_format = time_format
         self.assetPath = "hourly_report/assets"
@@ -488,7 +490,7 @@ class ItemReportDrawer:
             cy = start_y + row * (card_h + pad)
             self.draw.rounded_rectangle(
                 (cx, cy, cx + card_w, cy + card_h),
-                radius=15, fill=(50, 50, 50), outline=self.panelOutline, width=3,
+                radius=15, fill=self.itemCardColor, outline=self.panelOutline, width=3,
             )
 
             icon_size = 100
@@ -590,7 +592,7 @@ class ItemReportDrawer:
             cy = start_y
             self.draw.rounded_rectangle(
                 (cx, cy, cx + card_w, cy + card_h),
-                radius=15, fill=(42, 42, 42), outline=colors[rank], width=4,
+                radius=15, fill=self.itemCardTopColor, outline=colors[rank], width=4,
             )
 
             icon_size = 100
