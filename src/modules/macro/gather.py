@@ -213,6 +213,7 @@ class GatherMixin:
             "pattern_debug_mode": defaults["fuzzy_ai_debug_mode"],
             "pattern_record_video": defaults["fuzzy_ai_record_video"],
             "pattern_record_video_fps": defaults["fuzzy_ai_record_video_fps"],
+            "pattern_live_overlay": bool(self.setdat.get("ai_detection_overlay", False)),
             "pattern_ai_gather_model_file": str(fieldSetting.get("ai_gather_model_file", "")),
             "pattern_field_drift_compensation": bool(fieldSetting.get("field_drift_compensation", False)),
             "pattern_field_dimensions": startLocationDimensions.get(field.replace("_", " ")),

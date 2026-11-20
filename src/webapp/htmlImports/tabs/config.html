@@ -659,6 +659,15 @@
         },
       ]);
       document.getElementById("use_1080p_virtual_display").setAttribute("aria-label", "Use 1080p virtual display");
+      buildStandardContainer(parentOther, "Detection Overlay", "", [
+        {
+          id: "ai_detection_overlay",
+          title: "Show AI detections over Roblox",
+          desc: "While Fuzzy AI Gather or Blooms AI is gathering, draws the tokens, target and sprinkler it detects on top of the game. The macro's own screen capture doesn't see the overlay. Applies from the next gather.",
+          type: { name: "checkbox", triggerFunction: saveGeneralTriggerFunction },
+        },
+      ]);
+      document.getElementById("ai_detection_overlay").setAttribute("aria-label", "Show AI detections over Roblox");
       buildStandardContainer(parentOther, "Beesmas", "", [
         {
           id: "beesmas_override",

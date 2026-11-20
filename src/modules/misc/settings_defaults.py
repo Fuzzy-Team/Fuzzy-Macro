@@ -715,6 +715,7 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'auto_planter_planter_of_plenty_field_coconut': True}
 
 DEFAULT_GENERAL_SETTINGS = {'use_1080p_virtual_display': False,
+ 'ai_detection_overlay': False,
  'beesmas_override': False,
  'hive_number': 1,
  'hive_exclude_slot': [],

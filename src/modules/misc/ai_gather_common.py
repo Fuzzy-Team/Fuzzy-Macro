@@ -1753,48 +1753,99 @@ def recording_overlay_base(runtime, target, target_sprinkler_label, field_drift_
     }
 
 
-def draw_detection_boxes(annotated, runtime, detections, target, labels, ignored_tokens):
-    frame_h, frame_w = annotated.shape[:2]
+def detection_boxes(runtime, detections, target, labels, ignored_tokens, frame_w, frame_h):
+    """Capture-space boxes for the detections as (left, top, right, bottom, text, kind)."""
     target_box = target.get("box") if isinstance(target, dict) else None
+    boxes = []
     for box, class_id, confidence in detections:
         token_name = labels.get(class_id, f"class {class_id}")
         x1, y1, x2, y2 = box
         left_f, top_f = model_point_to_capture(runtime, x1, y1)
         right_f, bottom_f = model_point_to_capture(runtime, x2, y2)
-        left = max(0, min(frame_w - 1, int(round(left_f))))
-        top = max(0, min(frame_h - 1, int(round(top_f))))
-        right = max(0, min(frame_w - 1, int(round(right_f))))
-        bottom = max(0, min(frame_h - 1, int(round(bottom_f))))
-        is_target = target_box == box
         if token_name in ignored_tokens:
-            color = (120, 120, 120)
-        elif is_target:
-            color = (0, 255, 255)
+            kind = "ignored"
+        elif target_box == box:
+            kind = "target"
         else:
-            color = (80, 220, 80)
-        cv2.rectangle(annotated, (left, top), (right, bottom), color, 2 if is_target else 1)
-        draw_label(annotated, f"{token_name} {confidence:.2f}", left, top - 4, color)
+            kind = "token"
+        boxes.append((
+            max(0, min(frame_w - 1, int(round(left_f)))),
+            max(0, min(frame_h - 1, int(round(top_f)))),
+            max(0, min(frame_w - 1, int(round(right_f)))),
+            max(0, min(frame_h - 1, int(round(bottom_f)))),
+            f"{token_name} {confidence:.2f}",
+            kind,
+        ))
+    return boxes
+
+
+def sprinkler_detection_box(sprinkler, frame_w, frame_h):
+    """The sprinkler detection as one box in the same form as detection_boxes, or None."""
+    sprinkler_box = sprinkler.get("box")
+    if not sprinkler_box:
+        return None
+    x1, y1, x2, y2 = sprinkler_box
+    match_text = "match" if sprinkler.get("target_match") else "seen"
+    return (
+        max(0, min(frame_w - 1, int(round(x1)))),
+        max(0, min(frame_h - 1, int(round(y1)))),
+        max(0, min(frame_w - 1, int(round(x2)))),
+        max(0, min(frame_h - 1, int(round(y2)))),
+        f"sprinkler {match_text} {sprinkler.get('label', '?')} {sprinkler.get('confidence', 0.0):.2f} d={sprinkler.get('distance', 0.0):.2f}",
+        "sprinkler",
+    )
+
+
+# BGR, as cv2 draws them.
+BOX_COLORS = {"token": (80, 220, 80), "target": (0, 255, 255), "ignored": (120, 120, 120), "sprinkler": (255, 180, 0)}
+BOX_THICKNESS = {"token": 1, "target": 2, "ignored": 1, "sprinkler": 3}
+
+
+def draw_boxes(annotated, boxes):
+    for left, top, right, bottom, text, kind in boxes:
+        color = BOX_COLORS[kind]
+        cv2.rectangle(annotated, (left, top), (right, bottom), color, BOX_THICKNESS[kind])
+        draw_label(annotated, text, left, top - 4, color)
+
+
+def draw_detection_boxes(annotated, runtime, detections, target, labels, ignored_tokens):
+    frame_h, frame_w = annotated.shape[:2]
+    draw_boxes(annotated, detection_boxes(runtime, detections, target, labels, ignored_tokens, frame_w, frame_h))
 
 
 def draw_sprinkler_box(annotated, sprinkler):
-    sprinkler_box = sprinkler.get("box")
-    if not sprinkler_box:
-        return
     frame_h, frame_w = annotated.shape[:2]
-    x1, y1, x2, y2 = sprinkler_box
-    left = max(0, min(frame_w - 1, int(round(x1))))
-    top = max(0, min(frame_h - 1, int(round(y1))))
-    right = max(0, min(frame_w - 1, int(round(x2))))
-    bottom = max(0, min(frame_h - 1, int(round(y2))))
-    cv2.rectangle(annotated, (left, top), (right, bottom), (255, 180, 0), 3)
-    match_text = "match" if sprinkler.get("target_match") else "seen"
-    draw_label(
-        annotated,
-        f"sprinkler {match_text} {sprinkler.get('label', '?')} {sprinkler.get('confidence', 0.0):.2f} d={sprinkler.get('distance', 0.0):.2f}",
-        left,
-        top - 4,
-        (255, 180, 0),
-    )
+    box = sprinkler_detection_box(sprinkler, frame_w, frame_h)
+    if box:
+        draw_boxes(annotated, [box])
+
+
+def capture_origin(capture):
+    """Where the capture's top-left corner sits on screen, in points."""
+    if capture["backend"] == "fuzzy":
+        from modules.screen import virtual_display
+        return virtual_display.to_global(0, 0)
+    if capture["backend"] == "mss":
+        return capture["monitor"]["left"], capture["monitor"]["top"]
+    return capture["bbox"][0], capture["bbox"][1]
+
+
+def publish_live_overlay(runtime, enabled, detections, target, labels, ignored_tokens):
+    """Show the current detections, target and sprinkler over the game when the overlay setting is on."""
+    if not enabled:
+        return
+    try:
+        from modules.screen import overlay
+        capture = runtime["capture"]
+        width, height = capture["width"], capture["height"]
+        boxes = detection_boxes(runtime, detections, target, labels, ignored_tokens, width, height)
+        sprinkler = sprinkler_detection_box(runtime.get("last_sprinkler_detection") or {}, width, height)
+        if sprinkler:
+            boxes.append(sprinkler)
+        overlay.publish(capture_origin(capture), (width, height), boxes)
+    except Exception:
+        # The overlay is cosmetic; a display or capture hiccup must not stop gathering.
+        pass
 
 
 def base_status_lines(overlay, headline):
