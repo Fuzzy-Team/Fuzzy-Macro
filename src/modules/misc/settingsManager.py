@@ -1163,7 +1163,7 @@ def loadAllSettings():
 def isSensitiveSetting(key, value):
     key = str(key)
     return (
-        key in ("discord_bot_token", "webhook_link")
+        key in ("discord_bot_token", "webhook_link", "field_alt_webhook")
         or (key.startswith("tad_alt_") and key.endswith("_webhook"))
         or "private_server_link" in key
         or (key.startswith("route_") and str(value).startswith("https://"))

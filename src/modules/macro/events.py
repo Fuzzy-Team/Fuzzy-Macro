@@ -66,6 +66,7 @@ def vicious_ground_is_night(bgr):
 
 from modules.controls.sleep import pause_aware_time as time
 from modules.macro.game_data import startLocationDimensions
+from modules.submacros.tadAltSync import REVERT_ENDING, broadcast_to_field_alts
 from modules.screen.imageSearch import captureRegionBGR, findColorObjectRGB, locateImageInScreen
 from modules.screen.screenshot import mssScreenshotNP
 
@@ -324,6 +325,22 @@ class EventDetectionMixin:
             #on a thread because moving the alts waits over 10s, which would stall the rest of the background tick.
             #The time left on the boost is unknown, so no Glitter extending.
             threading.Thread(target=self.tadAltSync.sync_to_boost, args=(field,), kwargs={"extend_with_glitter": False}, daemon=True).start()
+
+    def checkMainBoostEnd(self):
+        """Near the end of the main's boost, send the field alts back to their fields if the main isn't gathering there.
+        The boost lasts 15 minutes; this fires from 14 minutes, or 14.98 when Glitter extends it."""
+        if not self.mainBoost or self.setdat.get("account_role") != "main":
+            return
+        field, start = self.mainBoost
+        elapsed = time.time() - start
+        notBefore = (14.98 if self.setdat.get("field_booster_glitter_extend_enabled", False) else 14) * 60
+        if self.mainBoostEndSent == start or not notBefore <= elapsed < 15 * 60:
+            return
+        if self.isGathering and self.location == field:
+            return
+        self.mainBoostEndSent = start
+        self.logger.webhook("", f"The {field.title()} boost is ending and I won't go back, telling the field alts to go back to their fields", "light blue")
+        broadcast_to_field_alts(self.setdat, REVERT_ENDING)
 
     def boostIconVisible(self, screen, field):
         """True if every pixel of the field's boost icon matches somewhere in the screen within the colour tolerance."""
