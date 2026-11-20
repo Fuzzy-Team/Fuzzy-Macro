@@ -16,6 +16,8 @@ import time
 # Seconds a box stays on screen after the last publish, so a stalled scanner clears the overlay.
 HOLD = 1.0
 FILE = "boxes.json"
+# The helper's error output, read when it stops.
+LOG = "helper.log"
 # RGB colour per box kind.
 COLORS = {
     "token": (80, 220, 80),
@@ -37,23 +39,38 @@ def publish(origin, size, boxes):
             _start()
         elif process.poll() is not None:
             # The helper only exits on its own when AppKit is missing, so don't relaunch it.
-            _helper["failed"] = True
+            _fail(_helper_errors() or "the helper exited")
             return
         payload = {"time": time.time(), "x": origin[0], "y": origin[1], "w": size[0], "h": size[1], "boxes": boxes}
         path = os.path.join(_helper["directory"], FILE)
         with open(path + ".tmp", "w") as handle:
             json.dump(payload, handle)
         os.replace(path + ".tmp", path)
-    except OSError:
-        _helper["failed"] = True
+    except OSError as error:
+        _fail(str(error))
+
+
+def _fail(reason):
+    """Stop publishing for the rest of the run and say why once. Gathering carries on without the overlay."""
+    _helper["failed"] = True
+    print(f"Detection overlay turned off: {reason}")
+
+
+def _helper_errors():
+    try:
+        with open(os.path.join(_helper["directory"], LOG)) as handle:
+            return handle.read().strip().splitlines()[-1]
+    except (OSError, IndexError):
+        return ""
 
 
 def _start():
     _helper["directory"] = tempfile.mkdtemp(prefix="fuzzy-overlay-")
-    _helper["process"] = subprocess.Popen(
-        [sys.executable, os.path.abspath(__file__), _helper["directory"], str(os.getpid())],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
+    with open(os.path.join(_helper["directory"], LOG), "w") as log:
+        _helper["process"] = subprocess.Popen(
+            [sys.executable, os.path.abspath(__file__), _helper["directory"], str(os.getpid())],
+            stdout=subprocess.DEVNULL, stderr=log,
+        )
     atexit.register(_stop)
 
 
