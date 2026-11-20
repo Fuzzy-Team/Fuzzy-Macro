@@ -24,7 +24,7 @@ def run(self):
         return False
     self.viciousWalk('as', 7)
     self.viciousWalk('s', 6)
-    return self.viciousKillPattern()
+    return self.viciousFight()
 
 
 result = run(self)

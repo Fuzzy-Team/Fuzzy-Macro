@@ -5,16 +5,15 @@
 # give way to a goo-spreading diamond (or to standing at the sprinkler while its timer runs).
 # The decision table, timers, colours and X-Flame spin follow the original pattern.
 # Timer lengths come from Windows timing and are unverified on macOS.
-import math
 import threading
 import time
 
 import cv2
-import numpy as np
 
 from modules.controls.sleep import is_paused, is_stopped
 from modules.misc.sense_patterns import (
-    SCORCHING_ACTIVE, SCORCHING_THRESHOLD, SensePattern, SenseStopped,
+    SCORCHING_ACTIVE, SCORCHING_THRESHOLD, SensePattern, SenseStopped, detour, find_targets,
+    pixel_search,
 )
 from modules.screen.imageSearch import captureRegionBGR, locateImageOnScreen
 
@@ -57,15 +56,6 @@ CYCLE_SECONDS = 1
 SEARCH_TICK = 0.01
 AVOID_RADIUS = 2.2
 
-# Colours are 0xRRGGBB. A pair bounds each channel between its two colours.
-# fog: orange, violet, green, green while Scorching Star runs, purple
-TARGET_COLOURS = {
-    0: (0xFFCD6B, 0xCD66FF, 0x01FF01, 0x01FF01, 0x7237FF),
-    1: ((0xFFCB66, 0xFFCF6A), (0xCE6BFF, 0xCF6BFF), 0x08FF01, 0x08FF01, (0x773EFF, 0x7843FF)),
-    2: ((0xFFCC6C, 0xFFD17F), (0xCD67FF, 0xCD84FF), (0x02FF02, 0x20FF2F), (0x02FF02, 0x08FF2F),
-        (0x7542FF, 0x7644FF)),
-    3: (0xFFD371, 0xDB9FFF, (0x01FF01, 0x20FF2F), (0x01FF01, 0x08FF2F), 0x7237FF),
-}
 # Sprinkler colours by fog level, with the safety distances (fractions of the window height)
 # and the blob length each table is searched with. While Beesmas is on, honeystorm has its
 # own colour; otherwise it falls inside the white fog range, and the third colour is snowstorm.
@@ -161,101 +151,6 @@ def choose_targets(priority, orange, violet, green, purple, hit_waiting, size):
     return [], []   # x_flame: the move below is the whole behaviour
 
 
-def colour_bounds(colour):
-    """The (low, high) BGR bounds of a colour or colour pair."""
-    first, second = (colour, colour) if isinstance(colour, int) else colour
-    channels = [(first >> shift & 255, second >> shift & 255) for shift in (0, 8, 16)]
-    return tuple(min(c) for c in channels), tuple(max(c) for c in channels)
-
-
-def run_of(mask, length):
-    """Pixels that match and whose next |length| pixels also match: to the right when length
-    is positive, below when negative."""
-    out = mask.copy()
-    for k in range(1, abs(length) + 1):
-        if length > 0:
-            out[:, :-k] &= mask[:, k:]
-            out[:, -k:] = False
-        else:
-            out[:-k] &= mask[k:]
-            out[-k:] = False
-    return out
-
-
-def pixel_search(shot, colour, safety=0, blob_length=0, blob_size=0, blob_safety=0):
-    """Pixel search over a whole window capture, in "center" mode: the (x, y) of
-    the matching pixel nearest the middle of the window, or None.
-
-    safety: a match needs |safety| more matching pixels after it (right if positive, below if
-    negative). With blob_length and blob_size, a match also needs a blob: inside a square of
-    blob_size around it, the first and last matching pixels (counted with blob_safety) must be
-    blob_length apart, and the result is the middle of the two."""
-    safety, blob_length, blob_safety = int(safety), int(blob_length), int(blob_safety)
-    height, width = shot.shape[:2]
-    low, high = colour_bounds(colour)
-    mask = cv2.inRange(shot, low, high) > 0
-    ys, xs = np.nonzero(run_of(mask, safety))
-    if not len(xs):
-        return None
-    origin_x, origin_y = round(width * 0.5), round(height * 0.5)
-    order = np.argsort((xs - origin_x) ** 2 + (ys - origin_y) ** 2, kind="stable")
-    blob_size = round(blob_size)
-    if blob_length <= 0 or blob_size <= 0:
-        return int(xs[order[0]]), int(ys[order[0]])
-    blob_mask = run_of(mask, blob_safety)
-    half = blob_size // 2
-    # A blob's middle is within half a square (corner to corner) of the pixel that found it,
-    # so nothing farther than best + reach can win.
-    reach = half * math.sqrt(2)
-    best = None
-    best_key = None   # (squared distance, scan position): a tie goes to the pixel scanned first
-    for index in order:
-        x, y = int(xs[index]), int(ys[index])
-        if best is not None and math.hypot(x - origin_x, y - origin_y) - reach > math.sqrt(best_key[0]) + 1e-6:
-            break
-        left, top = max(0, x - half), max(0, y - half)
-        window = blob_mask[top:min(height - 1, y + half) + 1, left:min(width - 1, x + half) + 1]
-        flat = window.ravel()
-        first = int(flat.argmax())
-        if not flat[first]:
-            continue
-        last = flat.size - 1 - int(flat[::-1].argmax())
-        first_y, first_x = divmod(first, window.shape[1])
-        last_y, last_x = divmod(last, window.shape[1])
-        if (last_x - first_x) ** 2 + (last_y - first_y) ** 2 < blob_length ** 2:
-            continue
-        found = (left + (first_x + last_x) // 2, top + (first_y + last_y) // 2)
-        key = ((found[0] - origin_x) ** 2 + (found[1] - origin_y) ** 2, y * width + x)
-        if best is None or key < best_key:
-            best, best_key = found, key
-    return best
-
-
-def find_targets(shot, search_all, fog, scorching):
-    """The orange, violet, green and purple targets on screen, as (x, y) or None. Marks and
-    Precision-only gathering skip the green and purple search."""
-    height = shot.shape[0]
-    blob_length, blob_size = height * 0.021, height * 0.12
-    orange, violet, green, green_scorching, purple = TARGET_COLOURS[fog]
-    # source: the safety distances (as a fraction of the window height) grow with fog
-    if fog == 0:
-        orange_s, violet_s, green_s, purple_s, blob_s = 0.005, 0.003, 0.003, 0.005, 0.003
-    else:
-        orange_s, violet_s, green_s, purple_s, blob_s = 0.007, 0.004, 0.004, 0.007, 0.006
-    found = {
-        "orange": pixel_search(shot, orange, height * orange_s, blob_length, blob_size, -height * blob_s),
-        "violet": pixel_search(shot, violet, height * violet_s),
-        "green": None,
-        "purple": None,
-    }
-    if search_all:
-        found["green"] = pixel_search(shot, green_scorching if scorching else green,
-                                      height * green_s, blob_length, blob_size, 0)
-        found["purple"] = pixel_search(shot, purple, height * purple_s, blob_length, blob_size,
-                                       -height * blob_s)
-    return found
-
-
 def sprinkler_colour_index(shot, yaw, beesmas, limit=3):
     """The first sprinkler colour (up to index limit) found on screen, or None."""
     return sprinkler_hit(shot, yaw, beesmas, limit)[0]
@@ -296,37 +191,6 @@ def read_fog(shot, yaw, new_shot, beesmas):
         if again is not None:
             fog = again
     return fog
-
-
-def detour(target, obstacle, radius):
-    """Tangent waypoint: where to aim first so the walk to target (tiles from the
-    player) skirts a circle of radius around obstacle, or None if the way is clear."""
-    tx, ty = target
-    cx, cy = obstacle
-    distance = math.hypot(cx, cy)
-    if tx * tx + ty * ty < distance * distance - radius * radius:
-        return None
-    if distance <= radius:
-        return -cx, -cy
-    theta = math.atan2(cy, cx)
-    alpha = math.asin(radius / distance)
-    aim = math.atan2(ty, tx)
-
-    def wrap(angle):
-        return (angle + math.pi) % (2 * math.pi) - math.pi
-
-    low, high = wrap(theta - alpha), wrap(theta + alpha)
-    blocked = low <= aim <= high if low <= high else aim >= low or aim <= high
-    if not blocked:
-        return None
-    reach = math.sqrt(distance * distance - radius * radius)
-    left = reach * math.cos(theta + alpha), reach * math.sin(theta + alpha)
-    right = reach * math.cos(theta - alpha), reach * math.sin(theta - alpha)
-
-    def gap(a, b):
-        return abs((a - b + math.pi) % (2 * math.pi) - math.pi)
-
-    return left if gap(aim, theta + alpha) < gap(aim, theta - alpha) else right
 
 
 class TargetSense(SensePattern):
