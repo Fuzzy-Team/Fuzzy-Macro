@@ -325,21 +325,22 @@ class EventDetectionMixin:
             #The time left on the boost is unknown, so no Glitter extending.
             threading.Thread(target=self.tadAltSync.sync_to_boost, args=(field,), kwargs={"extend_with_glitter": False}, daemon=True).start()
 
-    def boostIconVisible(self, screen, field):
-        """True if every pixel of the field's boost icon matches somewhere in the screen within the colour tolerance."""
-        icon = self.adjustImage("./images/buffs", f"boost_{field.replace(' ', '_')}")[:, :, :3].astype(np.int16)
+    def boostIconVisible(self, screen, field, kind="boost", tolerance=BUFF_BAR_BOOST_TOLERANCE):
+        """True if every pixel of the field's buff icon matches somewhere in the screen within the colour tolerance.
+        kind picks the icon set: "boost" for field boosters, "winds" for the Wind Shrine."""
+        icon = self.adjustImage("./images/buffs", f"{kind}_{field.replace(' ', '_')}")[:, :, :3].astype(np.int16)
         iconH, iconW = icon.shape[:2]
         screen = screen[:, :, :3].astype(np.int16)
         if screen.shape[0] < iconH or screen.shape[1] < iconW:
             return False
         # Start from the pixels matching the icon's first pixel, then drop positions as the other icon pixels disagree.
-        candidates = np.argwhere(np.all(np.abs(screen[:screen.shape[0] - iconH + 1, :screen.shape[1] - iconW + 1] - icon[0, 0]) <= BUFF_BAR_BOOST_TOLERANCE, axis=2))
+        candidates = np.argwhere(np.all(np.abs(screen[:screen.shape[0] - iconH + 1, :screen.shape[1] - iconW + 1] - icon[0, 0]) <= tolerance, axis=2))
         for dy in range(iconH):
             for dx in range(iconW):
                 if not len(candidates):
                     return False
                 ys, xs = candidates[:, 0] + dy, candidates[:, 1] + dx
-                candidates = candidates[np.all(np.abs(screen[ys, xs] - icon[dy, dx]) <= BUFF_BAR_BOOST_TOLERANCE, axis=1)]
+                candidates = candidates[np.all(np.abs(screen[ys, xs] - icon[dy, dx]) <= tolerance, axis=1)]
         return len(candidates) > 0
 
     def detectGuidingStarAnnouncement(self, text, now):
