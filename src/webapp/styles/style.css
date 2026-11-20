@@ -408,6 +408,58 @@ select:focus {
   font-weight: 600;
 }
 
+.sub-nav-bar > .gather-add-field {
+  padding: 0.55rem 0.8rem;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  gap: 0.7rem;
+  font: inherit;
+  font-weight: 500;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.gather-add-field > :first-child {
+  position: absolute;
+  left: 0.8rem;
+}
+
+.sub-nav-bar > .gather-add-field:hover {
+  background-color: var(--surface-hover);
+  color: var(--text-main);
+}
+
+.gather-tab-item {
+  position: relative;
+}
+
+.gather-remove-field {
+  display: none;
+  position: absolute;
+  top: 50%;
+  right: 0.5rem;
+  transform: translateY(-50%);
+  padding: 0 0.3rem;
+  border-radius: 4px;
+  font-size: 1rem;
+  line-height: 1.2;
+  opacity: 0.6;
+}
+
+.gather-remove-field:hover {
+  opacity: 1;
+  background-color: var(--surface-hover);
+}
+
+.can-remove-field .gather-tab-item:hover .gather-remove-field {
+  display: block;
+}
+
 .sub-nav-label {
   color: var(--text-dim);
   font-size: 0.8rem;

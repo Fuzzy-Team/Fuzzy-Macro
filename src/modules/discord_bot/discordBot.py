@@ -865,7 +865,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                     return
                 settings = settingsManager.loadSettings()
                 fields = list(settings.get("fields", []))
-                while len(fields) < 5:
+                while len(fields) < 3:
                     fields.append("sunflower")
                 fields[0] = value
                 settingsManager.saveProfileSetting("fields", fields)

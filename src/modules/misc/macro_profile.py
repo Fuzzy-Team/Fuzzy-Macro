@@ -333,7 +333,7 @@ class MacroProfileStore:
             value = profile_data.get(key)
             default = self._profile_defaults.get(key, [])
             if isinstance(value, list):
-                while len(value) < 5:
+                while len(value) < 3:
                     value.append(copy.deepcopy(default[len(value)] if len(value) < len(default) else default[-1]))
 
         self._merge_quest_gumdrop_slot(profile_data, general_data, fields_data)
