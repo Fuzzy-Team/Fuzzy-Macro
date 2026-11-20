@@ -136,6 +136,7 @@ def _run(directory, parent):
                     data = json.load(handle)
                 modified = stamp
         except (OSError, ValueError):
+            # No file yet, or it was read mid-replace. Keep the last boxes and try again next tick.
             pass
         if data is None or time.time() - data["time"] > HOLD:
             window.orderOut_(None)
