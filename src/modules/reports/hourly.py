@@ -541,7 +541,7 @@ class HourlyReport():
         self.itemMonitorSnapshot = None
         self.resetHourlyStats()
     
-    def addHourlyStat(self, stat, value):
+    def addHourlyStat(self, stat, value, save=True):
         self.hourlyReportStats.setdefault(stat, 0)
         if stat.startswith("vic_"):
             self.sessionReportStats.setdefault(stat, 0)
@@ -556,7 +556,8 @@ class HourlyReport():
                 self.sessionReportStats[stat].append(value)
             else:
                 self.sessionReportStats[stat] += value
-        self.saveHourlyReportData()
+        if save:
+            self.saveHourlyReportData()
     
     def setSessionStats(self, start_honey, start_time):
         self.hourlyReportStats["start_honey"] = start_honey
