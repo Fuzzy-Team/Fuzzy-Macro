@@ -1,5 +1,9 @@
 """Colours for report images, matched to the macro's GUI theme."""
 
+import re
+
+from modules.misc.settings_defaults import DEFAULT_GENERAL_SETTINGS
+
 
 # The dark palette every report theme starts from. The first block mirrors the
 # webapp's default tokens; the second is the panel and graph chrome.
@@ -131,8 +135,33 @@ def buildReportTheme(spec):
 THEMES = {name: buildReportTheme(spec) for name, spec in REPORT_THEMES.items()}
 
 
-def resolveReportTheme(guiTheme):
-    """Map a macro gui_theme value to its matching report theme key."""
+def customThemeSpec(setdat):
+    """Report colours for the Custom theme, from the six gui_color_* hex settings."""
+    def color(name):
+        raw = str(setdat.get(name, "")).strip().lstrip("#")
+        if not re.fullmatch(r"[0-9a-fA-F]{6}", raw):
+            raw = DEFAULT_GENERAL_SETTINGS[name]
+        return tuple(int(raw[i:i + 2], 16) for i in (0, 2, 4))
+
+    bg, section, text = color("gui_color_background"), color("gui_color_section"), color("gui_color_text")
+    return {
+        "accent":         color("gui_color_accent"),
+        "bg":             bg,
+        "canvas":         bg,
+        "sidebar_bg":     section,
+        "card_bg":        section,
+        "panel":          section,
+        "panel_outline":  mixColor(section, text, 0.15),
+        "graph_bg":       mixColor(bg, (0, 0, 0), 0.15),
+        "text_primary":   text,
+        "text_secondary": mixColor(text, bg, 0.35),
+    }
+
+
+def resolveReportTheme(guiTheme, setdat=None):
+    """Map a macro gui_theme value to its matching report theme key. The Custom theme is built from setdat."""
     key = str(guiTheme or "").strip().lower().replace(" ", "_")
     key = _THEME_ALIASES.get(key, key)
+    if key == "custom":
+        THEMES[key] = buildReportTheme(customThemeSpec(setdat if isinstance(setdat, dict) else {}))
     return key if key in THEMES else DEFAULT_THEME

@@ -999,6 +999,26 @@ select:focus {
   border-color: var(--primary);
 }
 
+.textbox[aria-invalid="true"] {
+  border-color: #cf2013;
+}
+
+/* Custom theme colour picker, beside its hex textbox */
+.color-swatch {
+  width: 2.2rem;
+  height: 2.2rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+}
+
+.color-swatch:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
 /* Custom Select */
 .custom-select {
   cursor: pointer;

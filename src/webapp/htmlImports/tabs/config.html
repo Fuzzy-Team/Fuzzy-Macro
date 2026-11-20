@@ -678,6 +678,19 @@
             triggerFunction: saveGeneralTriggerFunction,
           },
         },
+        ...[
+          ["gui_color_background", "Background", "The page background"],
+          ["gui_color_section", "Sections", "Cards and sections"],
+          ["gui_color_object", "Buttons and Inputs", "Inputs, dropdowns and hover highlights"],
+          ["gui_color_text", "Text", "Main text color"],
+          ["gui_color_accent", "Accent", "Buttons, tabs and highlights"],
+          ["gui_color_accent_text", "Accent Text", "Text on accent-colored buttons"],
+        ].map(([id, title, desc]) => ({
+          id,
+          title: `Custom ${title}`,
+          desc: `${desc}. Used when GUI Theme is Custom Theme. Six hex digits, like 00FF00.`,
+          type: { name: "color", label: title },
+        })),
         {
           id: "hidden_patterns",
           title: "Hidden Patterns",

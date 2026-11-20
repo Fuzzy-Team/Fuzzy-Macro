@@ -455,7 +455,7 @@ class HourlyReport():
 
         # the report theme (colors and accent) follows the macro's GUI theme
         gui_theme = setdat.get("gui_theme", "Brown") if isinstance(setdat, dict) else "Brown"
-        theme  = resolveReportTheme(gui_theme)
+        theme  = resolveReportTheme(gui_theme, setdat)
         send_embed_text = setdat.get("hourly_report_embed_text", True) if isinstance(setdat, dict) else True
 
         # parse configurable buff lists from settings (comma-separated strings)

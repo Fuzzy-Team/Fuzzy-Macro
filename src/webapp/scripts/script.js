@@ -1030,6 +1030,7 @@ function loadInputs(obj, save = "") {
   if (save == "profile") {
     eel.saveDictProfileSettings(obj);
   }
+  syncCustomColors();
   // Update visibility of any dependent fields after loading inputs
   try { updateDependentFields(); } catch (e) { /* ignore */ }
 
@@ -1112,6 +1113,39 @@ function textboxRestriction(ele, evt) {
   } else if (ele.dataset.inputType == "int") {
     return !(charCode > 31 && (charCode < 48 || charCode > 57));
   }
+}
+
+// Custom theme colours: each is an RRGGBB textbox with a picker beside it.
+// Repaint the theme from the six textboxes and keep the pickers in step.
+function syncCustomColors() {
+  const colors = {};
+  for (const id of Object.keys(CUSTOM_THEME_COLORS)) {
+    const box = document.getElementById(id);
+    if (!box) return; // the config tab isn't built yet
+    const hex = box.value.replace(/^#/, "");
+    if (!HEX_COLOR.test(hex)) continue;
+    colors[id] = hex.toUpperCase();
+    document.querySelector(`[data-color-for="${id}"]`).value = "#" + hex;
+  }
+  setCustomColors(colors);
+}
+
+// Save a typed colour once it is six hex digits. Until then the last saved colour stays in use.
+function saveCustomColor(box) {
+  const hex = box.value.trim().replace(/^#/, "");
+  const valid = HEX_COLOR.test(hex);
+  box.setAttribute("aria-invalid", String(!valid));
+  box.title = valid ? "" : "Enter six hex digits, like 00FF00";
+  if (!valid) return;
+  box.value = hex.toUpperCase();
+  syncCustomColors();
+  saveSetting(box, "general");
+}
+
+function pickCustomColor(picker) {
+  const box = document.getElementById(picker.dataset.colorFor);
+  box.value = picker.value.slice(1);
+  saveCustomColor(box);
 }
 
 //disable browser actions

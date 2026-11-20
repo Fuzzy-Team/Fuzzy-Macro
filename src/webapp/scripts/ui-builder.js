@@ -47,6 +47,11 @@ const saveProfileTriggerFunction = "saveSetting(this, 'profile')";
         text: "reset" //button text
         length: 10, //in rem units, defaults to 5 if not included
     }
+    color: (RRGGBB hex textbox plus a picker, for the Custom theme)
+    type: {
+        name: "color",
+        label: "Background" //names the inputs for screen readers
+    }
     multicheck:
     type: {
         name: "multicheck",
@@ -153,6 +158,12 @@ function buildInput(id, type) {
       }"${type.allowNegative ? ' data-allow-negative="1"' : ""} onkeypress="return textboxRestriction(this, event)" onchange="${type.triggerFunction
       }">`;
     return html;
+  } else if (type.name == "color") {
+    // an RRGGBB textbox (the saved value) with a colour picker beside it
+    return `<div style="display:flex; align-items:center; gap:0.5rem; margin-top:0.6rem;">
+            <input type="color" class="color-swatch" data-color-for="${id}" value="#000000" aria-label="${type.label} color picker" onchange="pickCustomColor(this)">
+            <input type="text" id="${id}" name="${id}" class="poppins-regular textbox" style="width:7rem; margin:0;" maxlength="7" spellcheck="false" autocomplete="off" placeholder="RRGGBB…" aria-label="${type.label} hex color" onchange="saveCustomColor(this)">
+          </div>`;
   } else if (type.name == "textbox_with_button") {
     // composite control: an input plus a button on the same line
     const inputId = type.inputId ? type.inputId : `${id}_input`;
@@ -289,6 +300,7 @@ function buildStandardContainer(parentElement, title, desc, settings) {
     checkbox: "10%",
     dropdown: "5%",
     textbox: "5%",
+    color: "5%",
     button: "5%",
     keybind: "5%",
     multicheck: "5%",

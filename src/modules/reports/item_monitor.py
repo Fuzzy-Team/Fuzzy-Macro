@@ -348,7 +348,7 @@ def generate_item_report(snapshot, setdat=None, report_type="hourly", output_pat
     from modules.reports.theme import resolveReportTheme
 
     gui_theme = setdat.get("gui_theme", "Brown")
-    theme = resolveReportTheme(gui_theme)
+    theme = resolveReportTheme(gui_theme, setdat)
     time_format = setdat.get("hourly_report_time_format", 24)
 
     drawer = ItemReportDrawer(time_format=time_format, theme=theme)
