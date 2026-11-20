@@ -1839,7 +1839,9 @@ def publish_live_overlay(runtime, enabled, detections, target, labels, ignored_t
         capture = runtime["capture"]
         width, height = capture["width"], capture["height"]
         boxes = detection_boxes(runtime, detections, target, labels, ignored_tokens, width, height)
-        sprinkler = sprinkler_detection_box(runtime.get("last_sprinkler_detection") or {}, width, height)
+        seen = runtime.get("last_sprinkler_detection") or {}
+        # A failed sprinkler scan leaves the old detection in place, so skip it once it is as old as the overlay's hold time.
+        sprinkler = sprinkler_detection_box(seen, width, height) if time.time() - seen.get("time", 0.0) <= overlay.HOLD else None
         if sprinkler:
             boxes.append(sprinkler)
         overlay.publish(capture_origin(capture), (width, height), boxes)

@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 
 # Seconds a box stays on screen after the last publish, so a stalled scanner clears the overlay.
@@ -27,27 +28,30 @@ COLORS = {
 }
 
 _helper = {"directory": None, "process": None, "failed": False}
+_lock = threading.Lock()
 
 
 def publish(origin, size, boxes):
     """Show boxes at `origin` (screen points, top-left) over a `size` area. Boxes are (l, t, r, b, text, kind)."""
-    if _helper["failed"]:
-        return
-    try:
-        process = _helper["process"]
-        if process is None:
-            _start()
-        elif process.poll() is not None:
-            # The helper only exits on its own when AppKit is missing, so don't relaunch it.
-            _fail(_helper_errors() or "the helper exited")
+    # A scan that outlives its gather can overlap the next one, and both would write the same temp file.
+    with _lock:
+        if _helper["failed"]:
             return
-        payload = {"time": time.time(), "x": origin[0], "y": origin[1], "w": size[0], "h": size[1], "boxes": boxes}
-        path = os.path.join(_helper["directory"], FILE)
-        with open(path + ".tmp", "w") as handle:
-            json.dump(payload, handle)
-        os.replace(path + ".tmp", path)
-    except OSError as error:
-        _fail(str(error))
+        try:
+            process = _helper["process"]
+            if process is None:
+                _start()
+            elif process.poll() is not None:
+                # The helper only exits on its own when AppKit is missing, so don't relaunch it.
+                _fail(_helper_errors() or "the helper exited")
+                return
+            payload = {"time": time.time(), "x": origin[0], "y": origin[1], "w": size[0], "h": size[1], "boxes": boxes}
+            path = os.path.join(_helper["directory"], FILE)
+            with open(path + ".tmp", "w") as handle:
+                json.dump(payload, handle)
+            os.replace(path + ".tmp", path)
+        except OSError as error:
+            _fail(str(error))
 
 
 def _fail(reason):
