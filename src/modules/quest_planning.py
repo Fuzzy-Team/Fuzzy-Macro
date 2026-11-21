@@ -237,8 +237,8 @@ def choose_quest_gather(objectives, settings, field_settings, current_field=None
                      key=lambda obj: (order.index(obj["giver"]), obj["row"]))
     if not pending:
         return None
-    required = [fields[0] for obj in pending
-                if len(fields := allowed_fields(obj, settings, field_settings)) == 1]
+    required = [fields[0] for fields in (allowed_fields(obj, settings, field_settings) for obj in pending)
+                if len(fields) == 1]
     candidates = []
     for objective in pending:
         fields = allowed_fields(objective, settings, field_settings)

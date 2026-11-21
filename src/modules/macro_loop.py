@@ -630,8 +630,8 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
     def completedQuestGivers():
         """Givers whose last quest-menu read showed every objective complete, in giver order."""
         return [giver for giver in quest_giver_order(macro.setdat)
-                if canClaimTimedBearQuest(giver) and (rows := macro.questObservations.get(giver))
-                and all(row["status"] == "complete" for row in rows)]
+                if canClaimTimedBearQuest(giver) and macro.questObservations.get(giver)
+                and all(row["status"] == "complete" for row in macro.questObservations[giver])]
 
     def gatherObjectives():
         return [objective for giver in quest_giver_order(macro.setdat)
