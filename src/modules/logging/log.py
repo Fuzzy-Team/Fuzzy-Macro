@@ -279,6 +279,10 @@ def installCrashLog():
         logException(excType, exc, tb)
         sys.__excepthook__(excType, exc, tb)
 
+    sys.excepthook = onException
+    if not hasattr(threading, "excepthook"):  # Python 3.7 has no thread hook, so thread crashes are only printed
+        return
+
     printThreadException = threading.excepthook  # threading.__excepthook__ needs Python 3.10
 
     def onThreadException(args):
@@ -286,7 +290,6 @@ def installCrashLog():
             logException(args.exc_type, args.exc_value, args.exc_traceback)
         printThreadException(args)
 
-    sys.excepthook = onException
     threading.excepthook = onThreadException
 
 
