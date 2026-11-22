@@ -321,6 +321,7 @@ class FinalReport:
             "total_bugs": sourceStats.get("bugs", 0),
             "total_quests": sourceStats.get("quests_completed", 0),
             "total_vicious_bees": sourceStats.get("vicious_bees", 0),
+            "start_honey": startHoney,
             "gathering_time": timeBreakdown["gathering_time"],
             "converting_time": timeBreakdown["converting_time"],
             "bug_run_time": timeBreakdown["bug_run_time"],
