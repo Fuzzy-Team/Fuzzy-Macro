@@ -835,9 +835,11 @@
           </div>`;
       }
       document.getElementById("blender").parentElement.insertAdjacentHTML("beforeend", `
-        <div class="blender-queue-head" aria-hidden="true"><span></span><span>Item</span><span>Amount</span><span>Repeat</span><span></span></div>
-        <div class="blender-queue"></div>
-        <button type="button" class="blender-add" onclick="addBlenderSlot()">+ Add Slot</button>`);
+        <div class="blender-queue-box">
+          <div class="blender-queue-head" aria-hidden="true"><span></span><span>Item</span><span>Amount</span><span>Repeat</span><span></span></div>
+          <div class="blender-queue"></div>
+          <button type="button" class="blender-add" onclick="addBlenderSlot()">+ Add Slot</button>
+        </div>`);
     </script>
   </div>
   <div id="collect-badges-tab" class="standard-container sub-tab-panel">

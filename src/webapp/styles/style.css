@@ -2065,6 +2065,11 @@ select:focus {
 
 
 /* Blender craft queue */
+/* the layout changes with the room the queue has, which depends on the sidebar */
+.blender-queue-box {
+  container-type: inline-size;
+}
+
 .blender-queue-head,
 .blender-slot {
   display: grid;
@@ -2341,7 +2346,7 @@ select:focus {
   pointer-events: none;
 }
 
-@media (max-width: 720px) {
+@container (max-width: 650px) {
   .blender-queue-head {
     display: none;
   }

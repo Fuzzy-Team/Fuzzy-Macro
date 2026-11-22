@@ -694,8 +694,7 @@ class CollectiblesMixin:
                 #item must be set and have repeats
                 if (self.setdat[f"blender_item_{nextItem}"] != "none") and (self.setdat[f"blender_repeat_{nextItem}"] > 0 or self.setdat[f"blender_repeat_inf_{nextItem}"]):
                     return nextItem
-            else:
-                return 0 #no items to craft
+            return 0 #no items to craft
 
         def skipUnavailableCraft(reason):
             # Do not confirm a craft that the blender rejected or whose quantity

@@ -25,10 +25,12 @@ function readBlenderSlot(slot){
 }
 
 // rows[i] are the values for slot i + 1. Saved along with how many slots are in use.
-function saveBlenderSlots(rows, count){
+// order, when slots moved, is each new position's old slot number (see moveBlenderSlots in gui.py).
+function saveBlenderSlots(rows, count, order){
     const next = { blender_slots: count }
     rows.forEach((row, i) => BLENDER_SLOT_KEYS.forEach((key, j) => next[`blender_${key}_${i + 1}`] = row[j]))
     loadInputs(next, "profile")
+    if (order) eel.moveBlenderSlots(order)
 }
 
 // numbers, screen reader labels, and the limits on removing and adding
@@ -68,9 +70,10 @@ function removeBlenderSlot(button){
     const rows = slots.map(readBlenderSlot)
     rows.splice(slots.indexOf(button.closest(".blender-slot")), 1)
     rows.push(BLENDER_SLOT_DEFAULT) // the freed last slot goes back to its defaults
+    const order = slots.map((slot) => Number(slot.dataset.slot)).filter((n) => n !== Number(button.closest(".blender-slot").dataset.slot))
     slots.pop().remove()
     refreshBlenderSlots()
-    saveBlenderSlots(rows, slots.length)
+    saveBlenderSlots(rows, slots.length, order)
 }
 
 // Slots are dragged around in the page, but each keeps its own setting ids. Once the order
@@ -79,9 +82,10 @@ function commitBlenderOrder(save){
     const queue = document.querySelector(".blender-queue")
     const slots = Array.from(queue.children)
     const rows = slots.map(readBlenderSlot)
+    const order = slots.map((slot) => Number(slot.dataset.slot))
     slots.sort((a, b) => a.dataset.slot - b.dataset.slot).forEach((slot) => queue.appendChild(slot))
     refreshBlenderSlots()
-    if (save) saveBlenderSlots(rows, rows.length)
+    if (save) saveBlenderSlots(rows, rows.length, order)
 }
 
 function switchCollectTab(target){
