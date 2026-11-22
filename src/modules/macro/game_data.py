@@ -1,6 +1,5 @@
 """Static Bee Swarm Simulator data used by the macro."""
 import json
-from modules.misc.settings_defaults import BLENDER_ITEM_SLOTS
 from modules.quest_planning import load_quest_catalog
 
 import cv2
@@ -545,6 +544,7 @@ PING_SETTING_KEYS = [
     "ping_planters",
     "ping_collectibles",
     "ping_quests",
+    "ping_badges",
     "ping_boosts",
     "ping_crafting",
     "ping_stream",

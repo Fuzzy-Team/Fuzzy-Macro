@@ -65,7 +65,7 @@ ROUTE_FALLBACKS = {
     "reports": ["hourly_reports", "final_reports", "default"],
     "gathering": ["live_gather_report", "default"],
     "combat": ["mob_events", "vicious_bee", "character_deaths", "default"],
-    "activities": ["boosts", "crafting", "sticker_events", "ant_challenge", "mondo_buff", "conversion_events", "planters", "collectibles", "quests", "guiding_star", "default"],
+    "activities": ["boosts", "crafting", "sticker_events", "ant_challenge", "mondo_buff", "conversion_events", "planters", "collectibles", "quests", "badges", "guiding_star", "default"],
     "system": ["critical_errors", "disconnects", "stream", "default"],
     "live_gather_report": ["gathering", "default"],
     "hourly_reports": ["reports", "default"],
@@ -83,6 +83,7 @@ ROUTE_FALLBACKS = {
     "planters": ["activities", "default"],
     "collectibles": ["activities", "default"],
     "quests": ["activities", "default"],
+    "badges": ["activities", "default"],
     "boosts": ["activities", "default"],
     "crafting": ["activities", "default"],
     "guiding_star": ["activities", "default"],
@@ -112,6 +113,7 @@ ROUTE_CATEGORIES = [
     "planters",
     "collectibles",
     "quests",
+    "badges",
     "boosts",
     "crafting",
     "guiding_star",
@@ -156,6 +158,8 @@ def infer_route_category(title, desc=""):
         return "activities"
     if "quest" in text:
         return "activities"
+    if "badge" in text:
+        return "badges"
     if "boost" in text or "afb" in text:
         return "activities"
     if "blender" in text or "crafted:" in text or "craft" in text:
@@ -279,6 +283,10 @@ def installCrashLog():
         logException(excType, exc, tb)
         sys.__excepthook__(excType, exc, tb)
 
+    sys.excepthook = onException
+    if not hasattr(threading, "excepthook"):  # Python 3.7 has no thread hook, so thread crashes are only printed
+        return
+
     printThreadException = threading.excepthook  # threading.__excepthook__ needs Python 3.10
 
     def onThreadException(args):
@@ -286,7 +294,6 @@ def installCrashLog():
             logException(args.exc_type, args.exc_value, args.exc_traceback)
         printThreadException(args)
 
-    sys.excepthook = onException
     threading.excepthook = onThreadException
 
 

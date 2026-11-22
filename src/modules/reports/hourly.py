@@ -234,7 +234,7 @@ class HourlyReport():
             try:
                 value = float(sampleValues.get(buffName, 0) or 0)
             except (TypeError, ValueError):
-                value = 0
+                value = 0.0
             if value.is_integer():
                 value = int(value)
             if buffName not in self.uptimeBuffsValues:

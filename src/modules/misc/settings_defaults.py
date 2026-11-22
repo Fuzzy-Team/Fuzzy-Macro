@@ -3,6 +3,8 @@
 import copy
 from modules.quest_planning import OBJECTIVE_SETTING_CHOICES, gather_objective_types, load_quest_catalog
 
+# the most blender_item_N slots a profile can hold (one per recipe); blender_slots is how many are in use
+BLENDER_ITEM_SLOTS = 20
 
 DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False],
  'fields': ['pine tree', 'sunflower', 'dandelion', 'pine tree', 'sunflower'],
@@ -141,6 +143,7 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'wind_shrine_quantity': 1,
  'memory_match_rewards': [],
  'blender_enable': False,
+ 'blender_slots': 5,
  'blender_item_1': 'blue extract',
  'blender_quantity_1': 1,
  'blender_quantity_max_1': False,
@@ -317,6 +320,32 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'sticker_sprout_gather_minutes': 8,
  'bucko_bee_quest': False,
  'riley_bee_quest': False,
+ 'sunflower_badge': False,
+ 'dandelion_badge': False,
+ 'mushroom_badge': False,
+ 'blue_flower_badge': False,
+ 'clover_badge': False,
+ 'spider_badge': False,
+ 'strawberry_badge': False,
+ 'bamboo_badge': False,
+ 'pineapple_badge': False,
+ 'pumpkin_badge': False,
+ 'cactus_badge': False,
+ 'rose_badge': False,
+ 'pine_tree_badge': False,
+ 'stump_badge': False,
+ 'coconut_badge': False,
+ 'pepper_badge': False,
+ 'hive_hub_badge': False,
+ 'mountain_top_badge': False,
+ 'goo_badge': False,
+ 'honey_badge': False,
+ 'badge_honey_hive_color': 'mixed',
+ 'badge_gather_until': 'time',
+ 'badge_gather_mins': 0,
+ 'badge_gather_return': 'no override',
+ 'badge_use_ai_gather': False,
+ 'badge_progress_watch': False,
  'quest_progress_watch': False,
  'quest_progress_check_mode': 'interval',
  'quest_progress_check_seconds': 10,
@@ -403,6 +432,26 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
                          'quest_honey_bee',
                          'quest_bucko_bee',
                          'quest_riley_bee',
+                         'badge_sunflower',
+                         'badge_dandelion',
+                         'badge_mushroom',
+                         'badge_blue_flower',
+                         'badge_clover',
+                         'badge_spider',
+                         'badge_strawberry',
+                         'badge_bamboo',
+                         'badge_pineapple',
+                         'badge_pumpkin',
+                         'badge_cactus',
+                         'badge_rose',
+                         'badge_pine_tree',
+                         'badge_stump',
+                         'badge_coconut',
+                         'badge_pepper',
+                         'badge_hive_hub',
+                         'badge_mountain_top',
+                         'badge_goo',
+                         'badge_honey',
                          'stinger_hunt',
                          'mondo_buff',
                          'auto_field_boost',
@@ -766,6 +815,7 @@ DEFAULT_GENERAL_SETTINGS = {'use_1080p_virtual_display': False,
  'route_planters': '',
  'route_collectibles': '',
  'route_quests': '',
+ 'route_badges': '',
  'route_boosts': '',
  'route_crafting': '',
  'route_guiding_star': '',
@@ -814,6 +864,7 @@ DEFAULT_GENERAL_SETTINGS = {'use_1080p_virtual_display': False,
  'ping_planters': False,
  'ping_collectibles': False,
  'ping_quests': False,
+ 'ping_badges': False,
  'ping_boosts': False,
  'ping_crafting': False,
  'ping_stream': False,
@@ -867,6 +918,11 @@ for _objective in gather_objective_types(load_quest_catalog()):
                          "backpack": "auto", "return": "no override",
                          **dict.fromkeys(OBJECTIVE_SETTING_CHOICES, "auto")}.items():
         DEFAULT_PROFILE_SETTINGS[f"quest_objective_{_objective['value']}_{_key}"] = _value
+
+for _slot in range(6, BLENDER_ITEM_SLOTS + 1):
+    DEFAULT_PROFILE_SETTINGS.update({f"blender_item_{_slot}": "none", f"blender_quantity_{_slot}": 1,
+                                     f"blender_quantity_max_{_slot}": False, f"blender_repeat_{_slot}": 1,
+                                     f"blender_repeat_inf_{_slot}": False})
 
 
 DEFAULT_FIELDS = {'sunflower': {'shift_lock': False,
@@ -2008,9 +2064,6 @@ DEFAULT_TIMINGS = {'wealth_clock': 0,
 DEFAULT_AFB = {'AFB_dice_cd': 0, 'AFB_glitter_cd': 0, 'AFB_limit': 0}
 
 DEFAULT_BLENDER = {'item': 1, 'collectTime': 0}
-
-# number of blender_item_N slots in DEFAULT_PROFILE_SETTINGS
-BLENDER_ITEM_SLOTS = 5
 
 DEFAULT_STICKER_STACK = 0
 

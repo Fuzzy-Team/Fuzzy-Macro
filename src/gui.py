@@ -879,6 +879,15 @@ def clearBlender():
     }
     settingsManager.saveUserLiteral("blender.txt", blenderData)
 
+# order[i] is the old number of the slot that now sits in slot i + 1 (a removed slot is left out).
+# The saved next slot follows its recipe instead of keeping its number.
+@eel.expose
+def moveBlenderSlots(order):
+    blenderData = settingsManager.loadUserLiteral("blender.txt")
+    if blenderData["item"] in order:
+        blenderData["item"] = order.index(blenderData["item"]) + 1
+        settingsManager.saveUserLiteral("blender.txt", blenderData)
+
 @eel.expose
 def clearAFB():
     AFBData = {

@@ -270,6 +270,7 @@
         if (taskId.startsWith("collect_")) return "collect";
         if (taskId.startsWith("kill_")) return "kill";
         if (taskId.startsWith("quest_")) return "quest";
+        if (taskId.startsWith("badge_")) return "badge";
         return "special";
       }
 
@@ -280,6 +281,7 @@
           collect: "COLLECT",
           kill: "KILL",
           quest: "QUEST",
+          badge: "BADGE",
           special: "SPECIAL",
         };
         return badges[category] || "";
@@ -1110,6 +1112,7 @@
         ["route_gathering", "Gathering", "Gathering start/end and live gather report messages"],
         ["route_combat", "Combat", "Mobs, Vicious Bee, and character death messages"],
         ["route_activities", "Activities", "Boosts, crafting, stickers, ant challenge, planters, quests, collectibles, and conversion messages"],
+        ["route_badges", "Badges", "Badge scan, claim, and badge gather messages"],
         ["route_system", "System", "Critical errors, disconnects, stream messages, and other system-level notices"],
       ];
 

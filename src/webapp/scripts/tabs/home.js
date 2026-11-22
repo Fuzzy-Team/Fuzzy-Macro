@@ -429,11 +429,21 @@ async function loadTasks() {
       };
     }
 
+    if (taskId.startsWith("badge_")) {
+      const badgeName = taskId.replace("badge_", "");
+      if (!setdat[`${badgeName}_badge`]) return { enabled: false };
+      return {
+        enabled: true,
+        title: "Badge",
+        desc: `🏅 ${toTitleCase(badgeName.replaceAll("_", " "))}`,
+      };
+    }
+
     // Special tasks
     if (taskId === "blender") {
       if (!setdat.blender_enable) return { enabled: false };
       const selectedBlenderItems = {};
-      const blenderItemSlots = 5;
+      const blenderItemSlots = setdat.blender_slots;
       for (let i = 1; i <= blenderItemSlots; i++) {
         const item = setdat[`blender_item_${i}`]?.replaceAll(" ", "_");
         if (item == "none" || !item) continue;
@@ -559,7 +569,7 @@ async function loadTasks() {
     //blender
     if (setdat["blender_enable"]) {
       const selectedBlenderItems = {};
-      const blenderItemSlots = 5;
+      const blenderItemSlots = setdat.blender_slots;
       for (let i = 1; i <= blenderItemSlots; i++) {
         const item = setdat[`blender_item_${i}`]?.replaceAll(" ", "_");
         if (item == "none" || !item) continue;
