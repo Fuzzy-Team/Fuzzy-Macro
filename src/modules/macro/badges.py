@@ -101,6 +101,15 @@ class BadgeMixin:
                 clickX, clickY = int(cols.mean()), titleY + int(rows.mean())
             return status, tier, clickX, clickY
 
+        def readResult(screen, match):
+            status, tier, clickX, clickY = readSection(screen, match[1])
+            if logDetection:
+                imgPath = "latest-badge.png"
+                screen.crop((0, max(0, match[1] - 10), screen.width, min(screen.height, match[1] + int(180 * multi)))).convert("RGB").save(imgPath)
+                self.logger.webhook("Badge", f"{displayName}: {status}" + (f" ({tier})" if tier else ""),
+                                    "dark brown", imagePath=imgPath, route_category="badges")
+            return {"status": status, "tier": tier, "click_x": clickX, "click_y": clickY, "display_name": displayName}
+
         manageUi = badgeScreens is None
         if manageUi:
             self.toggleInventory("close")
@@ -123,18 +132,17 @@ class BadgeMixin:
             if screen is None:
                 break
             match = matchTitle(screen)
-            if match:
-                status, tier, clickX, clickY = readSection(screen, match[1])
-                result = {"status": status, "tier": tier, "click_x": clickX, "click_y": clickY, "display_name": displayName}
-                if logDetection:
-                    imgPath = "latest-badge.png"
-                    screen.crop((0, max(0, match[1] - 10), screen.width, min(screen.height, match[1] + int(180 * multi)))).convert("RGB").save(imgPath)
-                    self.logger.webhook("Badge", f"{displayName}: {status}" + (f" ({tier})" if tier else ""),
-                                        "dark brown", imagePath=imgPath, route_category="badges")
+            # A title at the bottom edge hides its tier and progress bar, so keep scrolling until the whole badge shows.
+            cutOff = bool(match) and screens is None and match[1] + int(150 * multi) > screen.height
+            if match and not cutOff:
+                result = readResult(screen, match)
                 break
             if screens is None:
                 scroller = scroller or self._scrollBadgeMenu("bottom")
                 if next(scroller, None) is None:
+                    # End of the list: this is as much of the badge as can be shown.
+                    if match:
+                        result = readResult(screen, match)
                     break
 
         if result is None:
@@ -151,7 +159,9 @@ class BadgeMixin:
         """Click a claimable badge's green bar in the open menu, then return its refreshed state."""
         if badgeInfo.get("status") != "claimable":
             return badgeInfo
-        mouse.moveTo(self.robloxWindow.mx + int(badgeInfo["click_x"]), self.robloxWindow.my + 150 + int(badgeInfo["click_y"]))
+        # click_x/click_y are screenshot pixels, which are multi times larger than screen points on Retina.
+        multi = self.robloxWindow.multi
+        mouse.moveTo(self.robloxWindow.mx + int(badgeInfo["click_x"] / multi), self.robloxWindow.my + 150 + int(badgeInfo["click_y"] / multi))
         time.sleep(0.1)
         mouse.click()
         time.sleep(0.6)

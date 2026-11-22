@@ -319,7 +319,9 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
             macro.clear_task_status()
             taskCompleted = True
             if action == INTERRUPT_SKIP:
-                if func == macro.gather and len(args) > 2 and args[2]:
+                if func == macro.gather and len(args) > 4 and args[4]:
+                    macro.badgeGatherSkipped = True
+                elif func == macro.gather and len(args) > 2 and args[2]:
                     macro.questGatherOutcome = "skipped"
                     macro.deferredQuestObjectives.add(args[2]["id"])
                 else:
@@ -762,8 +764,10 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
         # Badge level gathers again, after each backpack, until the tier changes.
         for _ in range(40 if until == "badge_level" else 1):
             macro.logger.webhook("Badge gathering", f"{display} in {field.title()}", "light blue", route_category="badges")
+            macro.badgeGatherSkipped = False
             runTask(macro.gather, args=(field, overrides, None, None, badgeId), resetAfter=False)
-            if run.value == 0:
+            # A skipped gather moves on to the next task instead of gathering again.
+            if run.value == 0 or macro.badgeGatherSkipped:
                 return
             info = runTask(scanAndClaim, resetAfter=False, allowAFB=False)
             if run.value == 0 or info is None or info["status"] in ("not_found", "done") or info["tier"] != startTier:
