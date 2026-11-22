@@ -796,62 +796,50 @@
             triggerFunction: "clearBlenderData(this)",
           },
         },
+        {
+          title: "Craft Queue",
+          desc: "Crafts each slot in order, then starts over at slot 1. Empty slots and slots with 0 repeats are skipped.",
+          type: { name: "separator" },
+        },
       ]);
 
-      function blenderItemDropDownHTML(id) {
-        return buildInput(id, {
-          name: "dropdown",
-          data: fieldNectarArray,
-          triggerFunction: "saveSetting(this, 'profile')",
-        });
+      // one number box with - / + buttons and an on/off chip that overrides it
+      function blenderCounter(id, flagId, label, flagText, flagLabel, flagTitle, min, length) {
+        const save = "saveSetting(this, 'profile')";
+        return `
+          <div class="blender-field" data-label="${label}">
+            <input type="checkbox" class="blender-flag" id="${flagId}" aria-label="${flagLabel}" onchange="${save}">
+            <div class="blender-stepper">
+              <button type="button" class="blender-step" aria-label="Decrease ${label.toLowerCase()}" onclick="stepBlenderInput('${id}', -1, ${min})">−</button>
+              ${buildInput(id, { name: "textbox", triggerFunction: save, inputType: "int", length })}
+              <button type="button" class="blender-step" aria-label="Increase ${label.toLowerCase()}" onclick="stepBlenderInput('${id}', 1, ${min})">+</button>
+            </div>
+            <label class="blender-chip" for="${flagId}" title="${flagTitle}">${flagText}</label>
+          </div>`;
       }
 
+      // one queue card; the number is its drag handle. collect.js builds as many as the profile has.
       const blenderItemsArray = toImgArray(blenderIcons);
-      const blenderParent = document.getElementById("blender").parentElement;
-      const blenderItemSlots = 5;
-      for (let i = 1; i <= blenderItemSlots; i++) {
-        const blenderItemHTML = `
-                    <div class="seperator" style="margin-bottom: 1rem;"></div>
-                    <h3 class="poppins-semibold" style = "margin-bottom: 0.9rem;">Item ${i}</h3>
-                    <div style="display:flex; justify-content:space-between; align-items: flex-start; flex-wrap: wrap">
-                        <div style="display:flex; align-items: flex-end">
-                            <h4 class="poppins-regular" style = "margin-right: 0.7rem">Item:</h4>
-                            ${buildInput(`blender_item_${i}`,{
-                                name: "dropdown",
-                                data: blenderItemsArray,
-                                triggerFunction: "saveSetting(this, 'profile')",   
-                            })}
-                        </div>
-                        <div style="display:flex; align-items: flex-start;">
-                            <h4 class="poppins-regular" style = "margin-right: 0.7rem; margin-top: 0.7rem;">Quantity:</h4>
-                            <div>
-                                ${buildInput(`blender_quantity_${i}`, {name: "textbox", triggerFunction: "saveSetting(this, 'profile')", inputType: "int", length:7})}
-                                <div style="display:flex; margin-top: 0.3rem; width:100%; justify-content: space-between">
-                                    <div>
-                                        <h4 class="poppins-regular" style = "margin-top:0.5rem">Max:</h4>
-                                        <div class="poppins-regular" style="font-size:0.9rem; color: #adb4bc">Craft the<br>max quantity</div>
-                                    </div>
-                                    ${buildInput(`blender_quantity_max_${i}`, {name: "checkbox", triggerFunction: "saveSetting(this, 'profile')"})}
-                                </div>
-                            </div>
-                        </div>
-                        <div style="display:flex; align-items: flex-start;">
-                            <h4 class="poppins-regular" style = "margin-right: 0.7rem; margin-top: 0.7rem;">Repeat:</h4>
-                            <div>
-                                ${buildInput(`blender_repeat_${i}`, {name: "textbox", triggerFunction: "saveSetting(this, 'profile')", inputType: "int", length:6})}
-                                <div style="display:flex; margin-top: 0.3rem; width:calc(100% + 1rem); justify-content: space-between">
-                                    <div>
-                                        <h4 class="poppins-regular" style = "margin-top:0.5rem">Inf:</h4>
-                                        <div class="poppins-regular" style="font-size:0.9rem; color: #adb4bc">Repeat<br>infinitely</div>
-                                    </div>
-                                    ${buildInput(`blender_repeat_inf_${i}`, {name: "checkbox", triggerFunction: "saveSetting(this, 'profile')"})}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-        blenderParent.innerHTML += blenderItemHTML;
+      function blenderSlotHTML(i) {
+        return `
+          <div class="blender-slot" data-slot="${i}">
+            <div class="blender-slot-num" role="button" tabindex="0" draggable="true" title="Drag to reorder, or press Up or Down">${i}</div>
+            ${buildInput(`blender_item_${i}`, {
+              name: "dropdown",
+              data: blenderItemsArray,
+              triggerFunction: "saveSetting(this, 'profile')",
+            })}
+            ${blenderCounter(`blender_quantity_${i}`, `blender_quantity_max_${i}`, "Amount", "Max", "Craft the max quantity", "Craft the max quantity", 1, 4)}
+            ${blenderCounter(`blender_repeat_${i}`, `blender_repeat_inf_${i}`, "Repeat", "∞", "Repeat forever", "Repeat forever", 0, 4)}
+            <button type="button" class="blender-slot-remove" title="Remove this slot" onclick="removeBlenderSlot(this)">×</button>
+          </div>`;
       }
+      document.getElementById("blender").parentElement.insertAdjacentHTML("beforeend", `
+        <div class="blender-queue-box">
+          <div class="blender-queue-head" aria-hidden="true"><span></span><span>Item</span><span>Amount</span><span>Repeat</span><span></span></div>
+          <div class="blender-queue"></div>
+          <button type="button" class="blender-add" onclick="addBlenderSlot()">+ Add Slot</button>
+        </div>`);
     </script>
   </div>
   <div id="collect-badges-tab" class="standard-container sub-tab-panel">

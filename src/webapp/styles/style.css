@@ -2062,3 +2062,319 @@ select:focus {
 .sprout-ai-token-row.dragging {
   opacity: 0.45;
 }
+
+
+/* Blender craft queue */
+/* the layout changes with the room the queue has, which depends on the sidebar */
+.blender-queue-box {
+  container-type: inline-size;
+}
+
+.blender-queue-head,
+.blender-slot {
+  display: grid;
+  grid-template-columns: 1.75rem minmax(9rem, 1fr) 11rem 11rem 1.75rem;
+  align-items: center;
+  gap: 0 0.9rem;
+}
+
+.blender-queue-head {
+  padding: 0 0.75rem;
+  margin: 0.9rem 0 0.4rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.blender-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.blender-slot {
+  position: relative;
+  padding: 0.6rem 0.75rem;
+  background-color: var(--surface-dim);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+/* a short line from each slot to the next shows the order */
+.blender-slot.dragging {
+  opacity: 0.5;
+  border-color: var(--primary);
+  border-style: dashed;
+}
+
+.blender-slot:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: calc(0.75rem + 0.875rem - 1px);
+  width: 2px;
+  height: calc(0.6rem + 2px);
+  background-color: rgba(var(--primary-rgb), 0.45);
+}
+
+.blender-slot .blender-slot-num {
+  cursor: grab;
+  user-select: none;
+  transition: background-color 0.15s;
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--primary);
+  background-color: rgba(var(--primary-rgb), 0.15);
+  border: 1px solid rgba(var(--primary-rgb), 0.4);
+}
+
+.blender-slot .blender-slot-num:hover {
+  background-color: rgba(var(--primary-rgb), 0.3);
+}
+
+.blender-slot .blender-slot-num:active {
+  cursor: grabbing;
+}
+
+.blender-slot .blender-slot-num:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.blender-slot .blender-slot-remove {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background-color: transparent;
+  color: var(--text-dim);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.blender-slot .blender-slot-remove:hover:not(:disabled) {
+  background-color: rgba(207, 32, 19, 0.18);
+  color: #ff6b6b;
+}
+
+.blender-slot .blender-slot-remove:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.blender-slot .blender-slot-remove:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.blender-add {
+  box-sizing: border-box;
+  width: 100%;
+  text-align: center;
+  margin-top: 0.6rem;
+  padding: 0.7rem;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background-color: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: border-color 0.15s, color 0.15s, background-color 0.15s;
+}
+
+.blender-add:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+  background-color: rgba(var(--primary-rgb), 0.08);
+}
+
+.blender-add:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.blender-add:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* the shared dropdown and textbox set their own inline width and margin */
+.blender-slot .custom-select {
+  width: auto !important;
+  min-width: 0;
+  margin: 0 !important;
+}
+
+.blender-slot .custom-select .select-area {
+  min-height: 2.4rem;
+  padding: 0.3rem 0.6rem;
+}
+
+.blender-slot .custom-select .value .icon-img {
+  width: 28px;
+  height: 28px;
+  margin-right: 0.55rem;
+}
+
+.blender-slot .custom-select .option img {
+  width: 24px;
+  height: 24px;
+}
+
+.blender-slot .blender-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* the real checkbox stays focusable; the chip beside it is what you see */
+.blender-slot .blender-flag {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+}
+
+.blender-slot .blender-stepper {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background-color: var(--textbox-bg);
+  overflow: hidden;
+  transition: border-color 0.2s, opacity 0.2s;
+}
+
+.blender-slot .blender-stepper:focus-within {
+  border-color: var(--primary);
+}
+
+.blender-slot .blender-step {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2rem;
+  padding: 0;
+  border: 0;
+  background-color: transparent;
+  color: var(--text-dim);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.blender-slot .blender-step:hover {
+  background-color: var(--surface-hover);
+  color: var(--text-main);
+}
+
+.blender-slot .blender-step:active {
+  background-color: rgba(var(--primary-rgb), 0.2);
+}
+
+.blender-slot .blender-step:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.blender-slot .textbox {
+  width: 3.2rem !important;
+  min-width: 0;
+  margin: 0 !important;
+  padding: 0.45rem 0;
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.blender-slot .blender-chip {
+  display: grid;
+  place-items: center;
+  align-self: stretch;
+  min-width: 2.6rem;
+  margin: 0;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: center;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.blender-slot .blender-chip:hover {
+  border-color: var(--text-dim);
+  color: var(--text-main);
+}
+
+.blender-slot .blender-flag:checked ~ .blender-chip {
+  background-color: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
+}
+
+.blender-slot .blender-flag:focus-visible ~ .blender-chip {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* with Max or ∞ on, the number is ignored */
+.blender-slot .blender-flag:checked ~ .blender-stepper {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+@container (max-width: 650px) {
+  .blender-queue-head {
+    display: none;
+  }
+
+  .blender-queue {
+    margin-top: 0.9rem;
+  }
+
+  .blender-slot {
+    grid-template-columns: 1.75rem 1fr 1.75rem;
+    gap: 0.6rem 0.9rem;
+  }
+
+  .blender-slot .blender-field {
+    grid-column: 2 / -1;
+  }
+
+  .blender-slot .blender-slot-remove {
+    grid-row: 1;
+    grid-column: 3;
+  }
+
+  .blender-slot .blender-field::before {
+    content: attr(data-label);
+    width: 3.5rem;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+}

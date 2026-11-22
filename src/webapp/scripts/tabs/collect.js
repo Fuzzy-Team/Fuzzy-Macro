@@ -9,6 +9,85 @@ function clearBlenderData(ele){
     flashButton(ele, () => eel.clearBlender())
 }
 
+// the - / + buttons beside a blender number box
+function stepBlenderInput(id, delta, min){
+    const box = document.getElementById(id)
+    box.value = Math.max(min, (parseInt(box.value, 10) || 0) + delta)
+    box.dispatchEvent(new Event("change"))
+}
+
+const BLENDER_SLOT_KEYS = ["item", "quantity", "quantity_max", "repeat", "repeat_inf"]
+const BLENDER_SLOT_DEFAULT = ["none", 1, false, 1, false]
+const BLENDER_MAX_SLOTS = 20 // BLENDER_ITEM_SLOTS in settings_defaults.py
+
+function readBlenderSlot(slot){
+    return BLENDER_SLOT_KEYS.map((key) => getInputValue(`blender_${key}_${slot.dataset.slot}`))
+}
+
+// rows[i] are the values for slot i + 1. Saved along with how many slots are in use.
+// order, when slots moved, is each new position's old slot number (see moveBlenderSlots in gui.py).
+function saveBlenderSlots(rows, count, order){
+    const next = { blender_slots: count }
+    rows.forEach((row, i) => BLENDER_SLOT_KEYS.forEach((key, j) => next[`blender_${key}_${i + 1}`] = row[j]))
+    loadInputs(next, "profile")
+    if (order) eel.moveBlenderSlots(order)
+}
+
+// numbers, screen reader labels, and the limits on removing and adding
+function refreshBlenderSlots(){
+    const slots = document.querySelectorAll(".blender-slot")
+    slots.forEach((slot, i) => {
+        const [amount, repeat] = slot.querySelectorAll(".textbox")
+        slot.querySelector(".blender-slot-num").textContent = i + 1
+        slot.querySelector(".blender-slot-num").setAttribute("aria-label", `Move slot ${i + 1}`)
+        amount.setAttribute("aria-label", `Slot ${i + 1} amount`)
+        repeat.setAttribute("aria-label", `Slot ${i + 1} repeat count`)
+        const remove = slot.querySelector(".blender-slot-remove")
+        remove.setAttribute("aria-label", `Remove slot ${i + 1}`)
+        remove.disabled = slots.length === 1
+    })
+    document.querySelector(".blender-add").disabled = slots.length >= BLENDER_MAX_SLOTS
+}
+
+function setBlenderSlots(count){
+    document.querySelector(".blender-queue").innerHTML = Array.from({ length: count }, (_, i) => blenderSlotHTML(i + 1)).join("")
+    refreshBlenderSlots()
+}
+
+function addBlenderSlot(){
+    const queue = document.querySelector(".blender-queue")
+    const rows = Array.from(queue.children).map(readBlenderSlot)
+    if (rows.length >= BLENDER_MAX_SLOTS) return
+    rows.push(BLENDER_SLOT_DEFAULT)
+    queue.insertAdjacentHTML("beforeend", blenderSlotHTML(rows.length))
+    refreshBlenderSlots()
+    queue.lastElementChild.scrollIntoView({ block: "nearest" })
+    saveBlenderSlots(rows, rows.length)
+}
+
+function removeBlenderSlot(button){
+    const slots = Array.from(document.querySelectorAll(".blender-slot"))
+    const rows = slots.map(readBlenderSlot)
+    rows.splice(slots.indexOf(button.closest(".blender-slot")), 1)
+    rows.push(BLENDER_SLOT_DEFAULT) // the freed last slot goes back to its defaults
+    const order = slots.map((slot) => Number(slot.dataset.slot)).filter((n) => n !== Number(button.closest(".blender-slot").dataset.slot))
+    slots.pop().remove()
+    refreshBlenderSlots()
+    saveBlenderSlots(rows, slots.length, order)
+}
+
+// Slots are dragged around in the page, but each keeps its own setting ids. Once the order
+// is final, put the cards back and write each slot's settings into its new position.
+function commitBlenderOrder(save){
+    const queue = document.querySelector(".blender-queue")
+    const slots = Array.from(queue.children)
+    const rows = slots.map(readBlenderSlot)
+    const order = slots.map((slot) => Number(slot.dataset.slot))
+    slots.sort((a, b) => a.dataset.slot - b.dataset.slot).forEach((slot) => queue.appendChild(slot))
+    refreshBlenderSlots()
+    if (save) saveBlenderSlots(rows, rows.length, order)
+}
+
 function switchCollectTab(target){
     setActiveSubtab("activeCollectSubtab", target.id)
     Array.from(document.getElementsByClassName("collect-tab-item")).forEach(x => {
@@ -123,8 +202,9 @@ function refreshSproutAITokenRows() {
     })
 }
 
-function getSproutAITokenDragAfterElement(container, y) {
-    const rows = Array.from(container.querySelectorAll(".sprout-ai-token-row:not(.dragging)"))
+// the element a dragged row should go in front of, or null to go last
+function getDragAfterElement(container, y, rowSelector) {
+    const rows = Array.from(container.querySelectorAll(rowSelector))
     return rows.reduce((closest, row) => {
         const box = row.getBoundingClientRect()
         const offset = y - box.top - box.height / 2
@@ -212,6 +292,7 @@ function closeSproutAITokenPopup() {
 
 async function loadCollect(){
     const settings = await loadAllSettings()
+    setBlenderSlots(settings.blender_slots)
     loadInputs(settings)
     refreshSproutAIModelOptions()
     switchCollectTab(document.getElementById(getActiveSubtab("activeCollectSubtab", "collect-dispensers")))
@@ -240,6 +321,40 @@ $("#collect-placeholder")
         refreshSproutAITokenRows()
     }
  })
+ .on("dragstart", ".blender-slot-num", (event) => {
+    const slot = event.currentTarget.closest(".blender-slot")
+    const box = slot.getBoundingClientRect()
+    event.originalEvent.dataTransfer.effectAllowed = "move"
+    event.originalEvent.dataTransfer.setDragImage(slot, event.originalEvent.clientX - box.left, event.originalEvent.clientY - box.top)
+    setTimeout(() => slot.classList.add("dragging"))
+ })
+ .on("dragend", ".blender-slot-num", (event) => {
+    event.currentTarget.closest(".blender-slot").classList.remove("dragging")
+    // dropped outside the list, or Esc: put everything back
+    commitBlenderOrder(event.originalEvent.dataTransfer.dropEffect !== "none")
+ })
+ .on("dragover", ".blender-queue", (event) => {
+    event.preventDefault()
+    const dragging = document.querySelector(".blender-slot.dragging")
+    if (!dragging) return
+    const afterElement = getDragAfterElement(event.currentTarget, event.originalEvent.clientY, ".blender-slot:not(.dragging)")
+    if (afterElement == null) event.currentTarget.appendChild(dragging)
+    else event.currentTarget.insertBefore(dragging, afterElement)
+    refreshBlenderSlots()
+ })
+ .on("keydown", ".blender-slot-num", (event) => {
+    const step = { ArrowUp: -1, ArrowDown: 1 }[event.key]
+    if (!step) return
+    event.preventDefault()
+    const slot = event.currentTarget.closest(".blender-slot")
+    const queue = slot.parentElement
+    const index = Array.from(queue.children).indexOf(slot)
+    const other = queue.children[index + step]
+    if (!other) return
+    queue.insertBefore(step < 0 ? slot : other, step < 0 ? other : slot)
+    commitBlenderOrder(true)
+    document.querySelectorAll(".blender-slot-num")[index + step].focus()
+ })
  .on("dragstart", ".sprout-ai-token-row", (event) => {
     event.currentTarget.classList.add("dragging")
  })
@@ -251,7 +366,7 @@ $("#collect-placeholder")
     event.preventDefault()
     const dragging = document.querySelector(".sprout-ai-token-row.dragging")
     if (!dragging) return
-    const afterElement = getSproutAITokenDragAfterElement(event.currentTarget, event.originalEvent.clientY)
+    const afterElement = getDragAfterElement(event.currentTarget, event.originalEvent.clientY, ".sprout-ai-token-row:not(.dragging)")
     if (afterElement == null) event.currentTarget.appendChild(dragging)
     else event.currentTarget.insertBefore(dragging, afterElement)
  })

@@ -3,6 +3,8 @@
 import copy
 from modules.quest_planning import OBJECTIVE_SETTING_CHOICES, gather_objective_types, load_quest_catalog
 
+# the most blender_item_N slots a profile can hold (one per recipe); blender_slots is how many are in use
+BLENDER_ITEM_SLOTS = 20
 
 DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False],
  'fields': ['pine tree', 'sunflower', 'dandelion', 'pine tree', 'sunflower'],
@@ -141,6 +143,7 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'wind_shrine_quantity': 1,
  'memory_match_rewards': [],
  'blender_enable': False,
+ 'blender_slots': 5,
  'blender_item_1': 'blue extract',
  'blender_quantity_1': 1,
  'blender_quantity_max_1': False,
@@ -914,6 +917,11 @@ for _objective in gather_objective_types(load_quest_catalog()):
                          "backpack": "auto", "return": "no override",
                          **dict.fromkeys(OBJECTIVE_SETTING_CHOICES, "auto")}.items():
         DEFAULT_PROFILE_SETTINGS[f"quest_objective_{_objective['value']}_{_key}"] = _value
+
+for _slot in range(6, BLENDER_ITEM_SLOTS + 1):
+    DEFAULT_PROFILE_SETTINGS.update({f"blender_item_{_slot}": "none", f"blender_quantity_{_slot}": 1,
+                                     f"blender_quantity_max_{_slot}": False, f"blender_repeat_{_slot}": 1,
+                                     f"blender_repeat_inf_{_slot}": False})
 
 
 DEFAULT_FIELDS = {'sunflower': {'shift_lock': False,
@@ -2055,9 +2063,6 @@ DEFAULT_TIMINGS = {'wealth_clock': 0,
 DEFAULT_AFB = {'AFB_dice_cd': 0, 'AFB_glitter_cd': 0, 'AFB_limit': 0}
 
 DEFAULT_BLENDER = {'item': 1, 'collectTime': 0}
-
-# number of blender_item_N slots in DEFAULT_PROFILE_SETTINGS
-BLENDER_ITEM_SLOTS = 5
 
 DEFAULT_STICKER_STACK = 0
 
