@@ -51,8 +51,9 @@ def gather_overrides(settings, entry, field):
     mins = settings.get("badge_gather_mins", 0)
     overrides = {"infinite_gather": False, "plant_sprout": False}
     if until == "time":
-        # Only the clock ends a timed gather.
+        # Only the clock ends a timed gather. A Honey Wreath wait would hold it open for a backpack that never reaches 101%.
         overrides["backpack"] = 101
+        overrides["honey_wreath_return"] = False
         if mins:
             overrides["mins"] = mins
     else:
