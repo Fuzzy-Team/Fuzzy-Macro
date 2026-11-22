@@ -11,7 +11,6 @@ generalReplace = {
     ";": "#",
     "||": "or",
     "static": "",
-    "dir": "direc",
 }
 
 rotationKeys = {"left": "rotleft", "right": "rotright", "up": "rotup", "down": "rotdown"}
@@ -61,6 +60,28 @@ def convertCall(statement):
         + [f"self.keyboard.tileWait({args[0]})"]
         + [f"self.keyboard.keyUp({key}, False)" for key in keys])
 
+def convertSleep(statement):
+    """Python sleep call for a command-style Sleep, or None for anything else."""
+    # Only sleep(...), sleep, ... or sleep ... are commands. The lookahead keeps
+    # sleep := 500, sleep += 1 and similar assignments untouched.
+    match = re.match(r"^sleep(?=\s*,|\s+|\s*\()", statement)
+    if not match:
+        return None
+    argument = statement[match.end():]
+    argument = re.sub(r"^\s*,?\s*", "", argument, count=1).strip()
+    # An assignment or comparison is not a Sleep argument. This also covers
+    # every compound assignment (//=, %=, <<=, ...) and ==/!=/<=/>=.
+    if re.match(r"^(?:𑑛|=|(?:\+|-|\*|/|//|%|&|\||\^|<<|>>)=|<|>|!)", argument):
+        return None
+    # AHK v1 dereference: Sleep, %delay% -> delay. Concatenations such as
+    # %n%000 deliberately do not match and keep their percent signs.
+    argument = re.sub(r"^%\s*([a-zA-Z_]\w*)\s*%$", r"\1", argument)
+    # AHK v1 expression prefix: Sleep, % delay + 500 -> delay + 500.
+    argument = re.sub(r"^%\s+(.+)$", r"\1", argument).strip()
+    if not argument:
+        return None
+    return f"sleep(({argument}) / 1000)"
+
 def ahkPatternToPython(ahk):
 
     def checkOrder(string, pattern):
@@ -81,11 +102,11 @@ def ahkPatternToPython(ahk):
     for k, v in generalReplace.items():
         ahk = ahk.replace(k,v)
 
-    #convert = to ==, but ignore != and =>
-    # Use regex to match `=` that is not part of `=>` or `!=`
-    ahk = re.sub(r'(?<![!>])=(?![>])', '==', ahk)
-    #replace double quotes ("") with a single quote (") only when they are not preceded by =, >, or <
-    ahk = re.sub(r'(?<![=><])""', '"', ahk)
+    # Convert standalone equality to ==, leaving comparisons, compound
+    # assignments, ==, and => untouched.
+    ahk = re.sub(r'(?<![=!<>+\-*/%&|^])=(?![=>])', '==', ahk)
+    # Convert dir/Dir/Dir<digits> identifiers without touching words like direction.
+    ahk = re.sub(r'\bdir(\d*)\b', r'direc\1', ahk)
 
     #convert into lines
     #comments and identations
@@ -197,8 +218,17 @@ def ahkPatternToPython(ahk):
         elif re.match(r"(nm_walk|nm_camerarotation|sleep)\(", code):
             converted = []
             for statement in splitTopLevel(code):
-                converted += convertCall(statement) or [statement]
+                call = convertCall(statement)
+                if call is None:
+                    #not a whole call, e.g. sleep(a + b) * 2 or x := 1 after a comma
+                    sleepCall = convertSleep(statement)
+                    call = [sleepCall] if sleepCall else [statement]
+                converted += call
             out[i] = indent + ("\n" + indent).join(converted) + comment
+        elif re.match(r"sleep\b", code):
+            sleepCall = convertSleep(code)
+            if sleepCall:
+                out[i] = indent + sleepCall + comment
         #convert send
         elif line.startswith("send"):
             cmds = []
