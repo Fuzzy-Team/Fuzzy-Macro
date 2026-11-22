@@ -8,7 +8,13 @@
   <script>
     // Config > App Settings > Appearance > Top Navigation opens the page with ?nav=top
     const topNav = new URLSearchParams(location.search).get("nav") === "top";
-    if (topNav) document.write('<link rel="stylesheet" href="styles/top-nav.css" />');
+    if (topNav) {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = "styles/top-nav.css";
+      link.blocking = "render"; // no flash of the sidebar layout
+      document.head.append(link);
+    }
   </script>
   <link rel="shortcut icon" type="image/x-icon" href="assets/general/icon.png" />
   <script type="text/javascript" src="./scripts/jquery.js"></script>
