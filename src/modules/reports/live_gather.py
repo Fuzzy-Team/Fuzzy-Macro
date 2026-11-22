@@ -324,3 +324,31 @@ class LiveQuestProgressReport(LiveGatherReport):
             "color": 0x89CFF0,
             "image": {"url": f"attachment://{self.image_filename}"},
         }
+
+
+class LiveBadgeProgressReport(LiveGatherReport):
+    """An auto-updating Discord attachment showing the visible badge panel."""
+
+    def __init__(self, *args, capture_badge_screen=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.capture_badge_screen = capture_badge_screen
+        self.image_filename = "live_badge_progress.png"
+
+    def _capture_honey_pollen(self):
+        if not callable(self.capture_badge_screen):
+            raise RuntimeError("Badge screen capture is unavailable")
+        out = io.BytesIO()
+        self.capture_badge_screen().save(out, format="PNG")
+        return out.getvalue()
+
+    def _build_embed(self, badge_name, tier, elapsed_seconds, activity="Badge Progress"):
+        now = time.strftime("%H:%M:%S", time.localtime())
+        if self.time_format == 12:
+            now = time.strftime("%I:%M:%S %p", time.localtime()).lstrip("0")
+        tier_label = str(tier).replace("_", " ").title() if tier else "In Progress"
+        return {
+            "title": f"[{now}] Live Badge Progress: {str(badge_name).replace('_', ' ').title()}",
+            "description": f"Tier: {tier_label}\nElapsed: {self._format_duration(elapsed_seconds)}",
+            "color": 0xF0B232,
+            "image": {"url": f"attachment://{self.image_filename}"},
+        }

@@ -51,6 +51,7 @@ from modules.macro.vicious import ViciousMixin
 from modules.macro.planters import PlanterMixin
 from modules.macro.quests import QuestMixin
 from modules.macro.quest_objectives import QuestObjectiveMixin
+from modules.macro.badges import BadgeMixin
 from modules.macro.afb import AFBMixin
 
 
@@ -72,6 +73,7 @@ class macro(
     PlanterMixin,
     QuestMixin,
     QuestObjectiveMixin,
+    BadgeMixin,
     AFBMixin,
 ):
     def __init__(self, status, logQueue, updateGUI, run=None, skipTask=None, presence=None, discordMessageQueue=None, skipServer=None):

@@ -545,6 +545,7 @@ PING_SETTING_KEYS = [
     "ping_planters",
     "ping_collectibles",
     "ping_quests",
+    "ping_badges",
     "ping_boosts",
     "ping_crafting",
     "ping_stream",
