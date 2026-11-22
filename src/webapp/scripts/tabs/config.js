@@ -56,6 +56,42 @@ async function saveHiddenPatterns(ele) {
   showGatherPatternOptions(getSelectedGatherPattern());
 }
 
+//the page address picks the navigation (see index.html), so reload into the other one
+async function saveTopNav(ele) {
+  await saveSetting(ele, "general");
+  location.href = location.pathname + (ele.checked ? "?nav=top" : "");
+}
+
+//Sprinkler and item slots: Config > Bee Swarm with the sidebar, Boost > Hotbar with the top bar
+function hotbarItemSettings() {
+  return [
+    {
+      id: "sprinkler_type",
+      title: "Sprinkler Type",
+      desc: "The type of sprinkler that you use. Silver, Golden and Diamond sprinklers are spread out across the field when gathering",
+      type: { name: "dropdown", data: ["Basic", "Silver", "Golden", "Diamond", "Saturator"], triggerFunction: saveGeneralTriggerFunction },
+    },
+    {
+      id: "sprinkler_slot",
+      title: "Sprinkler Slot",
+      desc: "The hotbar slot of the sprinkler",
+      type: { name: "dropdown", data: [1, 2, 3, 4, 5, 6], triggerFunction: saveGeneralTriggerFunction },
+    },
+    {
+      id: "goo_slot",
+      title: "Gumdrop Slot",
+      desc: "The hotbar slot of your gumdrops, used for goo in fields, goo quests, and the glue dispenser",
+      type: { name: "dropdown", data: [1, 2, 3, 4, 5, 6, 7], triggerFunction: saveGeneralTriggerFunction },
+    },
+    {
+      id: "glitter_slot",
+      title: "Glitter Slot",
+      desc: "The hotbar slot of your Glitter, used by field booster extending. Set to 0 to find Glitter in the inventory. Auto Field Boost and TAD alts have their own Glitter slots.",
+      type: { name: "dropdown", data: [0, 1, 2, 3, 4, 5, 6, 7], triggerFunction: saveGeneralTriggerFunction },
+    },
+  ];
+}
+
 function formatModelSize(sizeBytes) {
   if (!sizeBytes) return "";
   return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;

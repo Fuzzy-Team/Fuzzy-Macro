@@ -5,6 +5,11 @@
   <meta charset="utf-8" />
   <title>Fuzzy Macro</title>
   <link rel="stylesheet" href="styles/style.css" />
+  <script>
+    // Config > App Settings > Appearance > Top Navigation opens the page with ?nav=top
+    const topNav = new URLSearchParams(location.search).get("nav") === "top";
+    if (topNav) document.write('<link rel="stylesheet" href="styles/top-nav.css" />');
+  </script>
   <link rel="shortcut icon" type="image/x-icon" href="assets/general/icon.png" />
   <script type="text/javascript" src="./scripts/jquery.js"></script>
   <script type="text/javascript" src="./scripts/ui-builder.js"></script>
@@ -16,7 +21,7 @@
 
 <body>
   <div class="app-container">
-    <header class="topbar">
+    <header class="app-nav">
       <div class="app-title">Fuzzy Macro <span id="version" class="app-version"></span></div>
       <nav id="tabs-placeholder" aria-label="Main">
         <!-- Tabs loaded via JS -->
@@ -35,6 +40,11 @@
         <button class="purple-button d-none" id="stop-btn">Stop [F3]</button>
         <button class="purple-button" id="start-btn">Start [F1]</button>
       </div>
+      <!-- Sidebar: version and updates at the bottom, start/stop and mode on the Home tab.
+           Top bar: version by the title, start/stop and mode in the bar, update button in Config. -->
+      <div class="update-slot">
+        <button id="update-btn" class="purple-button" onclick="startUpdate()">Check for Updates</button>
+      </div>
     </header>
     <div id="update-progress" class="update-progress d-none" aria-live="polite">
       <div class="update-progress-row">
@@ -45,6 +55,16 @@
         <div id="update-progress-bar" class="update-progress-bar"></div>
       </div>
     </div>
+    <script>
+      if (topNav) {
+        document.querySelector(".update-slot").remove();
+      } else {
+        const slot = document.querySelector(".update-slot");
+        slot.prepend(document.getElementById("version"));
+        slot.append(document.getElementById("update-progress"));
+        document.querySelector(".run-controls").remove();
+      }
+    </script>
 
     <main class="main-content-container">
       <div id="home-placeholder" class="content" style="display: flex;"></div>

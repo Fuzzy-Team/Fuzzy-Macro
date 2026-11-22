@@ -1464,6 +1464,8 @@ def launch():
 
     port = get_free_port(8000, 100)
     port_url = f"http://localhost:{port}"
+    # The top navigation is chosen by the page address, so the window opens straight into it
+    start_url = f"{port_url}/" + ("?nav=top" if settingsManager.loadAllSettings().get("top_nav") else "")
 
     # Browsers let any site open a websocket to localhost, so refuse requests sent from another page's origin
     allowed_origins = {port_url, f"http://127.0.0.1:{port}"}
@@ -1483,7 +1485,7 @@ def launch():
     def openInDefaultBrowser():
         eel.start('index.html', block=False, mode=None, port=port)
         time.sleep(2)
-        webbrowser.open(f"{port_url}/", new=2)
+        webbrowser.open(start_url, new=2)
 
     # Chrome that needs a newer macOS crashes on launch without eel noticing, so check its minimum first
     def chromeNeedsNewerMacOS():
@@ -1504,10 +1506,10 @@ def launch():
         return
 
     try:
-        eel.start('index.html', mode = "chrome", app_mode = True, block = False, port=port, cmdline_args=["--incognito", f"--app={port_url}"])
+        eel.start('index.html', mode = "chrome", app_mode = True, block = False, port=port, cmdline_args=["--incognito", f"--app={start_url}"])
     except EnvironmentError:
         try:
-            eel.start('index.html', mode = "chrome-app", app_mode = True, block = False, port=port, cmdline_args=["--incognito", f"--app={port_url}"])
+            eel.start('index.html', mode = "chrome-app", app_mode = True, block = False, port=port, cmdline_args=["--incognito", f"--app={start_url}"])
         except EnvironmentError:
             print("Chrome/Chromium could not be found. Opening in default browser...")
             openInDefaultBrowser()

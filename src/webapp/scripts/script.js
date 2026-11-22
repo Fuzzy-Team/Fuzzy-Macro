@@ -224,9 +224,9 @@ async function loadAllSettings() {
 // Refresh the currently visible tab content after backend-triggered profile swaps
 window.refreshCurrentTabContent = async function () {
   try {
-    const activeNavTab = document.querySelector(".nav-item.active");
-    const activeMainTab = activeNavTab
-      ? activeNavTab.id.split("-")[0]
+    const activeSidebarTab = document.querySelector(".sidebar-item.active");
+    const activeMainTab = activeSidebarTab
+      ? activeSidebarTab.id.split("-")[0]
       : "home";
 
     if (activeMainTab === "home" && typeof loadTasks === "function") {

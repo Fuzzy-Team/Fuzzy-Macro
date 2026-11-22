@@ -969,5 +969,5 @@ $("#tools-placeholder")
     switchToolsTab(event.currentTarget);
     syncToolStatusPollers();
   });
-//runs after the nav bar's own switchTab handler, which tab.js registers first
-$("#tabs-placeholder").on("click", ".nav-item", syncToolStatusPollers);
+//runs after the sidebar's own switchTab handler, which tab.js registers first
+$("#tabs-placeholder").on("click", ".sidebar-item", syncToolStatusPollers);

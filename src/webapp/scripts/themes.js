@@ -101,7 +101,7 @@ function customThemeTokens(colors) {
     "--text-dim": toHex(mixHex(c.gui_color_text, c.gui_color_background, 0.35)),
     "--border": toHex(mixHex(c.gui_color_section, c.gui_color_text, 0.15)),
     "--active-text": c.gui_color_accent_text,
-    // The nav icons are white, so they turn black on a light background.
+    // The sidebar icons are white, so they turn black on a light background.
     "--icon-filter": luminance(c.gui_color_background) > 0.4 ? "invert(1)" : "none",
   };
 }

@@ -1,4 +1,30 @@
 <div id="home-parent" class="flex-col gap-md">
+  <!-- Top Row: Control and Mode (with the top bar they are in the bar instead) -->
+  <div id="home-run-row" class="flex-row gap-md">
+    <div class="poppins-semibold standard-container flex-1 home-control-bar">
+      <h2>Macro Control
+        <button class="purple-button ml-auto d-none" id="stop-btn">Stop [F3]</button>
+        <button class="purple-button ml-auto" id="start-btn">Start [F1]</button>
+      </h2>
+    </div>
+    <div class="poppins-semibold standard-container flex-1">
+      <div class="home-mode-header">
+        <h2>Macro Mode</h2>
+        <select id="macro_mode" aria-label="Macro Mode">
+          <option value="normal">Normal Mode</option>
+          <option value="alt">Alt Mode</option>
+          <option value="field">Field Mode</option>
+          <option value="quest">Quest Mode</option>
+          <option value="bug">Bug Run Mode</option>
+          <option value="boost">Boost Mode</option>
+          <option value="resources">Resources Mode</option>
+          <option value="vic">Vic Hop Mode</option>
+        </select>
+      </div>
+    </div>
+  </div>
+  <script>if (topNav) document.getElementById("home-run-row").remove();</script>
+
   <div class="flex-row gap-md flex-grow-1" style="min-height: 0;">
     <!-- Left Column: Tasks -->
     <div class="flex-col flex-1 gap-md">

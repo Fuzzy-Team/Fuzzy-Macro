@@ -13,7 +13,7 @@ function switchTab(event) {
     Array.from(document.getElementsByClassName("content")).forEach(x => {
         x.style.display = "none"
     })
-    Array.from(document.getElementsByClassName("nav-item")).forEach(x => {
+    Array.from(document.getElementsByClassName("sidebar-item")).forEach(x => {
         x.classList.remove("active")
     })
     //add and show
@@ -70,4 +70,4 @@ $("#tabs-placeholder")
             }
         }
     })
-    .on("click", ".nav-item", switchTab)
+    .on("click", ".sidebar-item", switchTab)

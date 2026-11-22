@@ -133,6 +133,8 @@
         },
       ]);
 
+      if (!topNav) buildStandardContainer(parentBSS, "Hotbar Items", "", hotbarItemSettings());
+
       buildStandardContainer(parentBSS, "Converting", "", [
         {
           id: "convert_balloon",
@@ -626,6 +628,12 @@
       ]);
       buildStandardContainer(parentOther, "Appearance", "", [
         {
+          id: "top_nav",
+          title: "Top Navigation",
+          desc: "Show the tabs in a bar across the top instead of the sidebar. The window reloads when you change this.",
+          type: { name: "checkbox", triggerFunction: "saveTopNav(this)" },
+        },
+        {
           id: "gui_theme",
           title: "GUI Theme",
           desc: "Colors for the macro and its reports",
@@ -727,7 +735,7 @@
       ]);
 
       buildStandardContainer(parentOther, "Updates", "", [
-        {
+        ...(topNav ? [{
           id: "update-btn",
           title: "Update Fuzzy Macro",
           desc: "Download and install the latest version from your update channel.",
@@ -736,7 +744,7 @@
             text: "Check for Updates",
             triggerFunction: "startUpdate()",
           },
-        },
+        }] : []),
         {
           id: "update_channel",
           title: "Update Channel",

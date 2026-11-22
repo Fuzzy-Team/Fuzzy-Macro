@@ -839,8 +839,8 @@ $("#home-placeholder")
     }
   });
 
-//start/stop and the mode picker live in the top bar, outside the home tab
-$(".run-controls")
+//start/stop and the mode picker are on the Home tab with the sidebar, or in the top bar
+$(document)
   .on("click", "#start-btn", async (event) => {
     const settings = await loadAllSettings();
     const pauseKey = settings.pause_keybind || "F2";
