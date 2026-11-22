@@ -10,7 +10,6 @@ from modules.misc.settings_defaults import glitter_slot, glitter_slot_label
 import modules.screen.ocr as ocr
 from modules.controls.sleep import is_stopped, pause_aware_time as time, paused_seconds, sleep
 from modules.macro.game_data import (
-    BLENDER_ITEM_SLOTS,
     blenderItems,
     fieldBoosterData,
     mergedCollectData,
@@ -686,10 +685,11 @@ class CollectiblesMixin:
             updateHourlyTime()
         
         def getNextItem():
+            slots = self.setdat["blender_slots"]
             nextItem = itemNo
-            for _ in range(BLENDER_ITEM_SLOTS + 1):
+            for _ in range(slots + 1):
                 nextItem += 1
-                if nextItem > BLENDER_ITEM_SLOTS:
+                if nextItem > slots:
                     nextItem = 1
                 #item must be set and have repeats
                 if (self.setdat[f"blender_item_{nextItem}"] != "none") and (self.setdat[f"blender_repeat_{nextItem}"] > 0 or self.setdat[f"blender_repeat_inf_{nextItem}"]):

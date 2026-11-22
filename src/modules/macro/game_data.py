@@ -1,6 +1,5 @@
 """Static Bee Swarm Simulator data used by the macro."""
 import json
-from modules.misc.settings_defaults import BLENDER_ITEM_SLOTS
 from modules.quest_planning import load_quest_catalog
 
 import cv2
