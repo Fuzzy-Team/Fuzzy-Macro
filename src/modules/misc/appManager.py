@@ -24,7 +24,7 @@ def missingPermissions():
         if not ax.AXIsProcessTrusted():
             missing.append("Accessibility")
     except (OSError, AttributeError):
-        pass
+        pass  # framework or function missing on this macOS, so skip the check
     try:
         cg = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
         # Preflight (macOS 11+) never prompts. Request (10.15+) prompts, which also lists Terminal in Settings.
@@ -33,7 +33,7 @@ def missingPermissions():
         if not check():
             missing.append("Screen & System Audio Recording")
     except (OSError, AttributeError):
-        pass
+        pass  # framework or function missing on this macOS, so skip the check
     return missing
 
 def openWith(*args):
