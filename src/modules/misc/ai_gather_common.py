@@ -791,13 +791,26 @@ def release_video_writer(runtime=None, debug_log_fn=None):
             thread.join(timeout=2)
         except Exception:
             pass
+    killed = False
     try:
         if isinstance(writer, dict) and writer.get("kind") == "ffmpeg":
             process = writer.get("process")
             if process and process.stdin:
-                process.stdin.close()
+                try:
+                    process.stdin.close()
+                except Exception:
+                    pass
             if process:
-                process.wait(timeout=5)
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.terminate()
+                    try:
+                        process.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        killed = True
+                        process.wait(timeout=2)
         elif isinstance(writer, dict) and writer.get("kind") == "opencv":
             writer["writer"].release()
         else:
@@ -807,7 +820,7 @@ def release_video_writer(runtime=None, debug_log_fn=None):
     runtime["video_writer"] = None
     runtime["recording_thread"] = None
     runtime["recording_stop_event"] = None
-    if runtime.get("video_path") and debug_log_fn:
+    if not killed and runtime.get("video_path") and debug_log_fn:
         debug_log_fn(f"saved recording: {runtime['video_path']}")
 
 
