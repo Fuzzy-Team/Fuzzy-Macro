@@ -15,6 +15,9 @@
     <div id="collect-blender" class="collect-tab-item">
       Blender
     </div>
+    <div id="collect-badges" class="collect-tab-item">
+      Badges
+    </div>
   </div>
 
   <div id="collect-dispensers-tab" class="standard-container sub-tab-panel active">
@@ -849,6 +852,118 @@
                 `;
         blenderParent.innerHTML += blenderItemHTML;
       }
+    </script>
+  </div>
+  <div id="collect-badges-tab" class="standard-container sub-tab-panel">
+    <script>
+      const parentCollectBadges = document.getElementById("collect-badges-tab");
+      const fieldBadgeOptions = [
+        ["sunflower_badge", "Sunflower"],
+        ["dandelion_badge", "Dandelion"],
+        ["mushroom_badge", "Mushroom"],
+        ["blue_flower_badge", "Blue Flower"],
+        ["clover_badge", "Clover"],
+        ["spider_badge", "Spider"],
+        ["strawberry_badge", "Strawberry"],
+        ["bamboo_badge", "Bamboo"],
+        ["pineapple_badge", "Pineapple"],
+        ["pumpkin_badge", "Pumpkin"],
+        ["cactus_badge", "Cactus"],
+        ["rose_badge", "Rose"],
+        ["pine_tree_badge", "Pine Tree"],
+        ["stump_badge", "Stump"],
+        ["coconut_badge", "Coconut"],
+        ["pepper_badge", "Pepper"],
+        ["hive_hub_badge", "Hive Hub"],
+        ["mountain_top_badge", "Mountain Top"],
+      ];
+
+      buildStandardContainer(
+        parentCollectBadges,
+        "Field Badges",
+        "Gather in a field until its badge tier is complete, then claim it. Enabled badges run from Config → Task Priority. Quest, battle, ability, playtime and sticker badges can't be gathered for.",
+        fieldBadgeOptions.map(([id, name]) => ({
+          id,
+          title: `${name} Badge`,
+          desc: `Gather in ${name} for this badge`,
+          type: { name: "checkbox", triggerFunction: saveProfileTriggerFunction },
+        }))
+      );
+
+      buildStandardContainer(parentCollectBadges, "Special Badges", "", [
+        {
+          id: "goo_badge",
+          title: "Goo Badge",
+          desc: "Gather in Pine Tree with goo on",
+          type: { name: "checkbox", triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "honey_badge",
+          title: "Honey Badge",
+          desc: "Make honey in the field chosen by Hive Color",
+          type: { name: "checkbox", triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "badge_honey_hive_color",
+          title: "Hive Color",
+          desc: "Blue and Mixed use Pine Tree, Red uses Pepper, White uses Pineapple",
+          type: {
+            name: "dropdown",
+            data: ["Blue", "Red", "White", "Mixed"],
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+      ]);
+
+      buildStandardContainer(parentCollectBadges, "Badge Gathering", "", [
+        {
+          id: "badge_gather_until",
+          title: "Gather Until",
+          desc: "Time: gather for the minutes below. Backpack: fill the backpack once. Badge Level: keep gathering, converting between backpacks, until the badge reaches its next tier.",
+          type: {
+            name: "dropdown",
+            data: [
+              { label: "Time", value: "time" },
+              { label: "Backpack", value: "backpack" },
+              { label: "Badge Level", value: "badge_level" },
+            ],
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "badge_gather_mins",
+          title: "Gather Until Mins",
+          desc: "Gather time when Gather Until is Time. Set to 0 to use the field time.",
+          type: {
+            name: "textbox",
+            inputType: "float",
+            inputLimit: 4,
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "badge_gather_return",
+          title: "Return To Hive",
+          desc: "Return behavior for badge gathers",
+          type: {
+            name: "dropdown",
+            data: ["No Override", "💀 Reset", "👟 Walk", "🔄 Rejoin", "🌱 Whirligig"],
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+        {
+          id: "badge_use_ai_gather",
+          title: "Use AI Gathering",
+          desc: "Gather every badge field with Fuzzy AI Gather, so no pattern is needed per field",
+          type: { name: "checkbox", triggerFunction: saveProfileTriggerFunction },
+        },
+        {
+          id: "badge_progress_watch",
+          title: "Keep Badge Menu Open",
+          desc: "Watch the badge menu while gathering, stop once the tier is ready, and show it in the live gather report",
+          type: { name: "checkbox", triggerFunction: saveProfileTriggerFunction },
+        },
+      ]);
     </script>
   </div>
 </div>

@@ -1200,6 +1200,9 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             quest_key = f"{task_id.replace('quest_', '')}_quest"
             return bool(settings.get(quest_key, False))
 
+        if task_id.startswith("badge_"):
+            return bool(settings.get(f"{task_id.replace('badge_', '')}_badge", False))
+
         if task_id.startswith("collect_"):
             collect_key = task_id.replace("collect_", "")
             return bool(settings.get(collect_key, False))
@@ -1236,6 +1239,9 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         if task_id.startswith("quest_"):
             quest_key = f"{task_id.replace('quest_', '')}_quest"
             return update_setting(quest_key, enabled)
+
+        if task_id.startswith("badge_"):
+            return update_setting(f"{task_id.replace('badge_', '')}_badge", enabled)
 
         if task_id.startswith("collect_"):
             collect_key = task_id.replace("collect_", "")
@@ -1621,6 +1627,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     def _format_task_name(task_id: str) -> str:
         if task_id.startswith("quest_"):
             return f"Quest: {task_id.replace('quest_', '').replace('_', ' ').title()}"
+        if task_id.startswith("badge_"):
+            return f"Badge: {task_id.replace('badge_', '').replace('_', ' ').title()}"
         if task_id.startswith("collect_"):
             return f"Collect: {task_id.replace('collect_', '').replace('_', ' ').title()}"
         if task_id.startswith("kill_"):

@@ -225,9 +225,10 @@ class GatherMixin:
             "pattern_sprout_idle_square": sproutIdleSquare,
         }
 
-    def gather(self, field, settingsOverride = {}, questObjective=None, stopWhen=None):
+    def gather(self, field, settingsOverride = {}, questObjective=None, stopWhen=None, badgeName=None):
         self.robloxWindow.questMenuVisibleForAI = False
-        if not (questObjective and self.setdat.get("quest_progress_watch", False)):
+        if not ((questObjective and self.setdat.get("quest_progress_watch", False))
+                or (badgeName and self.setdat.get("badge_progress_watch", False))):
             self.closeQuestMenu()
         if stopWhen and stopWhen():
             return
@@ -533,7 +534,34 @@ class GatherMixin:
                 self.questGatherOutcome = "unreadable"
                 keepGathering = False
 
-        self.robloxWindow.questMenuVisibleForAI = questMenuKeptOpen
+        # A badge gather can keep the badge panel open and end when its tier is ready or changes.
+        badgeMenuKeptOpen = False
+        badgeWatchTier = None
+        badgeWatchFailures = 0
+        lastBadgeCheck = time.time()
+        if badgeName and self.setdat.get("badge_progress_watch", False) and not isSproutGather:
+            try:
+                badgeInfo = self.findBadge(badgeName, keepBadgeMenuOpen=True, logDetection=False)
+                if badgeInfo and badgeInfo["status"] != "not_found":
+                    badgeMenuKeptOpen = True
+                    badgeWatchTier = badgeInfo["tier"]
+                    if badgeInfo["status"] == "claimable":
+                        keepGathering = False
+                    self.moveMouseToDefault()
+                else:
+                    self.closeQuestMenu()
+            except InterruptRequested:
+                self.skipTask.value = INTERRUPT_NONE
+                try:
+                    self.closeQuestMenu()
+                finally:
+                    gatherSession.finish(gatherNameSpace)
+                raise
+            except Exception:
+                print(traceback.format_exc())
+                self.closeQuestMenu()
+
+        self.robloxWindow.questMenuVisibleForAI = questMenuKeptOpen or badgeMenuKeptOpen
 
         lastGooTime = 0  # Track when goo was last used
         gooTimerActive = True  # Flag to control goo timer thread
@@ -616,9 +644,14 @@ class GatherMixin:
             )
             gatherSession.add_cleanup(liveQuestProgressReport.stop)
         
+        if badgeMenuKeptOpen and self.liveGatherReportEnabled():
+            liveBadgeProgressReport = self.createLiveBadgeProgressReport()
+            liveBadgeProgressReport.start(badgeName, badgeWatchTier, getGatherTime, isGatherPaused, activity="Badge Progress")
+            gatherSession.add_cleanup(liveBadgeProgressReport.stop)
+
         gatherStopped = False
         def stopGather():
-            nonlocal gooTimerActive, inactiveHoneyTimerActive, questMenuKeptOpen, gatherStopped
+            nonlocal gooTimerActive, inactiveHoneyTimerActive, questMenuKeptOpen, badgeMenuKeptOpen, gatherStopped
             if gatherStopped:
                 return
             gatherStopped = True
@@ -634,9 +667,9 @@ class GatherMixin:
                     if self._gatherShiftLockEnabled:
                         self.disableShiftLock()
                         self._gatherShiftLockEnabled = False
-                if questMenuKeptOpen:
+                if questMenuKeptOpen or badgeMenuKeptOpen:
                     self.closeQuestMenu()
-                    questMenuKeptOpen = False
+                    questMenuKeptOpen = badgeMenuKeptOpen = False
                 self.moveMouseToDefault()
             finally:
                 self.robloxWindow.questMenuVisibleForAI = False
@@ -720,6 +753,26 @@ class GatherMixin:
                 if not isSproutGather:
                     self.hourlyReport.addHourlyStat("gathering_time", time.time()-patternStartTime)
                 gatherTime = self.convertSecsToMinsAndSecs(getGatherTime())
+
+                if badgeMenuKeptOpen and quest_check_due(self.setdat, time.time() - lastBadgeCheck):
+                    lastBadgeCheck = time.time()
+                    try:
+                        badgeInfo = self.findBadge(badgeName, badgeScreens=[self.captureBadgeWatchScreen()], logDetection=False)
+                        if badgeInfo["status"] == "claimable" or (
+                                badgeInfo["tier"] and badgeWatchTier and badgeInfo["tier"] != badgeWatchTier):
+                            self.logger.webhook("Badge tier ready", badgeInfo["display_name"], "light green", route_category="badges")
+                            keepGathering = False
+                            continue
+                        # Something else (a Glitter inventory search) can cover the panel. Stop watching and
+                        # let the gather's own limit end it; the rescan afterwards reads the badge.
+                        badgeWatchFailures = badgeWatchFailures + 1 if badgeInfo["status"] == "not_found" else 0
+                        if badgeWatchFailures >= 3:
+                            badgeMenuKeptOpen = False
+                            self.robloxWindow.questMenuVisibleForAI = questMenuKeptOpen
+                    except InterruptRequested:
+                        raise
+                    except Exception:
+                        print(traceback.format_exc())
 
                 if questMenuKeptOpen and quest_check_due(self.setdat, time.time() - lastQuestProgressCheck):
                     lastQuestProgressCheck = time.time()

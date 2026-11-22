@@ -10,7 +10,7 @@ from modules.screen.imageSearch import captureRegionBGR, locateMaskedImage
 from modules.screen.screenshot import mssScreenshot
 from modules.macro.events import BUFF_BAND_HEIGHT
 from modules.reports.buffs import BUFF_RENDER_CONFIG, FIELD_BOOST_BUFFS
-from modules.reports.live_gather import LiveGatherReport, LiveQuestProgressReport
+from modules.reports.live_gather import LiveGatherReport, LiveQuestProgressReport, LiveBadgeProgressReport
 
 # The 70px field icons are about 38px on the buff bar. In a real buff bar the Pine Tree tile scored 0.03 against its icon, the other two icons scored 0.12 or more.
 FIELD_BOOST_ICON_SCALES = (0.5, 0.55, 0.6)
@@ -55,6 +55,20 @@ class ReportMixin:
             logModule.get_delivery_mode(self.setdat),
             "quests",
             capture_quest_screen=self.captureQuestWatchScreen,
+        )
+
+    def createLiveBadgeProgressReport(self):
+        return LiveBadgeProgressReport(
+            logModule.get_default_delivery_route(self.setdat),
+            self.robloxWindow,
+            self.setdat.get("live_gather_report_interval", 10),
+            self.setdat.get("webhook_time_format", 24),
+            logModule.build_route_settings(self.setdat),
+            self.setdat.get("discord_bot_token", ""),
+            None,
+            logModule.get_delivery_mode(self.setdat),
+            "badges",
+            capture_badge_screen=self.captureBadgeWatchScreen,
         )
 
     def getHoney(self):

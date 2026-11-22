@@ -4,6 +4,7 @@ import time
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
 import modules.macro.planter_bonus_loot as bonusLoot
+from modules.misc.badgeData import badge_id_from_task, gather_overrides, get_badge, resolve_gather_field, setting_key
 from modules.quest_planning import quest_giver_order, choose_quest_gather, is_gather_objective, allowed_fields, quest_uses_ant_challenge, kill_objective_mob
 from modules.controls.sleep import (
     InterruptRequested,
@@ -318,7 +319,9 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
             macro.clear_task_status()
             taskCompleted = True
             if action == INTERRUPT_SKIP:
-                if func == macro.gather and len(args) > 2 and args[2]:
+                if func == macro.gather and len(args) > 4 and args[4]:
+                    macro.badgeGatherSkipped = True
+                elif func == macro.gather and len(args) > 2 and args[2]:
                     macro.questGatherOutcome = "skipped"
                     macro.deferredQuestObjectives.add(args[2]["id"])
                 else:
@@ -727,6 +730,49 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
             runTask(macro.closeQuestMenu, resetAfter=False, allowAFB=False)
         return gathered
 
+    def handleBadge(badgeId):
+        """Claim a badge tier if it's ready, then gather in its field per the Badges tab."""
+        entry = get_badge(badgeId)
+        display = entry["display_name"]
+        field = resolve_gather_field(badgeId, macro.setdat.get("badge_honey_hive_color", "mixed"))
+        until = macro.setdat.get("badge_gather_until", "time")
+        overrides = gather_overrides(macro.setdat, entry, field)
+
+        def scanAndClaim():
+            """Returns the badge's state after claiming, or None if it can't be read."""
+            info = macro.findBadge(badgeId, keepBadgeMenuOpen=True)
+            beforeTier = info["tier"]
+            if info["status"] == "claimable":
+                info = macro.claimBadgeReward(badgeId, info)
+                # Grandmaster stays Complete! after its claim, so it counts as finished.
+                if info["status"] == "claimable" and (beforeTier == "grandmaster" or info["tier"] == "grandmaster"):
+                    info = {**info, "status": "done"}
+            macro.closeQuestMenu()
+            macro.moveMouseToDefault()
+            return info
+
+        info = runTask(scanAndClaim, resetAfter=False, allowAFB=False)
+        if info is None:
+            return
+        if info["status"] == "not_found":
+            macro.logger.webhook("Badge", f"{display} not found in the badge menu", "orange", "screen", route_category="badges")
+            return
+        if info["status"] == "done":
+            macro.logger.webhook("Badge", f"{display} is complete", "light green", route_category="badges")
+            return
+        startTier = info["tier"]
+        # Badge level gathers again, after each backpack, until the tier changes.
+        for _ in range(40 if until == "badge_level" else 1):
+            macro.logger.webhook("Badge gathering", f"{display} in {field.title()}", "light blue", route_category="badges")
+            macro.badgeGatherSkipped = False
+            runTask(macro.gather, args=(field, overrides, None, None, badgeId), resetAfter=False)
+            # A skipped gather moves on to the next task instead of gathering again.
+            if run.value == 0 or macro.badgeGatherSkipped:
+                return
+            info = runTask(scanAndClaim, resetAfter=False, allowAFB=False)
+            if run.value == 0 or info is None or info["status"] in ("not_found", "done") or info["tier"] != startTier:
+                break
+
     lastProfileCheck = float("-inf")
 
     def cooldownTaskReady():
@@ -1091,6 +1137,14 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                 for _, feeds in claimed:
                     for item, quantity in feeds:
                         runTask(macro.feedBee, args=(item, quantity), resetAfter=False)
+                return True
+
+            if taskId.startswith("badge_"):
+                badgeId = badge_id_from_task(taskId)
+                if not macro.setdat.get(setting_key(badgeId)):
+                    return False
+                handleBadge(badgeId)
+                executedTasks.add(taskId)
                 return True
 
             # Handle collect tasks
