@@ -823,7 +823,7 @@
       function blenderSlotHTML(i) {
         return `
           <div class="blender-slot" data-slot="${i}">
-            <button type="button" class="blender-slot-num" draggable="true" title="Drag to reorder, or press Up or Down">${i}</button>
+            <div class="blender-slot-num" role="button" tabindex="0" draggable="true" title="Drag to reorder, or press Up or Down">${i}</div>
             ${buildInput(`blender_item_${i}`, {
               name: "dropdown",
               data: blenderItemsArray,
