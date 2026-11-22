@@ -537,6 +537,7 @@ class GatherMixin:
         # A badge gather can keep the badge panel open and end when its tier is ready or changes.
         badgeMenuKeptOpen = False
         badgeWatchTier = None
+        badgeWatchFailures = 0
         lastBadgeCheck = time.time()
         if badgeName and self.setdat.get("badge_progress_watch", False) and not isSproutGather:
             try:
@@ -762,6 +763,12 @@ class GatherMixin:
                             self.logger.webhook("Badge tier ready", badgeInfo["display_name"], "light green", route_category="badges")
                             keepGathering = False
                             continue
+                        # Something else (a Glitter inventory search) can cover the panel. Stop watching and
+                        # let the gather's own limit end it; the rescan afterwards reads the badge.
+                        badgeWatchFailures = badgeWatchFailures + 1 if badgeInfo["status"] == "not_found" else 0
+                        if badgeWatchFailures >= 3:
+                            badgeMenuKeptOpen = False
+                            self.robloxWindow.questMenuVisibleForAI = questMenuKeptOpen
                     except InterruptRequested:
                         raise
                     except Exception:
