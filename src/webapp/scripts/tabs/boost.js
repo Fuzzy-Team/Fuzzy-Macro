@@ -90,11 +90,11 @@ function switchBoostHotbarSlot(slot) {
 async function loadBoost(){
     switchBoostTab(document.getElementById(getActiveSubtab("activeBoostSubtab", "boost-hotbar")))
     switchBoostHotbarSlot(1)
+    const settings = await loadAllSettings();
+    loadInputs(settings);
     try {
         const patterns = await eel.getDefaultPatterns()();
         setDropdownData("tad_alt_gather_shape", patterns);
-        const settings = await loadAllSettings();
-        loadInputs(settings);
         const patternDropdown = document.getElementById("tad_alt_gather_shape");
         if (patternDropdown) setDropdownValue(patternDropdown, settings.tad_alt_gather_shape || "e_lol");
     } catch (error) {

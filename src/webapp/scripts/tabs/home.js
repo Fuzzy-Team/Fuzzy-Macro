@@ -853,7 +853,6 @@ $("#home-placeholder")
 $(document)
   .on("click", "#start-btn", async (event) => {
     const settings = await loadAllSettings();
-    const pauseKey = settings.pause_keybind || "F2";
     const stopKey = settings.stop_keybind || "F3";
     const runState = await eel.getRunState()();
     const startBtn = document.getElementById("start-btn");

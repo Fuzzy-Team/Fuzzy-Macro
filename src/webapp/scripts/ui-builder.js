@@ -189,9 +189,9 @@ function buildInput(id, type) {
     // fixed control height for buttons to align with inputs
     const singleBtnHeight = type.buttonHeight ? type.buttonHeight : '2.2rem';
     const singleBtnPadding = type.buttonPadding ? type.buttonPadding : '0 0.6rem';
-    let html = `<div id = "${id}" class="purple-button" onclick="${type.triggerFunction
+    let html = `<button type="button" id = "${id}" class="purple-button" onclick="${type.triggerFunction
       }" style="width: ${type.length ? type.length : 'auto'}rem; display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; height: ${singleBtnHeight}; padding: ${singleBtnPadding}; box-sizing: border-box; cursor: pointer;">${type.text
-      }</div>`;
+      }</button>`;
     return html;
   } else if (type.name == "keybind") {
     const keybindWidth = type.length ? type.length : 10;
