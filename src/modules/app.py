@@ -88,6 +88,7 @@ def runApp(macroTarget):
     gui.configureToolRuntime(logger=logger, status=status, presence=presence, ssa_command=ssaCommand)
 
     disconnectCooldownUntil = 0
+    disconnectDetected = False
 
     #add missing defaults to the current profile's files and apply migrations
     settingsManager.ensureRuntimeData()
@@ -604,6 +605,7 @@ def runApp(macroTarget):
             prevRunState = run.value
 
         if run.value == 1:
+            disconnectDetected = False
             missingPerms = missingPermissions()
             if missingPerms:
                 names = " and ".join(missingPerms)
@@ -792,6 +794,17 @@ def runApp(macroTarget):
             if macroProc and macroProc.is_alive():
                 macroProc.kill()
                 macroProc.join()
+            if disconnectDetected:
+                # The supervisor owns mid-session disconnect detection; persist the
+                # count after the macro process stops and before its replacement starts.
+                try:
+                    from modules.reports.hourly import HourlyReport
+                    report = HourlyReport()
+                    report.loadHourlyReportData()
+                    report.addHourlyStat("disconnects", 1)
+                except Exception as exc:
+                    print(f"Could not record disconnect in report stats: {exc}")
+                disconnectDetected = False
             logger.webhook("","Disconnected", "red", "screen", ping_category="ping_disconnects")
             #release held input before Roblox quits, otherwise WindowServer can hang on the orphaned gesture
             keyboardModule.releaseMovement()
@@ -904,5 +917,6 @@ def runApp(macroTarget):
                 disconnected = False
             if disconnected:
                 print("disconnected")
+                disconnectDetected = True
                 run.value = 4
                 disconnectCooldownUntil = time.time() + 300  # 5 min cooldown
