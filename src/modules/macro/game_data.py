@@ -233,6 +233,11 @@ HIVE_HUB_PLACE_ID = "15579077077"
 REJOIN_COLOR_PERCENT = 0.7754
 REJOIN_COLOR_TOLERANCE = 40
 REJOIN_COLOR_DURATION = 60
+# The join loading screen is a solid blue. A join is confirmed once at least
+# LOADING_SCREEN_PERCENT of the window was this colour and then stopped being.
+LOADING_SCREEN_COLOR = (34, 87, 168)
+LOADING_SCREEN_PERCENT = 0.5
+LOADING_SCREEN_TOLERANCE = 12
 
 
 SPROUT_FIELD_TOKEN_PRIORITY = {
