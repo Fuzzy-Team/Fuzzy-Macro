@@ -1581,6 +1581,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         source_message_id: Optional[int] = None,
     ):
         settings = get_cached_settings()
+        # a slot removed in the GUI since the panel opened falls back to the last one
+        slot_index = min(slot_index, len(_get_field_slots(settings)[0]) - 1)
         view = FieldsPanelView(
             slot_index=slot_index,
             section_key=section_key,
