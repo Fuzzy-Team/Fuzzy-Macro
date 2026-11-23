@@ -564,25 +564,68 @@ async function loadAndSaveField(ele) {
   await saveSettingValue("profile", "fields", fields);
 }
 
+const MIN_GATHER_FIELD_COUNT = 3;
+
+//one tab per configured field, kept in front of the + button; the x shows once there are more than the minimum
+function renderGatherTabs(count) {
+  const tabs = document.getElementsByClassName("gather-tab-item");
+  while (tabs.length > count) tabs[tabs.length - 1].remove();
+  const addButton = document.getElementById("add-field-button");
+  for (let i = tabs.length + 1; i <= count; i++) {
+    const tab = document.createElement("div");
+    tab.id = `field-${i}`;
+    tab.className = "gather-tab-item";
+    tab.innerHTML = `Field ${i}<span class="gather-remove-field" title="Remove this field" aria-label="Remove field ${i}">&times;</span>`;
+    addButton.before(tab);
+  }
+  addButton.parentElement.classList.toggle("can-remove-field", count > MIN_GATHER_FIELD_COUNT);
+}
+
+//both lists are saved in one write so a running macro never reads them with different lengths
+async function saveGatherFields(fields, fields_enabled) {
+  try {
+    await eel.saveDictProfileSettings({ fields, fields_enabled })();
+    return true;
+  } catch (error) {
+    await rejectSettingChange("fields", String(error?.errorText || error));
+    return false;
+  }
+}
+
+async function removeGatherField(number) {
+  const settings = await loadSettings();
+  const fields = settings.fields.filter((_, i) => i !== number - 1);
+  const fields_enabled = settings.fields_enabled.filter((_, i) => i !== number - 1);
+  if (fields.length < MIN_GATHER_FIELD_COUNT) return;
+  if (!(await saveGatherFields(fields, fields_enabled))) return;
+  const current = Number(fieldNo);
+  const next = number < current ? current - 1 : Math.min(current, fields.length);
+  await switchGatherTab(document.getElementById(`field-${next}`));
+}
+
+async function addGatherField() {
+  const settings = await loadSettings();
+  const fields = [...settings.fields, "pine tree"];
+  const fields_enabled = [...settings.fields_enabled, false];
+  if (!(await saveGatherFields(fields, fields_enabled))) return;
+  renderGatherTabs(fields.length);
+  await switchGatherTab(document.getElementById(`field-${fields.length}`));
+}
+
 async function switchGatherTab(target) {
+  const settings = await loadSettings();
+  renderGatherTabs(Math.max(settings.fields.length, MIN_GATHER_FIELD_COUNT));
+  if (!target.isConnected) target = document.getElementById("field-1");
   setActiveSubtab("activeGatherSubtab", target.id);
   fieldNo = target.id.split("-")[1];
-  //remove the arrow indicator
-  const selector = document.getElementById("gather-select");
-  if (selector) selector.remove();
   Array.from(document.getElementsByClassName("gather-tab-item")).forEach((x) =>
     x.classList.remove("active")
-  ); //remove the active class
-  //add indicator + active class
+  );
   target.classList.add("active");
-  target.innerHTML =
-    `<div class = "select-indicator" id = "gather-select"></div>` +
-    target.innerHTML;
   document.getElementById("gather-field").innerText = `Gather Field ${fieldNo}`;
   //scroll back to top
   document.getElementById("gather").scrollTo(0, 0);
   //load the fields
-  const settings = await loadSettings();
   const fieldDropdown = document.getElementById("field");
   setDropdownValue(fieldDropdown, settings.fields[fieldNo - 1]);
   document.getElementById("field_enable").checked =
@@ -592,12 +635,31 @@ async function switchGatherTab(target) {
   loadAndSaveField(fieldDropdown);
 }
 
+//a click on add or remove while the previous one is still saving is ignored, because the tabs on screen are out of date until it finishes
+let fieldOperationRunning = false;
+async function runFieldOperation(operation) {
+  if (fieldOperationRunning) return;
+  fieldOperationRunning = true;
+  try {
+    await operation();
+  } finally {
+    fieldOperationRunning = false;
+  }
+}
+
 $("#gather-placeholder")
-  .load("../htmlImports/tabs/gather.html", () =>
-    switchGatherTab(
+  .load("../htmlImports/tabs/gather.html", async () => {
+    renderGatherTabs(Math.max((await loadSettings()).fields.length, MIN_GATHER_FIELD_COUNT));
+    await switchGatherTab(
       document.getElementById(getActiveSubtab("activeGatherSubtab", "field-1"))
-    )
-  ) //load home tab, restore active field once its done loading
+    );
+  }) //load gather tab, restore active field once its done loading
+  .on("click", "#add-field-button", () => runFieldOperation(addGatherField))
+  .on("click", ".gather-remove-field", (event) => {
+    event.stopPropagation();
+    const number = Number(event.currentTarget.parentElement.id.split("-")[1]);
+    runFieldOperation(() => removeGatherField(number));
+  })
   .on("click", ".gather-tab-item", (event) =>
     switchGatherTab(event.currentTarget)
   ) //navigate between fields

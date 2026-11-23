@@ -1,19 +1,9 @@
-<div class="main-content-container">
-  <div class="sub-nav-bar" style="display:flex; justify-content:space-between; align-items:center;">
-    <div id="field-nav" class="sub-nav-bar" style="margin:0; gap:0.5rem;">
-      <div id="field-1" class="gather-tab-item">Field 1</div>
-      <div id="field-2" class="gather-tab-item">Field 2</div>
-      <div id="field-3" class="gather-tab-item">Field 3</div>
-      <div id="field-4" class="gather-tab-item">Field 4</div>
-      <div id="field-5" class="gather-tab-item">Field 5</div>
-    </div>
-    <div style="display:flex;">
-      <button id="import-patterns-button" class="import-export-button">
-        Import Patterns
-      </button>
-    </div>
+<div class="page">
+  <div class="sub-nav-bar">
+    <button id="add-field-button" class="gather-add-field"><span>+</span><span>Add</span><span>Field</span></button>
+    <button id="import-patterns-button" class="import-export-button sub-nav-action">Import Patterns</button>
   </div>
-  <div id="gather" class="standard-container sub-tab-panel active">
+  <div id="gather" class="sub-tab-panel active">
     <script>
       const parentElement = document.getElementById("gather");
       const triggerFunction = "saveField()";

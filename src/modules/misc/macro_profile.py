@@ -329,11 +329,14 @@ class MacroProfileStore:
             quest_only = bool(general_data.pop("quest_only_mode", False))
             general_data["macro_mode"] = "field" if field_only else "quest" if quest_only else "normal"
 
+        lists = [profile_data.get(key) for key in ("fields", "fields_enabled")]
+        #both lists stay the same length, so a field's flag is always at its own index
+        target = max([3] + [len(value) for value in lists if isinstance(value, list)])
         for key in ("fields", "fields_enabled"):
             value = profile_data.get(key)
             default = self._profile_defaults.get(key, [])
             if isinstance(value, list):
-                while len(value) < 5:
+                while len(value) < target:
                     value.append(copy.deepcopy(default[len(value)] if len(value) < len(default) else default[-1]))
 
         self._merge_quest_gumdrop_slot(profile_data, general_data, fields_data)

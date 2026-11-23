@@ -1,6 +1,6 @@
 <div id="home-parent" class="flex-col gap-md">
-  <!-- Top Row: Control and Mode -->
-  <div class="flex-row gap-md">
+  <!-- Top Row: Control and Mode (with the top bar they are in the bar instead) -->
+  <div id="home-run-row" class="flex-row gap-md">
     <div class="poppins-semibold standard-container flex-1 home-control-bar">
       <h2>Macro Control
         <button class="purple-button ml-auto d-none" id="stop-btn">Stop [F3]</button>
@@ -23,8 +23,8 @@
       </div>
     </div>
   </div>
+  <script>if (topNav) document.getElementById("home-run-row").remove();</script>
 
-  <!-- Bottom Row: Tasks and Logs/Planters -->
   <div class="flex-row gap-md flex-grow-1" style="min-height: 0;">
     <!-- Left Column: Tasks -->
     <div class="flex-col flex-1 gap-md">

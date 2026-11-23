@@ -1,5 +1,5 @@
-<div class="main-content-container">
-  <div id="collect-nav" class="sub-nav-bar poppins-regular" style="margin-bottom: 2rem;">
+<div class="page">
+  <div id="collect-nav" class="sub-nav-bar">
     <div id="collect-dispensers" class="collect-tab-item active">
       Dispensers
     </div>
@@ -20,7 +20,7 @@
     </div>
   </div>
 
-  <div id="collect-dispensers-tab" class="standard-container sub-tab-panel active">
+  <div id="collect-dispensers-tab" class="sub-tab-panel active">
     <script>
       const parentCollectDispensers = document.getElementById("collect-dispensers-tab");
       buildStandardContainer(parentCollectDispensers, "Regular ⏳", "", [
@@ -157,7 +157,7 @@
     </script>
   </div>
 
-  <div id="collect-activities-tab" class="standard-container sub-tab-panel">
+  <div id="collect-activities-tab" class="sub-tab-panel">
     <script>
       const parentCollectActivities = document.getElementById("collect-activities-tab");
       buildStandardContainer(parentCollectActivities, "Sticker Printer 🖨️", "", [
@@ -177,95 +177,6 @@
           type: {
             name: "dropdown",
             data: ["Basic", "Silver", "Gold", "Diamond", "Mythic"],
-            triggerFunction: saveProfileTriggerFunction,
-          },
-        },
-      ]);
-
-      buildStandardContainer(parentCollectActivities, "Mondo Buff 🐣", "", [
-        {
-          id: "mondo_buff",
-          title: "Enable Task",
-          desc: "Collect the Mondo Chick buff. The macro will only go to Mondo shortly before the hour and in the first 10 minutes of the hour.",
-          type: {
-            name: "checkbox",
-            triggerFunction: saveProfileTriggerFunction,
-          },
-        },
-        {
-          id: "mondo_prep_time",
-          title: "Prep time (seconds)",
-          desc: "How many seconds before the hour to stop and walk to Mondo, so you're in place when it spawns. 0 waits until it has spawned.",
-          type: {
-            name: "textbox",
-            inputType: "int",
-            inputLimit: 3,
-            triggerFunction: saveProfileTriggerFunction,
-          },
-        },
-        {
-          id: "mondo_buff_damage",
-          title: "Damage Mondo instead of waiting",
-          desc: "Attack Mondo Chick for the duration below, then leave without waiting for it to be defeated or collecting its loot.",
-          type: {
-            name: "checkbox",
-            triggerFunction: saveProfileTriggerFunction,
-          },
-        },
-        {
-          id: "mondo_buff_wait",
-          title: "Damage / wait time (minutes)",
-          desc: "Duration for damage mode, or idle time when looting is disabled. Decimals are allowed, e.g. 1.5 minutes = 90 seconds.",
-          type: {
-            name: "textbox",
-            inputType: "float",
-            inputLimit: 5,
-            triggerFunction: saveProfileTriggerFunction,
-          },
-        },
-        {
-          id: "mondo_buff_loot",
-          title: "Collect Loot From Mondo",
-          desc: "Collect loot when mondo chick is defeated.<br>Ignores the 'Damage Mondo for X mins' setting ",
-          type: {
-            name: "checkbox",
-            triggerFunction: saveProfileTriggerFunction,
-          },
-        },
-        {
-          id: "mondo_buff_hop",
-          title: "Hop Servers For More Mondos",
-          desc: "Requires 'Collect Loot From Mondo' active<br>After looting, join a new public server and do Mondo again until minute 14.75. Returns to your private server afterwards.",
-          type: {
-            name: "checkbox",
-            triggerFunction: saveProfileTriggerFunction,
-          },
-        },
-        {
-          id: "mondo_loot_times",
-          title: "Loops",
-          desc: "Requires 'Collect Loot From Mondo' active <br>How many loops while collecting loot<br>One loop is going up then down once.<br>1-2 is recommended",
-          type: {
-            name: "dropdown",
-            data: [1, 2, 3, 4, 5],
-            triggerFunction: saveProfileTriggerFunction,
-          },
-        },
-        {
-          id: "mondo_collect_token",
-          title: "Collect Tokens From Bees",
-          desc: "Only used when 'Collect Loot From Mondo' and 'Damage Mondo' are off.<br>Collect tokens during from bees by moving every few seconds. <br> Recommend if you don't have a Cub Buddy.<br>Note: Your avatar may move slightly and drift away from the wall.<br> It is recommend to have a animation that minimizes slight movement.",
-          type: {
-            name: "checkbox",
-            triggerFunction: saveProfileTriggerFunction,
-          },
-        },
-        {
-          id: "mondo_buff_interrupt_gathering",
-          title: "Mondo Buff Interrupts gathering",
-          desc: "If mondo respawns while gathering, stop and collect its buff",
-          type: {
-            name: "checkbox",
             triggerFunction: saveProfileTriggerFunction,
           },
         },
@@ -446,10 +357,22 @@
           },
         },
       ]);
+
+      buildStandardContainer(parentCollectActivities, "Ant Challenge 🎯", "", [
+        {
+          id: "ant_challenge",
+          title: "Enable Task",
+          desc: "Complete ant challenges. The macro will keep the ant amulet",
+          type: {
+            name: "checkbox",
+            triggerFunction: saveProfileTriggerFunction,
+          },
+        },
+      ]);
     </script>
   </div>
 
-  <div id="collect-seasonal-tab" class="standard-container sub-tab-panel">
+  <div id="collect-seasonal-tab" class="sub-tab-panel">
     <script>
       const parentCollectSeasonal = document.getElementById("collect-seasonal-tab");
       buildStandardContainer(parentCollectSeasonal, "Beesmas 🎅🏻", "", [
@@ -553,7 +476,7 @@
     </script>
   </div>
 
-  <div id="collect-sprouts-tab" class="standard-container sub-tab-panel">
+  <div id="collect-sprouts-tab" class="sub-tab-panel">
     <script>
       const parentCollectSprouts = document.getElementById("collect-sprouts-tab");
       const sproutFields = [
@@ -773,7 +696,7 @@
     </script>
   </div>
 
-  <div id="collect-blender-tab" class="standard-container sub-tab-panel">
+  <div id="collect-blender-tab" class="sub-tab-panel">
     <script>
       const parentCollectBlender = document.getElementById("collect-blender-tab");
       buildStandardContainer(parentCollectBlender, "Blender", "", [

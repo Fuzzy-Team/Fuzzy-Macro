@@ -2,8 +2,20 @@
 <html>
 
 <head>
+  <meta charset="utf-8" />
   <title>Fuzzy Macro</title>
   <link rel="stylesheet" href="styles/style.css" />
+  <script>
+    // Config > App Settings > Appearance > Top Navigation opens the page with ?nav=top
+    const topNav = new URLSearchParams(location.search).get("nav") === "top";
+    if (topNav) {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = "styles/top-nav.css";
+      link.blocking = "render"; // no flash of the sidebar layout
+      document.head.append(link);
+    }
+  </script>
   <link rel="shortcut icon" type="image/x-icon" href="assets/general/icon.png" />
   <script type="text/javascript" src="./scripts/jquery.js"></script>
   <script type="text/javascript" src="./scripts/ui-builder.js"></script>
@@ -15,30 +27,51 @@
 
 <body>
   <div class="app-container">
-    <!-- Sidebar -->
-    <div class="sidebar-container">
-      <div class="app-title">
-        Fuzzy Macro
-      </div>
-      <div id="tabs-placeholder">
+    <header class="app-nav">
+      <div class="app-title">Fuzzy Macro <span id="version" class="app-version"></span></div>
+      <nav id="tabs-placeholder" aria-label="Main">
         <!-- Tabs loaded via JS -->
+      </nav>
+      <div class="run-controls">
+        <select id="macro_mode" aria-label="Macro Mode">
+          <option value="normal">Normal Mode</option>
+          <option value="alt">Alt Mode</option>
+          <option value="field">Field Mode</option>
+          <option value="quest">Quest Mode</option>
+          <option value="bug">Bug Run Mode</option>
+          <option value="boost">Boost Mode</option>
+          <option value="resources">Resources Mode</option>
+          <option value="vic">Vic Hop Mode</option>
+        </select>
+        <button class="purple-button d-none" id="stop-btn">Stop [F3]</button>
+        <button class="purple-button" id="start-btn">Start [F1]</button>
       </div>
-      <div class="credits">
-        <span id="version">Loading version...</span><br>
-        <button id="update-btn" class="purple-button">Check for Updates</button>
-        <div id="update-progress" class="update-progress d-none" aria-live="polite">
-          <div class="update-progress-row">
-            <span id="update-progress-label">Preparing update</span>
-            <span id="update-progress-percent">0%</span>
-          </div>
-          <div class="update-progress-track">
-            <div id="update-progress-bar" class="update-progress-bar"></div>
-          </div>
-        </div>
+      <!-- Sidebar: version and updates at the bottom, start/stop and mode on the Home tab.
+           Top bar: version by the title, start/stop and mode in the bar, update button in Config. -->
+      <div class="update-slot">
+        <button id="update-btn" class="purple-button" onclick="startUpdate()">Check for Updates</button>
+      </div>
+    </header>
+    <div id="update-progress" class="update-progress d-none" aria-live="polite">
+      <div class="update-progress-row">
+        <span id="update-progress-label">Preparing update</span>
+        <span id="update-progress-percent">0%</span>
+      </div>
+      <div class="update-progress-track">
+        <div id="update-progress-bar" class="update-progress-bar"></div>
       </div>
     </div>
+    <script>
+      if (topNav) {
+        document.querySelector(".update-slot").remove();
+      } else {
+        const slot = document.querySelector(".update-slot");
+        slot.prepend(document.getElementById("version"));
+        slot.append(document.getElementById("update-progress"));
+        document.querySelector(".run-controls").remove();
+      }
+    </script>
 
-    <!-- Main Content -->
     <main class="main-content-container">
       <div id="home-placeholder" class="content" style="display: flex;"></div>
       <div id="gather-placeholder" class="content"></div>
@@ -49,7 +82,6 @@
       <div id="boost-placeholder" class="content"></div>
       <div id="quests-placeholder" class="content"></div>
       <div id="tools-placeholder" class="content"></div>
-
     </main>
   </div>
 
