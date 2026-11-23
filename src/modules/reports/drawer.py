@@ -509,10 +509,12 @@ class HourlyReportDrawer:
         self._drawLegacyBuffsCard(statRegions["buffs"], buffQuantity, hourlyBuffList, nectarQuantity, uptimeBuffsValues)
         self._drawLegacyPlantersCard(statRegions["planters"], planterData)
         statsRows = {
+            "bosses": sessionSource.get("total_bosses", sessionSource.get("bosses", hourlyReportStats.get("bosses", 0))),
             "bugs": sessionSource.get("total_bugs", sessionSource.get("bugs", hourlyReportStats.get("bugs", 0))),
             "vicious_bees": sessionSource.get("total_vicious_bees", sessionSource.get("vicious_bees", hourlyReportStats.get("vicious_bees", 0))),
             "quests_completed": sessionSource.get("total_quests", sessionSource.get("quests_completed", hourlyReportStats.get("quests_completed", 0))),
             "planters": len([p for p in planterData.get("planters", []) if p]) if planterData else 0,
+            "disconnects": sessionSource.get("total_disconnects", sessionSource.get("disconnects", hourlyReportStats.get("disconnects", 0))),
         }
         self._drawLegacyStatsCard(statRegions["stats"], statsRows)
         self._drawLegacyInfoCard(statRegions["info"], reportTitle, sessionTime)
