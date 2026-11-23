@@ -42,6 +42,15 @@ class FinalReport:
         self.lastItemEmbedFields = None
 
     @staticmethod
+    def _session_item_timeline(snapshot):
+        """Return the timeline to graph and whether its keys are elapsed session minutes."""
+        snapshot = snapshot or {}
+        session_timeline = snapshot.get("session_item_timeline") or {}
+        if session_timeline:
+            return session_timeline, True
+        return snapshot.get("item_timeline") or {}, False
+
+    @staticmethod
     def _normalizeCumulativeHoneySeries(values, baseline=None):
         """Return a stable cumulative honey series while preserving sample count."""
         if not values:
@@ -394,10 +403,15 @@ class FinalReport:
                 session_items = snapshot.get("session_collected_items") or snapshot.get("collected_items") or {}
                 if session_items:
                     from modules.reports.item_monitor import generate_item_report
+                    # item_timeline is cleared by the hourly rollover, so graph the
+                    # session copy; older snapshots only have clock-minute keys.
+                    session_timeline, timeline_is_session = self._session_item_timeline(snapshot)
                     item_snapshot = {
                         "collected_items": dict(session_items),
                         "session_collected_items": dict(session_items),
-                        "item_timeline": snapshot.get("item_timeline") or {},
+                        "item_timeline": session_timeline,
+                        "timeline_is_session": timeline_is_session,
+                        "session_duration": sessionTime,
                         "total_items_detected": snapshot.get("total_items_detected", 0),
                         "query_total": snapshot.get("query_total", 0),
                         "start_time": snapshot.get("start_time"),
