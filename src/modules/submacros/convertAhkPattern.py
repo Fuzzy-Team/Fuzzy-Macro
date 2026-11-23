@@ -44,6 +44,113 @@ def splitComment(text):
             return code, ("  " + text[pos:]) if code else text[pos:]
     return text, ""
 
+def stripOuterParentheses(text):
+    """Remove parentheses that wrap the whole expression, including nested pairs."""
+    text = text.strip()
+    while text.startswith("(") and text.endswith(")"):
+        depth = 0
+        quoted = False
+        encloses = True
+        for index, char in enumerate(text):
+            if char == '"':
+                quoted = not quoted
+            elif quoted:
+                continue
+            elif char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+                if depth == 0:
+                    if index != len(text) - 1:
+                        encloses = False
+                    break
+        if not encloses or quoted or depth != 0:
+            break
+        text = text[1:-1].strip()
+    return text
+
+def splitTernary(text):
+    """Split a quote-aware one-line ternary into condition and both arms.
+
+    Each top-level `?` raises ternaryDepth, so it waits for its own `:`:
+    `a ? b ? 1 : 2 : 3` pairs the inner `?` with the inner `:`.
+    """
+    text = stripOuterParentheses(text)
+    question = None
+    depth = 0
+    ternaryDepth = 0
+    quoted = False
+    for index, char in enumerate(text):
+        if char == '"':
+            quoted = not quoted
+        elif quoted:
+            continue
+        elif char in "([{":
+            depth += 1
+        elif char in ")]}":
+            depth -= 1
+        elif char == "?" and depth == 0:
+            if question is None:
+                question = index
+            ternaryDepth += 1
+        elif char == ":" and depth == 0 and question is not None:
+            ternaryDepth -= 1
+            if ternaryDepth == 0:
+                return (
+                    text[:question].strip(),
+                    text[question + 1:index].strip(),
+                    text[index + 1:].strip(),
+                )
+    return None
+
+def hasUnmatchedTernary(text):
+    """True when an unquoted `?` has no `:` at the same bracket depth.
+
+    A `?` inside brackets belongs to a sub-expression this converter does not
+    rewrite, so it is only reported when it cannot be paired at all.
+    """
+    questions = []
+    depth = 0
+    quoted = False
+    for char in text:
+        if char == '"':
+            quoted = not quoted
+        elif quoted:
+            continue
+        elif char in "([{":
+            depth += 1
+        elif char in ")]}":
+            depth = max(depth - 1, 0)
+        elif char == "?":
+            if len(questions) <= depth:
+                questions.extend([0] * (depth + 1 - len(questions)))
+            questions[depth] += 1
+        elif char == ":" and depth < len(questions) and questions[depth]:
+            questions[depth] -= 1
+    return any(questions)
+
+def convertTernary(text):
+    """Convert an AHK one-line ternary to Python, recursing into both arms.
+
+    Returns None when the text has no ternary, and raises ValueError when an
+    unquoted `?` cannot be paired, so malformed input is not written as a
+    successful conversion.
+    """
+    ternary = splitTernary(text)
+    if ternary is None:
+        if hasUnmatchedTernary(text):
+            raise ValueError(f"Invalid ternary expression: {text}")
+        return None
+    conditionSection, trueSection, falseSection = ternary
+    truePython = convertTernary(trueSection)
+    falsePython = convertTernary(falseSection)
+    # The true arm of a Python conditional must be parenthesised when it is
+    # itself conditional, otherwise Python's right-associative parsing would
+    # attach the outer `if` to the inner expression.
+    trueResult = f"({truePython})" if truePython is not None else trueSection
+    falseResult = f"({falsePython})" if falsePython is not None else falseSection
+    return f"{trueResult} if {conditionSection} else {falseResult}"
+
 def convertCall(statement):
     """Python lines for one nm_walk, nm_camerarotation or sleep call. None for any other statement."""
     match = re.fullmatch(r"(nm_walk|nm_camerarotation|sleep)\((.*)\)", statement)
@@ -296,12 +403,12 @@ def ahkPatternToPython(ahk):
         elif "else" in code and not "if" in code:
             out[i] = indent + "else:" + comment
         #one line if/else statements
-        elif checkOrder(line, "?:"):
-            if "𑑛" in line:
-                e = e.split("𑑛")[1]
-            conditionSection, resultSection = e.split("?")
-            trueSection, falseSection = resultSection.split(":")
-            out[i] = out[i].replace(e, f"{trueSection} if {conditionSection} else {falseSection}")
+        elif (ternary := convertTernary(code.partition("𑑛")[2] if "𑑛" in code else code)) is not None:
+            lhs, separator, _ = code.partition("𑑛")
+            replacement = ternary
+            if separator:
+                replacement = f"{lhs}{separator} {replacement}"
+            out[i] = indent + replacement + comment
         #function definition
         elif checkOrder(line, "(){") and not checkOrder(line, "𑑛(){"):
             out[i] = "def " + out[i].replace("{", ":")
