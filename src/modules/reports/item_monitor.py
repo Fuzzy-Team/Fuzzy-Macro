@@ -77,6 +77,7 @@ class ItemMonitor:
         self.collected_items = {}
         self.session_collected_items = {}
         self.item_timeline = {}  # clock minute -> total amount this hour
+        self.session_item_timeline = {}  # elapsed session minute -> total amount this session
         self.last_detection_time = {}
         self.last_detected_value = {}
         self.battle_point_lines = []  # (amount, last seen ms) of kill lines still on screen
@@ -123,10 +124,12 @@ class ItemMonitor:
 
     def get_snapshot(self, session=False):
         collected = self.session_collected_items if session else self.collected_items
+        timeline = self.session_item_timeline if session else self.item_timeline
         return {
             "collected_items": dict(collected),
             "session_collected_items": dict(self.session_collected_items),
-            "item_timeline": dict(self.item_timeline),
+            "item_timeline": dict(timeline),
+            "session_item_timeline": dict(self.session_item_timeline),
             "total_items_detected": self.total_items_detected,
             "query_total": self.query_total,
             "start_time": self.start_time,
@@ -142,6 +145,11 @@ class ItemMonitor:
             or {}
         )
         self.item_timeline = {int(k): int(v) for k, v in (data.get("item_timeline") or {}).items()}
+        # Older snapshots predate the session timeline; leave it empty and let the
+        # final report fall back to the hourly timeline.
+        self.session_item_timeline = {
+            int(k): int(v) for k, v in (data.get("session_item_timeline") or {}).items()
+        }
         self.total_items_detected = int(data.get("total_items_detected") or 0)
         self.query_total = int(data.get("query_total") or 0)
         if data.get("start_time"):
@@ -246,6 +254,8 @@ class ItemMonitor:
         self.session_collected_items[key] = self.session_collected_items.get(key, 0) + amount
         minute_slot = datetime.now().minute
         self.item_timeline[minute_slot] = self.item_timeline.get(minute_slot, 0) + amount
+        elapsed_slot = max(0, int((time.time() - self.start_time) // 60))
+        self.session_item_timeline[elapsed_slot] = self.session_item_timeline.get(elapsed_slot, 0) + amount
         self.total_items_detected += 1
 
     def detect_once(self):
@@ -421,6 +431,13 @@ class ItemReportDrawer:
 
         collected = (snapshot or {}).get("collected_items") or {}
         timeline = (snapshot or {}).get("item_timeline") or {}
+        self.start_time = (snapshot or {}).get("start_time")
+        timeline_is_session = (snapshot or {}).get("timeline_is_session")
+        if timeline_is_session is None:
+            # New snapshots carry session_item_timeline even when it is still empty;
+            # only older snapshots lack it and fall back to clock-minute keys.
+            timeline_is_session = report_type == "session" and "session_item_timeline" in (snapshot or {})
+        session_duration = (snapshot or {}).get("session_duration")
         sorted_items = ItemMonitor.sorted_items(collected)
         top = ItemMonitor.top_items(collected, limit=3)
 
@@ -437,12 +454,18 @@ class ItemReportDrawer:
         self._drawPanel(info_region, f"ItemMonitor")
 
         self._drawItemCards(items_region, sorted_items)
-        self._drawTimeline(items_region, timeline)
+        self._drawTimeline(items_region, timeline, report_type, timeline_is_session, session_duration)
         self._drawTopThree(this_hour_region, top)
 
         # Info panel
         ix, iy, iw, ih = info_region
-        uptime = max(0, time.time() - float((snapshot or {}).get("start_time") or time.time()))
+        if session_duration is not None:
+            try:
+                uptime = max(0.0, float(session_duration))
+            except (TypeError, ValueError):
+                uptime = 0.0
+        else:
+            uptime = max(0, time.time() - float((snapshot or {}).get("start_time") or time.time()))
         uptime_str = formatHMS(uptime)
         qps = 0.0
         if uptime > 0:
@@ -516,7 +539,7 @@ class ItemReportDrawer:
                 qty_text, font=qty_font, fill=(54, 203, 54),
             )
 
-    def _drawTimeline(self, region, timeline):
+    def _drawTimeline(self, region, timeline, report_type="hourly", timeline_is_session=None, session_duration=None):
         x, y, w, h = region
         graph = (x + 100, y + h - 210, w - 200, 120)
         gx, gy, gw, gh = graph
@@ -531,20 +554,56 @@ class ItemReportDrawer:
             self.draw.line((px, gy, px, gy + gh), fill=self.graphGridColor, width=2)
         self.draw.line((gx, gy + gh / 2, gx + gw, gy + gh / 2), fill=self.graphGridColor, width=2)
 
-        # Time labels for the current hour
-        base = datetime.now().replace(minute=0, second=0, microsecond=0)
+        timeline = timeline or {}
+        if timeline_is_session is None:
+            timeline_is_session = report_type == "session"
+        if timeline_is_session:
+            # Session timelines are keyed by elapsed minutes, so the graph spans
+            # the recorded session length instead of the 60 minutes of the current hour.
+            minutes = []
+            for key in timeline:
+                try:
+                    minutes.append(int(key))
+                except (TypeError, ValueError):
+                    continue
+            max_minute = max(minutes) if minutes else 0
+            elapsed_minute = 0
+            if session_duration is not None:
+                try:
+                    elapsed_minute = max(0, int(float(session_duration) // 60))
+                except (TypeError, ValueError):
+                    elapsed_minute = 0
+            span = max(60, max_minute + 1, elapsed_minute)
+            # Round up to a whole 6-minute label step so the X-axis labels are clean.
+            span = ((span + 5) // 6) * 6
+            values = [0] * span
+            for key, count in timeline.items():
+                try:
+                    minute = int(key)
+                    if 0 <= minute < span:
+                        values[minute] += int(count or 0)
+                except (TypeError, ValueError):
+                    continue
+            labels = [formatHMS(span * 60 * i / 6) for i in range(7)]
+        else:
+            # Time labels for the current hour
+            base = datetime.now().replace(minute=0, second=0, microsecond=0)
+            labels = []
+            for i in range(7):
+                minute = i * 10
+                t = base.replace(hour=(base.hour + (minute // 60)) % 24, minute=minute % 60)
+                labels.append(t.strftime("%I:%M %p") if self.time_format == 12 else t.strftime("%H:%M"))
+            values = [int(timeline.get(m, timeline.get(str(m), 0)) or 0) for m in range(60)]
+            span = 60
+
         label_font = self.getFont("bold", 24)
-        for i in range(7):
-            minute = i * 10
-            t = base.replace(hour=(base.hour + (minute // 60)) % 24, minute=minute % 60)
-            label = t.strftime("%I:%M %p") if self.time_format == 12 else t.strftime("%H:%M")
+        for i, label in enumerate(labels):
             bbox = self.draw.textbbox((0, 0), label, font=label_font)
             self.draw.text(
                 (gx + gw * i / 6 - (bbox[2] - bbox[0]) / 2, gy + gh + 18),
                 label, font=label_font, fill=self.bodyColor,
             )
 
-        values = [int(timeline.get(m, timeline.get(str(m), 0)) or 0) for m in range(60)]
         max_val = max(values) if values else 0
         # Y labels
         y_font = self.getFont("bold", 22)
@@ -558,15 +617,17 @@ class ItemReportDrawer:
         if max_val <= 0:
             return
 
-        bar_w = gw / 60
+        bar_w = gw / span
+        pad = min(2.0, bar_w / 4)
         for minute, count in enumerate(values):
             if count <= 0:
                 continue
             bar_h = gh * count / max_val
-            bx = gx + bar_w * minute + 2
+            bx = gx + bar_w * minute + pad
             by = gy + gh - bar_h
-            self.draw.rectangle((bx, by, bx + bar_w - 4, gy + gh), fill=(0, 255, 0))
-            self.draw.rectangle((bx, by, bx + bar_w - 4, gy + gh), outline=(0, 170, 0), width=1)
+            right = max(bx + 1, bx + bar_w - pad * 2)
+            self.draw.rectangle((bx, by, right, gy + gh), fill=(0, 255, 0))
+            self.draw.rectangle((bx, by, right, gy + gh), outline=(0, 170, 0), width=1)
 
     def _drawTopThree(self, region, top_items):
         x, y, w, h = region
