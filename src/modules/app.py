@@ -430,6 +430,9 @@ def runApp(macroTarget):
                 stopApp()
                 run.value = 3
                 gui.setRunState(3)
+            # Standby is a stopped state: remove any virtual display the macro
+            # was using, just as the normal stop path does.
+            displaySession.close()
             nextRestartAt = 0.0
             appManager.closeApp("Roblox")
             duration_text = "until disabled" if duration_seconds is None else f"for {duration_seconds / 60:g} minute(s)"
@@ -830,12 +833,14 @@ def runApp(macroTarget):
                 run.value = 0
                 continue
 
-        # Check for crash (non-zero exitcodes). Log signal name to aid diagnosis.
+        # Check for crash (non-zero exitcodes). This must be independent of the
+        # display health check above: the helper is owned by this process and can
+        # stay healthy after the macro child dies.
         # The dead process stays assigned until the scheduled restart so Stop,
         # Pause and standby keep seeing a running session during the backoff.
         # The restart itself is a deadline checked on later ticks; blocking here
         # would hold up the logQueue, /standby and auto-stop handling.
-        elif run.value == 2 and macroProc and not macroProc.is_alive() and macroProc.exitcode:
+        if run.value == 2 and macroProc and not macroProc.is_alive() and macroProc.exitcode:
             if nextRestartAt == 0.0:
                 extra = ""
                 if macroProc.exitcode < 0:
@@ -874,6 +879,8 @@ def runApp(macroTarget):
                     nextRestartAt = 0.0
                     run.value = 3
                     showRunState(3)
+                    # No restart owns the virtual display now, so release it.
+                    displaySession.close()
                 else:
                     restartDelay = getCrashRestartDelay(crashRestartCount)
                     print(f"Restarting macro in {restartDelay}s (crash {crashRestartCount}/{len(CRASH_RESTART_DELAYS)})")
