@@ -684,6 +684,15 @@ class CollectiblesMixin:
             settingsManager.saveUserLiteral("blender.txt", blenderData)
             updateHourlyTime()
         
+        def canCraftSlot(slot):
+            #item must be in the active queue, set, and have repeats
+            return (
+                isinstance(slot, int) and not isinstance(slot, bool)
+                and 1 <= slot <= self.setdat["blender_slots"]
+                and self.setdat[f"blender_item_{slot}"] != "none"
+                and (self.setdat[f"blender_repeat_{slot}"] > 0 or self.setdat[f"blender_repeat_inf_{slot}"])
+            )
+
         def getNextItem():
             slots = self.setdat["blender_slots"]
             nextItem = itemNo
@@ -691,8 +700,7 @@ class CollectiblesMixin:
                 nextItem += 1
                 if nextItem > slots:
                     nextItem = 1
-                #item must be set and have repeats
-                if (self.setdat[f"blender_item_{nextItem}"] != "none") and (self.setdat[f"blender_repeat_{nextItem}"] > 0 or self.setdat[f"blender_repeat_inf_{nextItem}"]):
+                if canCraftSlot(nextItem):
                     return nextItem
             return 0 #no items to craft
 
@@ -726,11 +734,25 @@ class CollectiblesMixin:
                 else:
                     updateHourlyTime()
 
+        # A saved slot can outlive the queue or lose its recipe/repeats (a slot was
+        # removed, the profile has fewer slots, or blender.txt was edited). Rescan
+        # instead of indexing a missing slot or crafting an unavailable recipe.
+        savedItem = blenderData["item"]
+        invalidSavedItem = (
+            isinstance(savedItem, bool)
+            or not isinstance(savedItem, int)
+            or not (0 <= savedItem <= self.setdat["blender_slots"])
+        )
+        # Keep an in-range but ineligible saved slot so getNextItem() advances
+        # to the following recipe instead of restarting at slot 1.
+        itemNo = 0 if invalidSavedItem else savedItem
+        staleItem = invalidSavedItem or (savedItem != 0 and not canCraftSlot(savedItem))
+
         #check if item is none (settings got changed but user did not reset the blender data)
-        #or first blender of the reset
-        if blenderData["collectTime"] == 0 or (itemNo and self.setdat[f"blender_item_{itemNo}"] == "none"): 
+        #or first blender of the reset, or a stale saved slot
+        if blenderData["collectTime"] == 0 or staleItem:
             itemNo = getNextItem() #get the first item
-            if not itemNo: #no items available
+            if not itemNo and blenderData["collectTime"] <= 0: #no items available and no craft to collect
                 blenderData["item"] = itemNo
                 blenderData["collectTime"] = -1
                 saveBlenderData()
@@ -836,6 +858,7 @@ class CollectiblesMixin:
             if is_stopped():
                 updateHourlyTime()
                 return
+            blenderData["item"] = 0
             blenderData["collectTime"] = -1 #set collectTime to -1 (disable blender)
             saveBlenderData()
             return
