@@ -119,8 +119,9 @@ class ItemMonitor:
     def reset_hourly(self):
         self.collected_items = {}
         self.item_timeline = {}
-        self.last_detection_time = {}
-        self.last_detected_value = {}
+        # The detection cache spans the hourly rollover: a loot toast can still
+        # be on screen when the hour changes, and clearing it would count that
+        # same toast again from scratch.
 
     def get_snapshot(self, session=False):
         collected = self.session_collected_items if session else self.collected_items
