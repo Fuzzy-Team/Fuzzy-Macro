@@ -1919,6 +1919,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             self.section_key = section_key
             self.source_channel_id = source_channel_id
             self.source_message_id = source_message_id
+            self.field_name = str(field_name).strip().lower()
             self.field_name_input = discord.ui.TextInput(label="Field Name", default=field_name, required=True, max_length=32)
             self.task_enabled_input = discord.ui.TextInput(label="Enable Task (true/false)", default=str(task_enabled), required=True, max_length=8)
             self.shift_lock_input = discord.ui.TextInput(label="Shift Lock (true/false)", default=str(shift_lock), required=True, max_length=8)
@@ -1947,13 +1948,30 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 await interaction.response.send_message("\n".join(validation_errors), ephemeral=True)
                 return
 
+            current_field = fields[self.slot_index]
+            field_changed = requested_field != self.field_name
+            initial_shift_lock, _ = _parse_required_bool(self.shift_lock_input.default, "Shift Lock")
+            initial_drift, _ = _parse_required_bool(self.drift_input.default, "Drift Compensation")
+            shift_lock_changed = shift_lock_value != initial_shift_lock
+            drift_changed = drift_value != initial_drift
+
             fields[self.slot_index] = requested_field
             fields_enabled[self.slot_index] = bool(task_enabled_value)
             success_fields, _ = update_setting("fields", fields)
             success_enabled, _ = update_setting("fields_enabled", fields_enabled)
 
-            success_shift, _ = _save_slot_field_setting(self.slot_index, "shift_lock", bool(shift_lock_value))
-            success_drift, _ = _save_slot_field_setting(self.slot_index, "field_drift_compensation", bool(drift_value))
+            def save_basic_flag(value, changed, setting_key):
+                # When the slot moves to a new field, an untouched input still
+                # contains the old field's value; do not overwrite the new field.
+                if field_changed and not changed:
+                    return True
+                if requested_field != current_field and not success_fields:
+                    return False
+                success, _ = _save_slot_field_setting(self.slot_index, setting_key, bool(value))
+                return success
+
+            success_shift = save_basic_flag(shift_lock_value, shift_lock_changed, "shift_lock")
+            success_drift = save_basic_flag(drift_value, drift_changed, "field_drift_compensation")
 
             failures = []
             if not success_fields:
@@ -1965,7 +1983,21 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             if not success_drift:
                 failures.append("field_drift_compensation")
 
-            status_message = "Updated basic settings." if not failures else "Some basic settings failed to update."
+            preserved_flags = []
+            if field_changed:
+                if not shift_lock_changed:
+                    preserved_flags.append("Shift Lock")
+                if not drift_changed:
+                    preserved_flags.append("Drift Compensation")
+            if failures:
+                status_message = "Some basic settings failed to update."
+            elif preserved_flags:
+                status_message = (
+                    f"Updated basic settings. Kept {requested_field.title()}'s existing "
+                    + " and ".join(preserved_flags) + "."
+                )
+            else:
+                status_message = "Updated basic settings."
             await _update_fields_message(
                 interaction,
                 slot_index=self.slot_index,
