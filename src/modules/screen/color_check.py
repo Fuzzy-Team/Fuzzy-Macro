@@ -12,9 +12,10 @@ def get_sample_colors():
 
 
 
-def percent_pixels_similar_to_color(x, y, w, h, target_color, tolerance=40):
+def percent_pixels_similar_to_color(x, y, w, h, target_color, tolerance=40, return_none_on_error=False):
     """Capture the region (x,y,w,h) and return fraction (0..1) of pixels
     within `tolerance` Euclidean distance of `target_color`.
+    With return_none_on_error, a failed capture is distinguishable from 0%.
     """
     try:
         arr = mssScreenshotNP(int(x), int(y), int(w), int(h))
@@ -22,7 +23,7 @@ def percent_pixels_similar_to_color(x, y, w, h, target_color, tolerance=40):
         if arr.ndim == 3 and arr.shape[2] >= 3:
             rgb = arr[..., :3][..., ::-1]
         else:
-            return 0.0
+            return None if return_none_on_error else 0.0
         # downsample for speed
         small = rgb[::max(1, rgb.shape[0]//120), ::max(1, rgb.shape[1]//120), :]
         # Use squared-distance math in wider integer types to avoid overflow.
@@ -32,6 +33,6 @@ def percent_pixels_similar_to_color(x, y, w, h, target_color, tolerance=40):
         tol2 = int(tolerance) * int(tolerance)
         cnt = np.sum(dist2 <= tol2)
         total = dist2.size
-        return float(cnt) / float(total) if total else 0.0
+        return float(cnt) / float(total) if total else (None if return_none_on_error else 0.0)
     except Exception:
-        return 0.0
+        return None if return_none_on_error else 0.0
