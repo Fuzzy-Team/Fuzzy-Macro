@@ -675,6 +675,11 @@ async function refreshAllSettings() {
       await loadConfig();
     }
 
+    // SSA Roller settings are profile data outside loadInputs; refresh its form too.
+    if (typeof restoreSsaRollerSettings === "function") {
+      await restoreSsaRollerSettings();
+    }
+
     console.log("All settings refreshed for new profile");
   } catch (error) {
     console.error("Error refreshing settings:", error);
