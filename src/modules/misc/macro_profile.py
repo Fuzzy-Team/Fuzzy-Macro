@@ -51,7 +51,7 @@ class MacroProfileStore:
     MIGRATION_FILE = ".migration_version"
     # One-time upgrades, in order. Append new ones to the end and never reorder or remove
     # them: each profile stores how many have run, so the version bumps by itself.
-    MIGRATIONS = ("_migrate_legacy_settings",)
+    MIGRATIONS = ("_migrate_legacy_settings", "_migrate_priority_tasks")
     # Gather patterns that lost their version suffix. Saved and imported `shape` values are mapped on load.
     PATTERN_RENAMES = {"bamb_dupe_v11": "bamb_dupe", "pine_dupe_v12": "pine_dupe", "octo_v4": "octo"}
 
@@ -341,6 +341,27 @@ class MacroProfileStore:
 
         self._merge_quest_gumdrop_slot(profile_data, general_data, fields_data)
         return profile_data != original_profile, general_data != original_general
+
+    def _migrate_priority_tasks(self, profile_data, general_data, fields_data):
+        """Add task IDs introduced after a profile was saved to its priority order."""
+        original_profile = copy.deepcopy(profile_data)
+        order = profile_data.get("task_priority_order")
+        default_order = self._profile_defaults.get("task_priority_order", [])
+        if isinstance(order, list):
+            for index, task in enumerate(default_order):
+                if task in order:
+                    continue
+                # Put a new task next to its nearest default neighbour that is already in
+                # the saved order. Existing entries never move, so custom priority survives.
+                before = next((item for item in reversed(default_order[:index]) if item in order), None)
+                after = next((item for item in default_order[index + 1:] if item in order), None)
+                if before is not None:
+                    order.insert(order.index(before) + 1, task)
+                elif after is not None:
+                    order.insert(order.index(after), task)
+                else:
+                    order.append(task)
+        return profile_data != original_profile, False
 
     @staticmethod
     def _merge_quest_gumdrop_slot(profile_data, general_data, fields_data):
