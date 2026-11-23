@@ -62,8 +62,6 @@ class QuestObjectiveMixin:
             (r'.*\b(catch|chase)\b.*', 'catch', r'.*'),
             # Craft patterns (check first - specific crafting actions)
             (r'.*\b(craft|make)\b.*\b(blender|ingredients)\b.*', 'craft', r'.*'),
-            # Obtain patterns (specific obtain actions)
-            (r'.*\b(obtain|get)\b.*', 'obtain', r'.*'),
             # Challenge patterns (check first - specific mini-games like Ant Challenge)
             (r'.*\b(get|earn|achieve)\b.*\b(score|amulet)\b.*\b(challenge)\b.*', 'challenge', r'.*'),
             # Feed patterns (check first as they have specific targets)
@@ -78,6 +76,8 @@ class QuestObjectiveMixin:
             (r'.*\b(kill|defeat|destroy|slay)\b.*', 'kill', r'(giant\s+ants?|army\s+ants?|fire\s+ants?|coconut\s+crabs?|mechsquitos?|scorpions?|mantises?|spiders?|beetles?|ladybugs?|rhinobeetles?|ants?|werewolves?|wolves?|king\s+beetles?|tunnel\s+bear)'),
             # Gather patterns (fields/plants) - more flexible to handle OCR errors
             (r'.*\b(gather|collect|get|harvest|pick)\b.*', 'gather', r'(strawberr\w*|blue\s*flower|pine\s*tree|mushroom|rose|clover|bamboo|cactus|pumpkin|pineapple|coconut|dandelion|spider|stump|pepper|mountain\s*top|sunflower|sunflow\w*|pineappl\w*)'),
+            # Obtain patterns (fallback for actions that have no specific matcher)
+            (r'.*\b(obtain|get)\b.*', 'obtain', r'.*'),
             # Fallback patterns
             (r'.*\b(blueberr\w*|strawberr\w*)\b.*', 'fieldtoken', r'blueberr\w*|strawberr\w*'),
             (r'.*\b(coconut\s+crabs?|mechsquitos?|scorpions?|mantises?|spiders?|beetles?|ladybugs?|rhinobeetles?|ants?|werewolves?|wolves?|tunnel\s+bear)\b.*', 'kill', r'coconut\s+crabs?|mechsquitos?|scorpions?|mantises?|spiders?|beetles?|ladybugs?|rhinobeetles?|ants?|werewolves?|wolves?|tunnel\s+bear'),

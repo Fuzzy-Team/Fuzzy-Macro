@@ -1,3 +1,4 @@
+import ctypes
 import os
 import subprocess
 import time
@@ -13,6 +14,27 @@ def runAppleScript(code):
 def isAppOpenMac(app="roblox"):
     tmp = os.popen("ps -Af").read()
     return app.lower() in tmp.lower()
+
+def missingPermissions():
+    """Names of the macOS permissions Terminal still needs. An API missing on an older macOS is skipped."""
+    missing = []
+    try:
+        ax = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices")
+        ax.AXIsProcessTrusted.restype = ctypes.c_bool
+        if not ax.AXIsProcessTrusted():
+            missing.append("Accessibility")
+    except (OSError, AttributeError):
+        pass  # framework or function missing on this macOS, so skip the check
+    try:
+        cg = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
+        # Preflight (macOS 11+) never prompts. Request (10.15+) prompts, which also lists Terminal in Settings.
+        check = getattr(cg, "CGPreflightScreenCaptureAccess", None) or cg.CGRequestScreenCaptureAccess
+        check.restype = ctypes.c_bool
+        if not check():
+            missing.append("Screen & System Audio Recording")
+    except (OSError, AttributeError):
+        pass  # framework or function missing on this macOS, so skip the check
+    return missing
 
 def openWith(*args):
     """Run macOS open. It can hang when Launch Services is stuck, so give up after 30 seconds

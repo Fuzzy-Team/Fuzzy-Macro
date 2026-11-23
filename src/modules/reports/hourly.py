@@ -451,6 +451,13 @@ class HourlyReport():
         honeyThisHour = max(0, onlyValidHourlyHoney[-1] - onlyValidHourlyHoney[0])
 
         hourlyReportStats = copy.deepcopy(self.hourlyReportStats)
+        if self.sessionReportStats.get("honey_per_min"):
+            sessionStats = copy.deepcopy(self.sessionReportStats)
+            sessionStats["start_honey"] = startHoney
+        else:
+            # Older saves can contain zero-filled session defaults; let the drawer
+            # fall back to hourlyReportStats and its hourly time labels.
+            sessionStats = None
 
         enabled_fields, field_patterns = enabledFieldPatterns(setdat)
 
@@ -481,7 +488,8 @@ class HourlyReport():
                                                           self.uptimeBuffsValues, self.buffGatherIntervals,
                                                           enabled_fields, field_patterns,
                                                           configuredUptimeBuffs=uptime_buffs,
-                                                          configuredHourlyBuffs=hourly_buffs)
+                                                          configuredHourlyBuffs=hourly_buffs,
+                                                          sessionStats=sessionStats)
         saveReportCanvas(canvas, "hourlyReport.png")
 
         # generate embed text fields (stored as attribute for caller to use)

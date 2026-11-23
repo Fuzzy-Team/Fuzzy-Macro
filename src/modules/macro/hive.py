@@ -210,7 +210,6 @@ class HiveMixin:
             if self.setdat["Auto_Field_Boost"] and not self.AFBLIMIT and not self.afb:
                 #glitter is not up, but dice is
                 if self.hasAFBRespawned("AFB_dice_cd", self.setdat["AFB_rebuff"]*60) and not self.AFBglitter and not self.failed: 
-                    self.afb = True
                     self.stop = True
                     self.cAFBDice = True
                     self.logger.webhook("Rebuffing","AFB", "brown")
@@ -221,7 +220,6 @@ class HiveMixin:
                 #glitter is up, g
                 elif self.setdat["AFB_glitter"] and self.hasAFBRespawned("AFB_glitter_cd", self.setdat["AFB_rebuff"]*60+30) and self.AFBglitter and not self.failed and not self.afb: #if used dice before
                     self.clear_task_status()
-                    self.afb = True
                     self.stop = True
                     self.cAFBglitter = True
                     self.logger.webhook("Converting: interrupted","AFB", "orange")

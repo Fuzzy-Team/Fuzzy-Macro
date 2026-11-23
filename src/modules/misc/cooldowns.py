@@ -15,10 +15,12 @@ def get_cooldown_rows(settings: Optional[Dict] = None) -> List[Tuple[str, float]
     cooldowns = {name: data[2] for name, data in {**collectData, **fieldBoosterData}.items() if data[2]}
     cooldowns["sticker_printer"] = 60 * 60  # same value as Macro._applySettingsState
     cooldowns["sticker_stack"] = int(settingsManager.loadUserText("sticker_stack.txt"))
+    cooldowns["sticker_sprout"] = 3 * 60 * 60
 
     rows = []
     for name, cooldown in cooldowns.items():
-        if not settings.get(name):
+        setting_name = "sticker_sprout_watch" if name == "sticker_sprout" else name
+        if not settings.get(setting_name):
             continue
         ready_at = timings.get(name, 0) + cooldown
         if name in fieldBoosterData:

@@ -361,10 +361,10 @@ class MacroProfileStore:
         for field, defaults in self._field_defaults.items():
             current = fields_data.get(field)
             if not isinstance(current, dict):
-                fields_data[field] = copy.deepcopy(defaults)
-                continue
-            for key, value in defaults.items():
-                current.setdefault(key, copy.deepcopy(value))
+                current = copy.deepcopy(defaults)
+            else:
+                for key, value in defaults.items():
+                    current.setdefault(key, copy.deepcopy(value))
             fields_data[field] = self._normalize_field(field, current)
             shape = fields_data[field].get("shape")
             if isinstance(shape, str):

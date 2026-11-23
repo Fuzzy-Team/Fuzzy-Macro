@@ -127,7 +127,7 @@ class AFBMixin:
         self.saveAFB("AFB_glitter_cd")
         self.AFBglitter = False
         self.cAFBglitter = False
-        self.afb = False
+        # Keep self.afb held across reset(): the convert() it starts must not trigger AFB again.
         if is_stopped():
             return False
         self.reset()
@@ -253,6 +253,15 @@ class AFBMixin:
         """Returns the target fields on a boost. On a gather interrupt, other exits return whether
         the player was reset out of the field; the time limit always returns False."""
 
+        # AFB owns the latch: it guards the reset() -> convert() calls below from re-entering
+        # AFB and is released on every exit, including failures, stops and interrupts.
+        self.afb = True
+        try:
+            return self._AFBRun(gatherInterrupt, turnOffShiftLock)
+        finally:
+            self.afb = False
+
+    def _AFBRun(self, gatherInterrupt, turnOffShiftLock):
         returnVal = None
         leftField = False
         def failedExit():
@@ -281,7 +290,6 @@ class AFBMixin:
             canUseDice = diceReady and not self.AFBglitter
             if (canUseGlitter or canUseDice) and not self.failed:
                 self.clear_task_status()
-                self.afb = True
                 if turnOffShiftLock:
                     self.disableShiftLock()
                 self.logger.webhook("Gathering: interrupted", "Automatic Field Boost", "orange")

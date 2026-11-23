@@ -880,13 +880,48 @@ def clearBlender():
     settingsManager.saveUserLiteral("blender.txt", blenderData)
 
 # order[i] is the old number of the slot that now sits in slot i + 1 (a removed slot is left out).
-# The saved next slot follows its recipe instead of keeping its number.
+# The saved next slot follows its recipe instead of keeping its number; a stale index wraps to the top.
 @eel.expose
 def moveBlenderSlots(order):
-    blenderData = settingsManager.loadUserLiteral("blender.txt")
-    if blenderData["item"] in order:
-        blenderData["item"] = order.index(blenderData["item"]) + 1
+    try:
+        blenderData = settingsManager.loadUserLiteral("blender.txt")
+    except Exception:
+        return
+    if not isinstance(blenderData, dict) or not isinstance(order, list) or not order:
+        return
+    item = blenderData.get("item")
+    if isinstance(item, bool) or not isinstance(item, int):
+        return
+    if item in order:
+        blenderData["item"] = order.index(item) + 1
         settingsManager.saveUserLiteral("blender.txt", blenderData)
+        return
+    if item == 0:
+        return
+    # The saved recipe was removed, or its index is stale. Pick the first slot
+    # that still has an item and repeats, rather than assuming slot 1 can craft.
+    try:
+        settings = settingsManager.loadMacroProfile()["settings"]
+    except Exception:
+        return
+    # A removed middle slot shifts the following recipe into that same index,
+    # so inspect it first; a removed tail slot starts over at the top.
+    start = item if 1 <= item <= len(order) else 1
+    replacement = 0
+    for offset in range(len(order)):
+        slot = ((start - 1 + offset) % len(order)) + 1
+        repeat = settings.get(f"blender_repeat_{slot}", 0)
+        try:
+            repeat = int(repeat)
+        except (TypeError, ValueError):
+            repeat = 0
+        if settings.get(f"blender_item_{slot}", "none") != "none" and (
+            repeat > 0 or settings.get(f"blender_repeat_inf_{slot}", False)
+        ):
+            replacement = slot
+            break
+    blenderData["item"] = replacement
+    settingsManager.saveUserLiteral("blender.txt", blenderData)
 
 @eel.expose
 def clearAFB():

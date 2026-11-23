@@ -1205,6 +1205,11 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         if task_id.startswith("collect_"):
             collect_key = task_id.replace("collect_", "")
+            # These tasks are enabled by a feature setting, not a setting named after the task.
+            if collect_key == "sprouts":
+                collect_key = "sprouts_enable"
+            elif collect_key == "sticker_sprout":
+                collect_key = "sticker_sprout_watch"
             return bool(settings.get(collect_key, False))
 
         if task_id.startswith("kill_"):
@@ -1245,6 +1250,11 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         if task_id.startswith("collect_"):
             collect_key = task_id.replace("collect_", "")
+            # These tasks are enabled by a feature setting, not a setting named after the task.
+            if collect_key == "sprouts":
+                collect_key = "sprouts_enable"
+            elif collect_key == "sticker_sprout":
+                collect_key = "sticker_sprout_watch"
             return update_setting(collect_key, enabled)
 
         if task_id.startswith("kill_"):
