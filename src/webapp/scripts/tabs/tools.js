@@ -701,15 +701,38 @@ function saveSsaRollerSettings() {
 }
 
 async function restoreSsaRollerSettings() {
+  const mainSelect = document.getElementById("ssa-main-passive");
+  if (!mainSelect || !mainSelect.options.length) return;
+
   let saved = {};
   try {
     saved = (await loadAllSettings()).ssa_roller_settings || {};
   } catch (error) {
+    // Keep the current form when settings cannot be read; clearing it would turn
+    // a temporary RPC failure into data loss on the next edit.
     console.error("Failed to load SSA Roller settings:", error);
+    return;
   }
-  if (!saved.main_passive) return;
 
-  const mainSelect = document.getElementById("ssa-main-passive");
+  // Reset the whole form first: the next profile may have no saved roller config,
+  // or fewer stat rows, and stale values would be saved into that profile.
+  mainSelect.value = mainSelect.options[0].value;
+  document.getElementById("ssa-double-passive").checked = false;
+  document.querySelectorAll("#ssa-side-passives input").forEach((box) => {
+    box.checked = false;
+  });
+  updateSsaSidePassives();
+  document.querySelectorAll("#ssa-stat-rows > div").forEach((row) => {
+    row.querySelector("select").value = "";
+    row.querySelector("input").value = "";
+    updateSsaMinPlaceholder(row);
+  });
+  document.getElementById("ssa-honey-limit").value = 5;
+  document.getElementById("ssa-safety").checked = false;
+  document.getElementById("ssa-wait-for-command").checked = true;
+  document.getElementById("ssa-manual-review").checked = false;
+
+  if (!saved.main_passive) return;
   if (SSA_PASSIVES[saved.main_passive]) mainSelect.value = saved.main_passive;
   document.getElementById("ssa-double-passive").checked = !!saved.double_passive;
   document.querySelectorAll("#ssa-side-passives input").forEach((box) => {
