@@ -1552,11 +1552,8 @@ def launch():
     try:
         eel.start('index.html', mode = "chrome", app_mode = True, block = False, port=port, cmdline_args=["--incognito", f"--app={start_url}"])
     except EnvironmentError:
-        try:
-            eel.start('index.html', mode = "chrome-app", app_mode = True, block = False, port=port, cmdline_args=["--incognito", f"--app={start_url}"])
-        except EnvironmentError:
-            print("Chrome/Chromium could not be found. Opening in default browser...")
-            openInDefaultBrowser()
+        print("Chrome/Chromium could not be found. Opening in default browser...")
+        openInDefaultBrowser()
 
 
 @eel.expose

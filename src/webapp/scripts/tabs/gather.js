@@ -635,6 +635,14 @@ async function switchGatherTab(target) {
   loadAndSaveField(fieldDropdown);
 }
 
+//add and remove run one at a time, so a quick second click never works from a stale list
+let fieldOperationQueue = Promise.resolve();
+function queueFieldOperation(operation) {
+  const run = fieldOperationQueue.then(operation);
+  fieldOperationQueue = run.catch(() => {});
+  return run;
+}
+
 $("#gather-placeholder")
   .load("../htmlImports/tabs/gather.html", async () => {
     renderGatherTabs(Math.max((await loadSettings()).fields.length, MIN_GATHER_FIELD_COUNT));
@@ -642,10 +650,11 @@ $("#gather-placeholder")
       document.getElementById(getActiveSubtab("activeGatherSubtab", "field-1"))
     );
   }) //load gather tab, restore active field once its done loading
-  .on("click", "#add-field-button", addGatherField)
+  .on("click", "#add-field-button", () => queueFieldOperation(addGatherField))
   .on("click", ".gather-remove-field", (event) => {
     event.stopPropagation();
-    removeGatherField(Number(event.currentTarget.parentElement.id.split("-")[1]));
+    const number = Number(event.currentTarget.parentElement.id.split("-")[1]);
+    queueFieldOperation(() => removeGatherField(number));
   })
   .on("click", ".gather-tab-item", (event) =>
     switchGatherTab(event.currentTarget)
