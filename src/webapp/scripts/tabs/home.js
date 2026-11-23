@@ -4,7 +4,7 @@ Home Tab
 =============================================
 */
 
-//show the start/stop button for a run state (0 = stopping, 2 = running, 3 = stopped, 6 = paused)
+//show the start/stop button for a run state (0 = stopping, 2 = running, 3 = stopped, 4 = reconnecting, 6 = paused)
 function renderRunButtons(runState, settings) {
   const startKey = settings.start_keybind || "F1";
   const pauseKey = settings.pause_keybind || "F2";
@@ -27,6 +27,15 @@ function renderRunButtons(runState, settings) {
       stopBtn.classList.remove("d-none");
       stopBtn.disabled = true;
       stopBtn.textContent = "Stopping...";
+    }
+  } else if (runState === 4) {
+    // Reconnecting: the supervisor still owns the session, so Start must stay
+    // hidden and Stop must remain available until the macro is running again.
+    if (startBtn) startBtn.classList.add("d-none");
+    if (stopBtn) {
+      stopBtn.classList.remove("d-none");
+      stopBtn.disabled = false;
+      stopBtn.textContent = `Reconnecting... Stop [${stopKey}]`;
     }
   } else if (runState === 6) {
     // Paused: show Unpause button
