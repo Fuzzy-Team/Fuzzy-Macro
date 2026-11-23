@@ -581,13 +581,23 @@ function renderGatherTabs(count) {
   addButton.parentElement.classList.toggle("can-remove-field", count > MIN_GATHER_FIELD_COUNT);
 }
 
+//both lists are saved in one write so a running macro never reads them with different lengths
+async function saveGatherFields(fields, fields_enabled) {
+  try {
+    await eel.saveDictProfileSettings({ fields, fields_enabled })();
+    return true;
+  } catch (error) {
+    await rejectSettingChange("fields", String(error?.errorText || error));
+    return false;
+  }
+}
+
 async function removeGatherField(number) {
   const settings = await loadSettings();
   const fields = settings.fields.filter((_, i) => i !== number - 1);
   const fields_enabled = settings.fields_enabled.filter((_, i) => i !== number - 1);
   if (fields.length < MIN_GATHER_FIELD_COUNT) return;
-  if (!(await saveSettingValue("profile", "fields", fields))) return;
-  if (!(await saveSettingValue("profile", "fields_enabled", fields_enabled))) return;
+  if (!(await saveGatherFields(fields, fields_enabled))) return;
   const current = Number(fieldNo);
   const next = number < current ? current - 1 : Math.min(current, fields.length);
   await switchGatherTab(document.getElementById(`field-${next}`));
@@ -597,8 +607,7 @@ async function addGatherField() {
   const settings = await loadSettings();
   const fields = [...settings.fields, "pine tree"];
   const fields_enabled = [...settings.fields_enabled, false];
-  if (!(await saveSettingValue("profile", "fields", fields))) return;
-  if (!(await saveSettingValue("profile", "fields_enabled", fields_enabled))) return;
+  if (!(await saveGatherFields(fields, fields_enabled))) return;
   renderGatherTabs(fields.length);
   await switchGatherTab(document.getElementById(`field-${fields.length}`));
 }

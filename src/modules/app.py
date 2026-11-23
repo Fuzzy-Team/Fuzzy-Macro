@@ -646,7 +646,7 @@ def runApp(macroTarget):
                     fs = fieldSettings.get(field, {})
                     if fs.get("field_drift_compensation", False) and setdat.get("sprinkler_type") != "saturator":
                         messageBox.msgBox(title="Field Drift Compensation", text=f"You have Field Drift Compensation enabled for {field} field, \
-                                        but you do not have Supreme Saturator as your sprinkler type in Boost > Hotbar.\n\
+                                        but you do not have Supreme Saturator as your sprinkler type in configs.\n\
                                         Color-based Field Drift Compensation requires the Supreme Saturator.\n\
                                         Enable 'Use Sprinkler Model For Field Drift Compensation' in Config to use AI detection with any sprinkler, \
                                         or disable field drift compensation if you do not have the Supreme Saturator.")
