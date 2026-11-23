@@ -635,12 +635,16 @@ async function switchGatherTab(target) {
   loadAndSaveField(fieldDropdown);
 }
 
-//add and remove run one at a time, so a quick second click never works from a stale list
-let fieldOperationQueue = Promise.resolve();
-function queueFieldOperation(operation) {
-  const run = fieldOperationQueue.then(operation);
-  fieldOperationQueue = run.catch(() => {});
-  return run;
+//a click on add or remove while the previous one is still saving is ignored, because the tabs on screen are out of date until it finishes
+let fieldOperationRunning = false;
+async function runFieldOperation(operation) {
+  if (fieldOperationRunning) return;
+  fieldOperationRunning = true;
+  try {
+    await operation();
+  } finally {
+    fieldOperationRunning = false;
+  }
 }
 
 $("#gather-placeholder")
@@ -650,11 +654,11 @@ $("#gather-placeholder")
       document.getElementById(getActiveSubtab("activeGatherSubtab", "field-1"))
     );
   }) //load gather tab, restore active field once its done loading
-  .on("click", "#add-field-button", () => queueFieldOperation(addGatherField))
+  .on("click", "#add-field-button", () => runFieldOperation(addGatherField))
   .on("click", ".gather-remove-field", (event) => {
     event.stopPropagation();
     const number = Number(event.currentTarget.parentElement.id.split("-")[1]);
-    queueFieldOperation(() => removeGatherField(number));
+    runFieldOperation(() => removeGatherField(number));
   })
   .on("click", ".gather-tab-item", (event) =>
     switchGatherTab(event.currentTarget)
