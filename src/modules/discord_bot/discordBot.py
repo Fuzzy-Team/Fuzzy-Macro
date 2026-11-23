@@ -865,7 +865,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                     return
                 settings = settingsManager.loadSettings()
                 fields = list(settings.get("fields", []))
-                while len(fields) < 5:
+                while len(fields) < 3:
                     fields.append("sunflower")
                 fields[0] = value
                 settingsManager.saveProfileSetting("fields", fields)
@@ -1140,7 +1140,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     ]
 
     SETTINGS_CATEGORIES = {
-        "fields": "Fields (Gather 1-5)",
+        "fields": "Fields (Gather slots)",
         "macro_mode": "Macro Mode",
         "quests": "Quests",
         "collectibles": "Collectibles",
@@ -1205,6 +1205,11 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         if task_id.startswith("collect_"):
             collect_key = task_id.replace("collect_", "")
+            # These tasks are enabled by a feature setting, not a setting named after the task.
+            if collect_key == "sprouts":
+                collect_key = "sprouts_enable"
+            elif collect_key == "sticker_sprout":
+                collect_key = "sticker_sprout_watch"
             return bool(settings.get(collect_key, False))
 
         if task_id.startswith("kill_"):
@@ -1245,6 +1250,11 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         if task_id.startswith("collect_"):
             collect_key = task_id.replace("collect_", "")
+            # These tasks are enabled by a feature setting, not a setting named after the task.
+            if collect_key == "sprouts":
+                collect_key = "sprouts_enable"
+            elif collect_key == "sticker_sprout":
+                collect_key = "sticker_sprout_watch"
             return update_setting(collect_key, enabled)
 
         if task_id.startswith("kill_"):
@@ -1298,7 +1308,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             )
 
         if category_key == "fields":
-            embed.add_field(name="Gather Slots", value="Use Gather 1-5 slot panel", inline=False)
+            embed.add_field(name="Gather Slots", value="Use the Gather slot panel", inline=False)
             embed.add_field(name="Controls", value="Basic, Pattern, Gather Until, Goo, Start", inline=False)
 
         elif category_key == "macro_mode":
@@ -1433,9 +1443,10 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     def _get_field_slots(settings: Dict) -> Tuple[List[str], List[bool]]:
         fields = list(settings.get("fields", []))
         fields_enabled = list(settings.get("fields_enabled", []))
-        while len(fields) < 5:
+        slot_count = max(3, len(fields), len(fields_enabled))
+        while len(fields) < slot_count:
             fields.append("sunflower")
-        while len(fields_enabled) < 5:
+        while len(fields_enabled) < slot_count:
             fields_enabled.append(False)
         return fields, fields_enabled
 
@@ -1557,7 +1568,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             embed.add_field(name="Start Location", value=start_location.title(), inline=True)
             embed.add_field(name="Distance", value=str(field_data.get("distance", 1)), inline=True)
 
-        embed.set_footer(text=status_message or "Gather tabs: 1-5. Choose a section to control more settings.")
+        embed.set_footer(text=status_message or "Choose a section to control more settings.")
         return embed
 
     async def _update_fields_message(
@@ -1570,6 +1581,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         source_message_id: Optional[int] = None,
     ):
         settings = get_cached_settings()
+        # a slot removed in the GUI since the panel opened falls back to the last one
+        slot_index = min(slot_index, len(_get_field_slots(settings)[0]) - 1)
         view = FieldsPanelView(
             slot_index=slot_index,
             section_key=section_key,
@@ -1786,7 +1799,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
     class OpenFieldsPanelButton(discord.ui.Button):
         def __init__(self):
-            super().__init__(label="Open Gather 1-5 Panel", style=discord.ButtonStyle.primary)
+            super().__init__(label="Open Gather Panel", style=discord.ButtonStyle.primary)
 
         async def callback(self, interaction: discord.Interaction):
             await _update_fields_message(interaction, slot_index=0, section_key="basic")
@@ -1794,7 +1807,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     class FieldsSlotSelect(discord.ui.Select):
         def __init__(self, current_slot: int):
             options = []
-            for slot_index in range(5):
+            slot_count = len(_get_field_slots(get_cached_settings())[0])
+            for slot_index in range(min(slot_count, 25)):
                 options.append(
                     discord.SelectOption(
                         label=f"Gather {slot_index + 1}",

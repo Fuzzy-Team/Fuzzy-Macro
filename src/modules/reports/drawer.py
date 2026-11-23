@@ -464,6 +464,21 @@ class HourlyReportDrawer:
             {"label": "Convert", "seconds": sessionSource.get("converting_time", hourlyReportStats.get("converting_time", 0)), "color": self.convertColor},
             {"label": "Other", "seconds": sessionSource.get("bug_run_time", hourlyReportStats.get("bug_run_time", 0)) + sessionSource.get("misc_time", hourlyReportStats.get("misc_time", 0)), "color": self.otherColor},
         ]
+        startHoney = sessionSource["start_honey"] if "start_honey" in sessionSource else hourlyReportStats.get("start_honey", 0)
+        sessionHoneyGraphData = onlyValidHourlyHoney or [0]
+        sessionHoneyGraphLabels = timeLabels
+        rawSessionHoney = sessionSource.get("honey_per_min") or []
+        if rawSessionHoney:
+            # Match the hourly/final pipeline: repair failed reads, cap OCR spikes,
+            # then drop placeholder zeroes unless the whole series is flat.
+            # FinalReport imports this module, so keep this import local.
+            from modules.reports.final import FinalReport
+            sourceHoneySeries = FinalReport._normalizeCumulativeHoneySeries(
+                rawSessionHoney, baseline=startHoney or None)
+            if len(set(sourceHoneySeries)) > 1:
+                sourceHoneySeries = [value for value in sourceHoneySeries if value]
+            sessionHoneyGraphData = sourceHoneySeries or [0]
+            sessionHoneyGraphLabels = self._elapsedTimeLabels(sessionTime)
 
         firstCardTitle = "SESSION TOTAL" if reportTitle == "Session Report" else "LAST HOUR"
         self._drawActivityCard(statRegions["lasthour"], firstCardTitle, hourRows, honeyData, timeLabels)
@@ -476,11 +491,11 @@ class HourlyReportDrawer:
         self.draw.text((x + 170, y + 180), "Hourly Average", font=topFont, fill=self.bodyColor)
         self.draw.text((x + 720, y + 180), millify(avg, "report"), font=topFont, fill=self.bodyColor)
 
-        self._drawActivityCard(statRegions["session"], "SESSION", sessionRows, onlyValidHourlyHoney or [0], timeLabels)
+        self._drawActivityCard(statRegions["session"], "SESSION", sessionRows, sessionHoneyGraphData, sessionHoneyGraphLabels)
         x, y, w, _ = statRegions["session"]
         currentHoney = onlyValidHourlyHoney[-1] if onlyValidHourlyHoney else 0
         sessionLines = [
-            ("Starting Honey", millify(hourlyReportStats.get("start_honey", 0), "report")),
+            ("Starting Honey", millify(startHoney, "report")),
             ("Current Honey", millify(currentHoney, "report")),
             ("Session Honey", millify(sessionHoney, "report")),
             ("Session Time", formatHMS(sessionTime)),
@@ -494,10 +509,12 @@ class HourlyReportDrawer:
         self._drawLegacyBuffsCard(statRegions["buffs"], buffQuantity, hourlyBuffList, nectarQuantity, uptimeBuffsValues)
         self._drawLegacyPlantersCard(statRegions["planters"], planterData)
         statsRows = {
+            "bosses": sessionSource.get("total_bosses", sessionSource.get("bosses", hourlyReportStats.get("bosses", 0))),
             "bugs": sessionSource.get("total_bugs", sessionSource.get("bugs", hourlyReportStats.get("bugs", 0))),
             "vicious_bees": sessionSource.get("total_vicious_bees", sessionSource.get("vicious_bees", hourlyReportStats.get("vicious_bees", 0))),
             "quests_completed": sessionSource.get("total_quests", sessionSource.get("quests_completed", hourlyReportStats.get("quests_completed", 0))),
             "planters": len([p for p in planterData.get("planters", []) if p]) if planterData else 0,
+            "disconnects": sessionSource.get("total_disconnects", sessionSource.get("disconnects", hourlyReportStats.get("disconnects", 0))),
         }
         self._drawLegacyStatsCard(statRegions["stats"], statsRows)
         self._drawLegacyInfoCard(statRegions["info"], reportTitle, sessionTime)
@@ -900,7 +917,7 @@ class HourlyReportDrawer:
             img = img.resize((imageWidth, imageHeight))
             self.canvas.paste(img, (x + (progressChartSize-imageWidth)//2, y+progressChartSize + 60), img)
 
-    def drawHourlyReport(self, hourlyReportStats, sessionTime, honeyPerMin, sessionHoney, honeyThisHour, onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData, uptimeBuffsValues, buffGatherIntervals, enabled_fields=None, field_patterns=None, configuredUptimeBuffs=None, configuredHourlyBuffs=None):
+    def drawHourlyReport(self, hourlyReportStats, sessionTime, honeyPerMin, sessionHoney, honeyThisHour, onlyValidHourlyHoney, buffQuantity, nectarQuantity, planterData, uptimeBuffsValues, buffGatherIntervals, enabled_fields=None, field_patterns=None, configuredUptimeBuffs=None, configuredHourlyBuffs=None, sessionStats=None):
         uptimeBuff_list = configuredUptimeBuffs if configuredUptimeBuffs is not None else DEFAULT_UPTIME_BUFFS
         hourlyBuff_list = configuredHourlyBuffs if configuredHourlyBuffs is not None else DEFAULT_HOURLY_BUFFS
 
@@ -910,4 +927,5 @@ class HourlyReportDrawer:
             uptimeBuffsValues, buffGatherIntervals,
             configuredUptimeBuffs=uptimeBuff_list,
             configuredHourlyBuffs=hourlyBuff_list,
+            sessionStats=sessionStats,
         )

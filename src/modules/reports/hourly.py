@@ -198,6 +198,8 @@ class HourlyReport():
             "bugs": 0,
             "quests_completed": 0,
             "vicious_bees": 0,
+            "bosses": 0,
+            "disconnects": 0,
             **dict.fromkeys(("vic_servers", "vic_nights", "vic_sightings", "vic_defeats", "vic_stingers", "vic_deaths", "vic_returns"), 0),
             "gathering_time": 0,
             "converting_time": 0,
@@ -451,6 +453,13 @@ class HourlyReport():
         honeyThisHour = max(0, onlyValidHourlyHoney[-1] - onlyValidHourlyHoney[0])
 
         hourlyReportStats = copy.deepcopy(self.hourlyReportStats)
+        if self.sessionReportStats.get("honey_per_min"):
+            sessionStats = copy.deepcopy(self.sessionReportStats)
+            sessionStats["start_honey"] = startHoney
+        else:
+            # Older saves can contain zero-filled session defaults; let the drawer
+            # fall back to hourlyReportStats and its hourly time labels.
+            sessionStats = None
 
         enabled_fields, field_patterns = enabledFieldPatterns(setdat)
 
@@ -481,7 +490,8 @@ class HourlyReport():
                                                           self.uptimeBuffsValues, self.buffGatherIntervals,
                                                           enabled_fields, field_patterns,
                                                           configuredUptimeBuffs=uptime_buffs,
-                                                          configuredHourlyBuffs=hourly_buffs)
+                                                          configuredHourlyBuffs=hourly_buffs,
+                                                          sessionStats=sessionStats)
         saveReportCanvas(canvas, "hourlyReport.png")
 
         # generate embed text fields (stored as attribute for caller to use)
@@ -501,6 +511,8 @@ class HourlyReport():
         self.hourlyReportStats["bugs"] = 0
         self.hourlyReportStats["quests_completed"] = 0
         self.hourlyReportStats["vicious_bees"] = 0
+        self.hourlyReportStats["bosses"] = 0
+        self.hourlyReportStats["disconnects"] = 0
         for key in self._defaultSessionReportStats():
             if key.startswith("vic_"):
                 self.hourlyReportStats[key] = 0
@@ -613,6 +625,11 @@ class HourlyReport():
             self.vicCompletedTotals = data.get("vicCompletedTotals", {})
             self.hourlyReportStats = data["hourlyReportStats"]
             self.sessionReportStats = data.get("sessionReportStats", self._defaultSessionReportStats())
+            # Backfill stats added after older saves were written.
+            defaults = self._defaultSessionReportStats()
+            for key, value in defaults.items():
+                self.hourlyReportStats.setdefault(key, copy.deepcopy(value))
+                self.sessionReportStats.setdefault(key, copy.deepcopy(value))
             self.uptimeBuffsValues = data.get("uptimeBuffsValues", self._defaultHourlyUptimeBuffs())
             self.buffGatherIntervals = data.get("buffGatherIntervals", [0]*600)
             self.sessionUptimeBuffsValues = data.get("sessionUptimeBuffsValues", self._defaultSessionUptimeBuffs())

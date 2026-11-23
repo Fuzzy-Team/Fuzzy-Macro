@@ -3,12 +3,15 @@ import numpy as np
 import modules.controls.mouse as mouse
 import modules.screen.ocr as ocr
 from modules.controls.sleep import is_stopped, pause_aware_time as time, sleep
-from modules.misc.badgeData import get_badge
+from modules.misc.badgeData import FIELD_BADGES, get_badge
 from modules.misc.imageManipulation import average_hash
 from PIL import Image
 from modules.screen.screenshot import mssScreenshotNP, mssScreenshotPillowRGBA
 
 BADGE_TIERS = ("grandmaster", "hotshot", "master", "cadet", "ace")
+BADGE_TITLE_NAMES = frozenset(name.lower() for name in FIELD_BADGES.values()) | {
+    "goo", "honey", "quest", "battle", "ability", "playtime", "sticker stack",
+}
 
 
 class BadgeMixin:
@@ -58,10 +61,15 @@ class BadgeMixin:
             prevHash = currentHash
             yield True
 
-    def _parseBadgeStatus(self, text):
+    def _parseBadgeStatus(self, text, titleText=None):
         """Return (status, tier) from the OCR text under a badge title."""
         lowered = self.convertCyrillic((text or "").lower())
-        tier = next((name for name in BADGE_TIERS if name in lowered), None)
+        titleLowered = self.convertCyrillic((titleText or "").lower())
+        # The current title owns the tier. Reading it from the whole section can
+        # pick up the next badge's title when OCR drops that row's "Badge" word.
+        tier = next((name for name in BADGE_TIERS if name in titleLowered), None)
+        if tier is None:
+            tier = next((name for name in BADGE_TIERS if name in lowered), None)
         # A Complete! bar is claimable until clicked. Grandmaster stays Complete! after the claim.
         if "complete" in lowered:
             return "claimable", tier
@@ -80,18 +88,37 @@ class BadgeMixin:
 
         def matchTitle(screen):
             best = None
+            titleYs = []
             for bbox, (text, _conf) in ocr.ocrRead(screen):
                 line = self.convertCyrillic(text.lower().strip())
-                if searchName in line and "badge" in line:
-                    yPos = int(min(point[1] for point in bbox))
+                if not line:
+                    continue
+                yPos = int(min(point[1] for point in bbox))
+                tier = next((name for name in BADGE_TIERS if name in line), None)
+                titleName = next((name for name in BADGE_TITLE_NAMES if line.startswith(name)), None)
+                isTitle = titleName is not None and ("badge" in line or tier is not None)
+                # A row title carries a badge name plus either the word "Badge"
+                # or a tier. This keeps body text and wrapped lines from ending
+                # the current row early, while unranked titles and titles where
+                # OCR drops "Badge" still count.
+                if isTitle:
+                    titleYs.append(yPos)
+                if searchName in line and (("badge" in line) or isTitle):
                     if best is None or yPos < best[1]:
                         best = (line, yPos)
-            return best
+            if best is None:
+                return None
+            # The next badge title starts the next row; keep it out of this row's OCR and green-bar scan.
+            nextTitleY = min((y for y in titleYs if y > best[1] + int(30 * multi)), default=None)
+            return best + (nextTitleY,)
 
-        def readSection(screen, titleY):
-            section = screen.crop((0, titleY, screen.width, min(screen.height, titleY + int(160 * multi))))
+        def readSection(screen, titleY, nextTitleY=None, titleText=None):
+            bottom = titleY + int(160 * multi)
+            if nextTitleY is not None:
+                bottom = min(bottom, nextTitleY)
+            section = screen.crop((0, titleY, screen.width, min(screen.height, bottom)))
             text = " ".join(self.convertCyrillic(t.lower().strip()) for _, (t, _c) in ocr.ocrRead(section))
-            status, tier = self._parseBadgeStatus(text)
+            status, tier = self._parseBadgeStatus(text, titleText)
             # The complete bar is green; click its centre to claim.
             clickX, clickY = 150, titleY + int(90 * multi)
             rgb = np.array(section.convert("RGB")).astype(int)
@@ -102,7 +129,7 @@ class BadgeMixin:
             return status, tier, clickX, clickY
 
         def readResult(screen, match):
-            status, tier, clickX, clickY = readSection(screen, match[1])
+            status, tier, clickX, clickY = readSection(screen, match[1], match[2], match[0])
             if logDetection:
                 imgPath = "latest-badge.png"
                 screen.crop((0, max(0, match[1] - 10), screen.width, min(screen.height, match[1] + int(180 * multi)))).convert("RGB").save(imgPath)

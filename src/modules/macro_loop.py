@@ -471,7 +471,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
             current_backpack = macro.getBackpack()
             fields = list(macro.setdat.get("fields", []))
             fields_enabled = list(macro.setdat.get("fields_enabled", []))
-            for index, enabled in enumerate(fields_enabled[:5]):
+            for index, enabled in enumerate(fields_enabled):
                 if not enabled or index >= len(fields):
                     continue
                 field_name = str(fields[index]).replace("_", " ").strip()

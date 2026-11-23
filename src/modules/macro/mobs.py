@@ -133,6 +133,9 @@ class MobMixin:
                 self.clear_task_status()
                 return False
             if result == "defeated":
+                # Damage-only Mondo runs leave without looting; only the loot path
+                # treats the confirmed defeat as a boss kill.
+                self.hourlyReport.addHourlyStat("bosses", 1)
                 if not self.isMondoHopOn():
                     self.saveTiming("mondo")
                 #loot
@@ -694,6 +697,7 @@ class MobMixin:
             self.clear_task_status()
             return
         #handle the other stump snail
+        self.hourlyReport.addHourlyStat("bosses", 1)
         self.logger.webhook("","Stump Snail Killed","bright green", "screen", ping_category="ping_mob_events")
         self.saveTiming("stump_snail")
         def keepOld():
@@ -842,6 +846,7 @@ class MobMixin:
             if self.bossStatus == "timelimit":
                 self.logger.webhook("", "Time Limit: Coconut Crab", "red", ping_category="ping_critical_errors")
             elif self.bossStatus == "defeated":
+                self.hourlyReport.addHourlyStat("bosses", 1)
                 self.keyboard.walk("a", 2)
                 self.logger.webhook("", "Defeated: Coconut Crab", "bright green", "screen", ping_category="ping_mob_events")
                 self.nmLoot(9, 4, "d")
@@ -888,6 +893,8 @@ class MobMixin:
                 # Check if defeated
                 if self.blueTextImageSearch("defeated", screen=screen):
                     self.bossStatus = "defeated"
+                    # Record the confirmed kill before reward collection can be interrupted.
+                    self.hourlyReport.addHourlyStat("bosses", 1)
                     break
                 # Check if died
                 if self.blueTextImageSearch("died", screen=screen):
@@ -961,6 +968,8 @@ class MobMixin:
                 # Check if defeated
                 if self.blueTextImageSearch("defeated", screen=screen):
                     self.bossStatus = "defeated"
+                    # Record the confirmed kill before reward collection can be interrupted.
+                    self.hourlyReport.addHourlyStat("bosses", 1)
                     break
                 # Check if died
                 if self.blueTextImageSearch("died", screen=screen):

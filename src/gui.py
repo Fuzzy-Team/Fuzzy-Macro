@@ -880,13 +880,48 @@ def clearBlender():
     settingsManager.saveUserLiteral("blender.txt", blenderData)
 
 # order[i] is the old number of the slot that now sits in slot i + 1 (a removed slot is left out).
-# The saved next slot follows its recipe instead of keeping its number.
+# The saved next slot follows its recipe instead of keeping its number; a stale index wraps to the top.
 @eel.expose
 def moveBlenderSlots(order):
-    blenderData = settingsManager.loadUserLiteral("blender.txt")
-    if blenderData["item"] in order:
-        blenderData["item"] = order.index(blenderData["item"]) + 1
+    try:
+        blenderData = settingsManager.loadUserLiteral("blender.txt")
+    except Exception:
+        return
+    if not isinstance(blenderData, dict) or not isinstance(order, list) or not order:
+        return
+    item = blenderData.get("item")
+    if isinstance(item, bool) or not isinstance(item, int):
+        return
+    if item in order:
+        blenderData["item"] = order.index(item) + 1
         settingsManager.saveUserLiteral("blender.txt", blenderData)
+        return
+    if item == 0:
+        return
+    # The saved recipe was removed, or its index is stale. Pick the first slot
+    # that still has an item and repeats, rather than assuming slot 1 can craft.
+    try:
+        settings = settingsManager.loadMacroProfile()["settings"]
+    except Exception:
+        return
+    # A removed middle slot shifts the following recipe into that same index,
+    # so inspect it first; a removed tail slot starts over at the top.
+    start = item if 1 <= item <= len(order) else 1
+    replacement = 0
+    for offset in range(len(order)):
+        slot = ((start - 1 + offset) % len(order)) + 1
+        repeat = settings.get(f"blender_repeat_{slot}", 0)
+        try:
+            repeat = int(repeat)
+        except (TypeError, ValueError):
+            repeat = 0
+        if settings.get(f"blender_item_{slot}", "none") != "none" and (
+            repeat > 0 or settings.get(f"blender_repeat_inf_{slot}", False)
+        ):
+            replacement = slot
+            break
+    blenderData["item"] = replacement
+    settingsManager.saveUserLiteral("blender.txt", blenderData)
 
 @eel.expose
 def clearAFB():
@@ -1473,6 +1508,8 @@ def launch():
 
     port = get_free_port(8000, 100)
     port_url = f"http://localhost:{port}"
+    # The top navigation is chosen by the page address, so the window opens straight into it
+    start_url = f"{port_url}/" + ("?nav=top" if settingsManager.loadAllSettings().get("top_nav") else "")
 
     # Browsers let any site open a websocket to localhost, so refuse requests sent from another page's origin
     allowed_origins = {port_url, f"http://127.0.0.1:{port}"}
@@ -1492,7 +1529,7 @@ def launch():
     def openInDefaultBrowser():
         eel.start('index.html', block=False, mode=None, port=port)
         time.sleep(2)
-        webbrowser.open(f"{port_url}/", new=2)
+        webbrowser.open(start_url, new=2)
 
     # Chrome that needs a newer macOS crashes on launch without eel noticing, so check its minimum first
     def chromeNeedsNewerMacOS():
@@ -1513,13 +1550,10 @@ def launch():
         return
 
     try:
-        eel.start('index.html', mode = "chrome", app_mode = True, block = False, port=port, cmdline_args=["--incognito", f"--app={port_url}"])
+        eel.start('index.html', mode = "chrome", app_mode = True, block = False, port=port, cmdline_args=["--incognito", f"--app={start_url}"])
     except EnvironmentError:
-        try:
-            eel.start('index.html', mode = "chrome-app", app_mode = True, block = False, port=port, cmdline_args=["--incognito", f"--app={port_url}"])
-        except EnvironmentError:
-            print("Chrome/Chromium could not be found. Opening in default browser...")
-            openInDefaultBrowser()
+        print("Chrome/Chromium could not be found. Opening in default browser...")
+        openInDefaultBrowser()
 
 
 @eel.expose

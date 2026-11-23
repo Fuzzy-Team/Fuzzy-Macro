@@ -899,6 +899,7 @@ DEFAULT_GENERAL_SETTINGS = {'use_1080p_virtual_display': False,
  'max_cannon_attempts': 3,
  'rejoin_attempts': 5,
  'gui_theme': 'Brown',
+ 'top_nav': False,
  # the Custom theme's colours as #RRGGBB (the # keeps the settings file from reading 001122 as a number), starting from the Fuzzy theme (also in webapp/scripts/themes.js)
  'gui_color_background': '#121212',
  'gui_color_section': '#1E1E1E',
