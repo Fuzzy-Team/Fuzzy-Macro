@@ -14,7 +14,7 @@ from modules.controls.sleep import HANG_FILE, INTERRUPT_NONE, summarize_hang
 from modules.discord_bot.richPresence import RichPresenceManager
 from modules.misc import messageBox
 from modules.misc.ColorProfile import DisplayColorProfile
-from modules.misc.appManager import getWindowSize
+from modules.misc.appManager import getWindowSize, missingPermissions
 from modules.misc.formatting import millify
 from modules.misc.imageManipulation import adjustImage
 from modules.screen.imageSearch import locateImageOnScreen
@@ -284,14 +284,6 @@ def runApp(macroTarget):
     except Exception:
         pass
     
-    #check screen recording permissions
-    try:
-        cg = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
-        cg.CGRequestScreenCaptureAccess.restype = ctypes.c_bool
-        if not cg.CGRequestScreenCaptureAccess():
-            messageBox.msgBox(title="Screen Recording Permission", text='Terminal does not have the screen recording permission. The macro will not work properly.\n\nTo fix it, go to System Settings -> Privacy and Security -> Screen Recording -> add and enable Terminal. After that, restart the macro')
-    except AttributeError:
-        pass
     #check full keyboard access
     try:
         result = subprocess.run(
@@ -614,6 +606,15 @@ def runApp(macroTarget):
 
         if run.value == 1:
             disconnectDetected = False
+            missingPerms = missingPermissions()
+            if missingPerms:
+                names = " and ".join(missingPerms)
+                text = f"Terminal does not have the {names} permission. The macro cannot see or click anything without it.\n\nTo fix it, go to System Settings -> Privacy & Security -> {names}, add and enable Terminal in each, then restart Terminal and the macro."
+                logger.webhook("Missing Permission", text, "red", route_category="system")
+                messageBox.msgBox(title="Missing Permission", text=text)
+                run.value = 3
+                showRunState(3)
+                continue
             try:
                 if setdat.get("use_1080p_virtual_display", False):
                     displaySession.start()
