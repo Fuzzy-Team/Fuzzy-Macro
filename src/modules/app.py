@@ -811,11 +811,16 @@ def runApp(macroTarget):
             mouse.mouseUp()
             time.sleep(0.2)
             appManager.closeApp("Roblox")
+            # Stop can arrive while Roblox is closing. A paused reconnect (6)
+            # is not a cancellation: it still needs a replacement process so
+            # /resume has something to resume.
+            if run.value in (0, 3):
+                continue
             macroProc = startMacroProcess()
             macroProcStartedAt = time.time()
             nextRestartAt = 0.0
             crashRestartCount = 0
-            # a Stop pressed while Roblox was closing is handled on the next tick
+            # a Stop pressed while the replacement is starting is handled on the next tick
             if run.value == 4:
                 run.value = 2
                 showRunState(2)
