@@ -607,9 +607,19 @@ def loadFuzzyAITokenRanking(field_name, model="standard"):
         ranking = field_rankings.get(model, {})
     if not isinstance(ranking, dict):
         ranking = {}
+    preferred_tokens = ranking.get("preferred_tokens")
+    ignored_tokens = ranking.get("ignored_tokens")
+    if not isinstance(preferred_tokens, str):
+        preferred_tokens = defaults["preferred_tokens"]
+    if not isinstance(ignored_tokens, str):
+        ignored_tokens = defaults["ignored_tokens"]
+    # The UI always saves every token to one of the two lists, so both empty
+    # means the entry is unconfigured/corrupt. Keep a single empty list intact.
+    if preferred_tokens == "" and ignored_tokens == "":
+        return defaults
     return {
-        "preferred_tokens": ranking.get("preferred_tokens") or defaults["preferred_tokens"],
-        "ignored_tokens": ranking.get("ignored_tokens") or defaults["ignored_tokens"],
+        "preferred_tokens": preferred_tokens,
+        "ignored_tokens": ignored_tokens,
     }
 
 def saveFuzzyAITokenRanking(field_name, ranking, model="standard"):
