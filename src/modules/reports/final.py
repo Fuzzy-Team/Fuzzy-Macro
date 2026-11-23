@@ -367,7 +367,8 @@ class FinalReport:
 
         enabled_fields, field_patterns = enabledFieldPatterns(setdat)
 
-        self.drawer = FinalReportDrawer(theme=theme)
+        time_format = setdat.get("hourly_report_time_format", 24) if isinstance(setdat, dict) else 24
+        self.drawer = FinalReportDrawer(time_format=time_format, theme=theme)
 
         # Draw the comprehensive final report
         try:
