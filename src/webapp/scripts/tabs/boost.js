@@ -89,7 +89,9 @@ function switchBoostHotbarSlot(slot) {
 
 async function loadBoost(){
     switchBoostTab(document.getElementById(getActiveSubtab("activeBoostSubtab", "boost-hotbar")))
-    switchBoostHotbarSlot(1)
+    // Backend refreshes reload this tab while it is open; keep the slot the user selected.
+    const activeSlot = document.querySelector("#boost-hotbar-strip .boost-hotbar-slot.active")
+    switchBoostHotbarSlot(activeSlot ? Number(activeSlot.id.replace("boost-slot-", "")) : 1)
     const settings = await loadAllSettings();
     loadInputs(settings);
     try {
