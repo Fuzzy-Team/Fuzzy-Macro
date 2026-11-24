@@ -224,6 +224,12 @@ async function loadAllSettings() {
 // Refresh the currently visible tab content after backend-triggered profile swaps
 window.refreshCurrentTabContent = async function () {
   try {
+    // SSA Roller settings are profile data outside loadInputs; refresh them even
+    // when another main tab is visible, since switchTab does not reload tab data.
+    if (typeof restoreSsaRollerSettings === "function") {
+      await restoreSsaRollerSettings();
+    }
+
     const activeSidebarTab = document.querySelector(".sidebar-item.active");
     const activeMainTab = activeSidebarTab
       ? activeSidebarTab.id.split("-")[0]
