@@ -22,7 +22,8 @@ from modules.submacros.ssaRoller import SsaRollerRunner
 import modules.controls.keyboard as keyboardModule
 import modules.logging.log as logModule
 
-eel.init('webapp')
+# Only JS files expose functions back to Python; skip parsing HTML/text assets at every launch.
+eel.init('webapp', allowed_extensions=['.js'])
 HOURLY_REPORT_ASSET_ROOT = os.path.join(settingsManager.getProjectRoot(), "src", "hourly_report", "assets")
 MEMORY_MATCH_ICON_ROOT = os.path.join(settingsManager.getProjectRoot(), "src", "images", "memorymatch")
 

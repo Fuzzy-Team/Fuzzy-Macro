@@ -39,7 +39,6 @@ def runApp(macroTarget):
     import modules.logging.log as logModule
     import modules.misc.appManager as appManager
     import modules.misc.settingsManager as settingsManager
-    from modules.discord_bot.discordBot import discordBot
     from modules.submacros.convertAhkPattern import ahkPatternToPython
     from modules.submacros.stream import cloudflaredStream
     import os
@@ -522,6 +521,8 @@ def runApp(macroTarget):
         # a bot that keeps dying (e.g. a bad token) is retried once a minute, not every tick
         retryDeadDiscordBot = discordBotDead and current_time - discordBotStartedAt >= 60
         if shouldRunDiscordBot and (currentDiscordBotToken != prevDiscordBotToken or retryDeadDiscordBot):
+            # Keep discord.py out of the GUI process until a bot token actually enables it.
+            from modules.discord_bot.discordBot import discordBot
             if discordBotProc is not None and discordBotProc.is_alive():
                 print("Detected change in discord bot token, killing previous bot process")
                 discordBotProc.terminate()
