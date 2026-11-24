@@ -120,7 +120,8 @@ class BadgeMixin:
             text = " ".join(self.convertCyrillic(t.lower().strip()) for _, (t, _c) in ocr.ocrRead(section))
             status, tier = self._parseBadgeStatus(text, titleText)
             # The complete bar is green; click its centre to claim.
-            clickX, clickY = 150, titleY + int(90 * multi)
+            # Both coordinates are screenshot pixels, like claim_x/claim_y below.
+            clickX, clickY = int(150 * multi), titleY + int(90 * multi)
             rgb = np.array(section.convert("RGB")).astype(int)
             green = (rgb[:, :, 1] > 140) & (rgb[:, :, 1] > rgb[:, :, 0] + 30) & (rgb[:, :, 1] > rgb[:, :, 2] + 30)
             if green.sum() > 80:
