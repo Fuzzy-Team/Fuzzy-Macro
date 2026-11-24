@@ -973,7 +973,6 @@ function syncToolStatusPollers() {
 async function loadTools() {
   syncToolSessionState();
   refreshToolStopHotkey();
-  loadInputs(await loadAllSettings());
   initializeAutoClickerTool();
   initializeBondTreatCalculator();
   initializeTicketPriceCalculator();
@@ -985,6 +984,8 @@ async function loadTools() {
     document.getElementById(getActiveSubtab("activeToolsSubtab", "tools-autoclicker"))
   );
   syncToolStatusPollers();
+  //last, so a failed settings read leaves the tools working
+  loadInputs(await loadAllSettings());
 }
 
 $("#tools-placeholder")
