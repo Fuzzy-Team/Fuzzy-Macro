@@ -279,7 +279,22 @@ async function saveSproutAITokenPopup() {
     closeSproutAITokenPopup()
 }
 
-function openSproutAITokenPopup() {
+async function openSproutAITokenPopup() {
+    // Preset buttons write into the hidden token inputs, so load the saved lists
+    // again: after Cancel the next open must not show the discarded preset.
+    try {
+        const settings = await loadAllSettings()
+        const preferredInput = document.getElementById("sprouts_preferred_tokens")
+        const ignoredInput = document.getElementById("sprouts_ignored_tokens")
+        if (preferredInput && typeof settings.sprouts_preferred_tokens === "string") {
+            preferredInput.value = settings.sprouts_preferred_tokens
+        }
+        if (ignoredInput && typeof settings.sprouts_ignored_tokens === "string") {
+            ignoredInput.value = settings.sprouts_ignored_tokens
+        }
+    } catch (error) {
+        console.error("Failed to load sprout token settings:", error)
+    }
     renderSproutAITokenList()
     const modal = document.getElementById("sprout-ai-token-modal")
     if (modal) modal.style.display = "flex"
