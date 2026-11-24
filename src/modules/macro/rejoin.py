@@ -27,9 +27,11 @@ from modules.screen.screenshot import mssScreenshot
 class RejoinMixin:
     def _loadingScreenShowing(self):
         w = self.robloxWindow
-        return percent_pixels_similar_to_color(
-            w.mx, w.my, w.mw, w.mh, LOADING_SCREEN_COLOR, tolerance=LOADING_SCREEN_TOLERANCE
-        ) >= LOADING_SCREEN_PERCENT
+        percent = percent_pixels_similar_to_color(
+            w.mx, w.my, w.mw, w.mh, LOADING_SCREEN_COLOR,
+            tolerance=LOADING_SCREEN_TOLERANCE, return_none_on_error=True,
+        )
+        return None if percent is None else percent >= LOADING_SCREEN_PERCENT
 
     def _parseRejoinAtTime(self):
         value = str(self.setdat.get("rejoin_at_time", "00:00")).strip()
@@ -372,7 +374,11 @@ class RejoinMixin:
                     # Fuzzy Display captures its own screen, so it needs no focus.
                     if not virtual_display.active() and not appManager.isAppFocused("Roblox"):
                         appManager.openApp("Roblox")
-                    if self._loadingScreenShowing():
+                    loadingScreen = self._loadingScreenShowing()
+                    if loadingScreen is None:
+                        # A failed capture is not evidence the loading screen is gone.
+                        loadingGoneChecks = 0
+                    elif loadingScreen:
                         sawLoadingScreen = True
                         loadingGoneChecks = 0
                     elif sawLoadingScreen:
