@@ -380,3 +380,15 @@ def findColorObjectRGB(img, rgbTarget, variance=0, kernel=None, mode="point", be
     
     return results if best > 1 else results[0]
 
+
+def colorObjectPresent(img, rgbTarget, variance=0, kernel=None):
+    """findColorObjectRGB's mode="box" truth test, without the RGB conversion or contours:
+    True when the colour is in range anywhere, or when eroding its mask leaves a pixel."""
+    bgr = np.array([rgbTarget[2], rgbTarget[1], rgbTarget[0]])
+    mask = cv2.inRange(img, np.clip(bgr - variance, 0, 255).astype(np.uint8),
+                       np.clip(bgr + variance, 0, 255).astype(np.uint8))
+    if cv2.countNonZero(mask) == 0:
+        return False
+    if kernel is None:
+        return True
+    return cv2.countNonZero(cv2.erode(mask, kernel)) > 0
