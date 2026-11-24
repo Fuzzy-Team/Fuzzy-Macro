@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -586,8 +586,11 @@ class ItemReportDrawer:
                     continue
             labels = [formatHMS(span * 60 * i / 6) for i in range(7)]
         else:
-            # Time labels for the current hour
-            base = datetime.now().replace(minute=0, second=0, microsecond=0)
+            # Hourly reports sent in the first minute cover the hour that just ended.
+            now = datetime.now()
+            if now.minute == 0:
+                now -= timedelta(hours=1)
+            base = now.replace(minute=0, second=0, microsecond=0)
             labels = []
             for i in range(7):
                 minute = i * 10
