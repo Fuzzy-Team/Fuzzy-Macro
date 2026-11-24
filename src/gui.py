@@ -791,7 +791,11 @@ def getPlanterDropPlanters():
 
 @eel.expose
 def clearAutoPlanters():
-    data = defaultAutoPlanterData()
+    try:
+        data = normalizeAutoPlanterData(settingsManager.loadUserJson("auto_planters.json"))
+    except Exception:
+        data = defaultAutoPlanterData()
+    data["planters"] = [emptyAutoPlanterSlot() for _ in data["planters"]]
     settingsManager.saveUserJson("auto_planters.json", data)
 
 
