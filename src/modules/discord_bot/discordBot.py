@@ -2471,7 +2471,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         await interaction.response.defer()
         img = await asyncio.get_running_loop().run_in_executor(None, screenshotRobloxWindow)
         with io.BytesIO() as imageBinary:
-            img.save(imageBinary, "PNG")
+            await asyncio.get_running_loop().run_in_executor(None, img.save, imageBinary, "PNG")
             imageBinary.seek(0)
             await interaction.followup.send(file = discord.File(fp=imageBinary, filename="screenshot.png"))
 
