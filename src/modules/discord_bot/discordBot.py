@@ -20,6 +20,7 @@ import asyncio
 import signal
 import json
 import ast
+import math
 import time
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Tuple
@@ -1533,6 +1534,21 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         return parsed, None
 
+    def _parse_required_float(value: str, field_label: str, min_value: Optional[float] = None, max_value: Optional[float] = None) -> Tuple[Optional[float], Optional[str]]:
+        try:
+            parsed = float(str(value).strip())
+        except Exception:
+            return None, f"Invalid value for {field_label}. Enter a number."
+
+        if not math.isfinite(parsed):
+            return None, f"Invalid value for {field_label}. Enter a number."
+        if min_value is not None and parsed < min_value:
+            return None, f"Invalid value for {field_label}. Must be >= {min_value}."
+        if max_value is not None and parsed > max_value:
+            return None, f"Invalid value for {field_label}. Must be <= {max_value}."
+
+        return parsed, None
+
     def _build_fields_slot_embed(slot_index: int, section_key: str, settings: Dict, status_message: Optional[str] = None) -> discord.Embed:
         fields, fields_enabled = _get_field_slots(settings)
         field_map = _load_field_map()
@@ -2061,7 +2077,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             self.add_item(self.whirl_fallback_input)
 
         async def on_submit(self, interaction: discord.Interaction):
-            mins_value, mins_error = _parse_required_int(self.mins_input.value, "Mins", min_value=1)
+            mins_value, mins_error = _parse_required_float(self.mins_input.value, "Mins", min_value=0)
             backpack_value, backpack_error = _parse_required_int(self.backpack_input.value, "Backpack %", min_value=1, max_value=100)
             whirl_fallback_value, whirl_fallback_error = _parse_required_bool(self.whirl_fallback_input.value, "Whirligig Fallback")
             validation_errors = [e for e in [mins_error, backpack_error, whirl_fallback_error] if e]
@@ -2070,7 +2086,9 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 return
 
             failures = []
-            success, _ = _save_slot_field_setting(self.slot_index, "mins", int(mins_value))
+            # The GUI stores mins as a float; keep fractional values instead of truncating them.
+            mins_setting = int(mins_value) if mins_value.is_integer() else mins_value
+            success, _ = _save_slot_field_setting(self.slot_index, "mins", mins_setting)
             if not success:
                 failures.append("mins")
 
@@ -2106,7 +2124,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         async def on_submit(self, interaction: discord.Interaction):
             goo_value, goo_error = _parse_required_bool(self.goo_input.value, "Use Goo")
-            interval_value, interval_error = _parse_required_int(self.interval_input.value, "Goo Interval Seconds", min_value=1)
+            interval_value, interval_error = _parse_required_int(self.interval_input.value, "Goo Interval Seconds", min_value=3)
 
             validation_errors = [e for e in [goo_error, interval_error] if e]
             if validation_errors:
