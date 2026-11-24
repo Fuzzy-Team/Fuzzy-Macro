@@ -2,7 +2,7 @@
 import cv2
 import numpy as np
 import modules.controls.mouse as mouse
-from datetime import datetime
+from datetime import datetime, timezone
 from modules.controls.sleep import is_stopped, pause_aware_time as time, paused_seconds
 from modules.screen.imageSearch import captureLogicalBGR
 
@@ -123,7 +123,7 @@ class MondoMixin:
                     return "defeated"
                 if self.blueTextImageSearch("died", screen=screen):
                     return "died"
-                now = datetime.now()
+                now = datetime.now(timezone.utc)
                 if misses > LOST_AFTER_MISSES:
                     return "lost"
                 if now.minute + now.second / 60 >= 15 or (endTime and now > endTime):

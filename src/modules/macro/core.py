@@ -3,7 +3,7 @@ import json
 import threading
 import traceback
 import time as raw_time
-from datetime import datetime
+from datetime import datetime, timezone
 import modules.controls.mouse as mouse
 import modules.logging.log as logModule
 import modules.misc.appManager as appManager
@@ -353,7 +353,7 @@ class macro(
         return time.time() - timing >= cooldown*mobRespawnBonus
 
     def getCurrentMinute(self):
-        return datetime.now().minute
+        return datetime.now(timezone.utc).minute
 
     def checkEmergencyBalloon(self):
         mins = int(self.setdat.get("emergency_balloon_mins", 60) or 0)
