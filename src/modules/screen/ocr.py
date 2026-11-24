@@ -6,48 +6,81 @@ import threading
 import time
 
 ocrLib = None
+ocrmac = None
+easyocrReader = None
+visionLevel = None
+useLangPref = False
+_ocrDispatch = None
+_engineLoaded = False
+_engineLoadLock = threading.Lock()
 mac_version = tuple(int(part) for part in platform.mac_ver()[0].split(".")[:2] if part.isdigit())
-# Apple Vision OCR is used on Big Sur and newer.  Do not load ocrmac on
-# Catalina: recent transitive Core ML wheels can be compiled for a newer macOS
-# and emit noisy dyld errors before the fallback OCR is selected.
-# Python 3.8 from python.org (used on Intel Macs) reports every macOS 11+ as 10.16.
-if len(mac_version) >= 2 and mac_version >= (10, 16):
-    try:
-        from ocrmac import ocrmac #see if ocr mac is installed
-        ocrLib = "ocrmac"
-    except:
-        pass
 
-if ocrLib is None:
-    try:
-        import skimage.io
-    except ImportError:
-        # easyocr imports skimage.io only to read image files, and the macro passes it arrays.
-        # scikit-image isn't installed below macOS 10.15 (its wheels bundle a libomp that
-        # needs 10.15), so give easyocr a stand-in.
-        import sys
-        import types
-        from PIL import Image
-        skimageStub = types.ModuleType("skimage")
-        skimageStub.io = types.ModuleType("skimage.io")
-        skimageStub.io.imread = lambda path: np.asarray(Image.open(path))
-        sys.modules["skimage"] = skimageStub
-        sys.modules["skimage.io"] = skimageStub.io
-    import easyocr
-    import functools
-    import ssl
-    try:
-        # older Python installs may lack system CA certificates; verify with certifi's instead
-        import certifi
-        ssl._create_default_https_context = functools.partial(ssl.create_default_context, cafile=certifi.where())
-    except ImportError:
-        pass
-    print("Imported easyocr")
-    easyocrReader = easyocr.Reader(['en'])
-    ocrLib = "easyocr"
 
-# Vision's language preference API (supportedRecognitionLanguages) needs macOS 12
-useLangPref = mac_version >= (12, 0)
+def _loadOcrEngine():
+    """Load the OCR backend on the first read instead of at import.
+
+    Every macro module imports this module, but only a few tasks read text.
+    Loading ocrmac/Vision (or easyocr) and running the startup Vision probe
+    here keeps those frameworks out of the macro's import path.
+    """
+    global ocrLib, ocrmac, easyocrReader, visionLevel, useLangPref, _ocrDispatch, _engineLoaded
+    if _engineLoaded:
+        return
+    with _engineLoadLock:
+        if _engineLoaded:
+            return
+        lib = None
+        # Apple Vision OCR is used on Big Sur and newer.  Do not load ocrmac on
+        # Catalina: recent transitive Core ML wheels can be compiled for a newer macOS
+        # and emit noisy dyld errors before the fallback OCR is selected.
+        # Python 3.8 from python.org (used on Intel Macs) reports every macOS 11+ as 10.16.
+        if len(mac_version) >= 2 and mac_version >= (10, 16):
+            try:
+                from ocrmac import ocrmac as ocrmacModule #see if ocr mac is installed
+                ocrmac = ocrmacModule
+                lib = "ocrmac"
+            except:
+                pass
+
+        if lib is None:
+            try:
+                import skimage.io
+            except ImportError:
+                # easyocr imports skimage.io only to read image files, and the macro passes it arrays.
+                # scikit-image isn't installed below macOS 10.15 (its wheels bundle a libomp that
+                # needs 10.15), so give easyocr a stand-in.
+                import sys
+                import types
+                from PIL import Image
+                skimageStub = types.ModuleType("skimage")
+                skimageStub.io = types.ModuleType("skimage.io")
+                skimageStub.io.imread = lambda path: np.asarray(Image.open(path))
+                sys.modules["skimage"] = skimageStub
+                sys.modules["skimage.io"] = skimageStub.io
+            import easyocr
+            import functools
+            import ssl
+            try:
+                # older Python installs may lack system CA certificates; verify with certifi's instead
+                import certifi
+                ssl._create_default_https_context = functools.partial(ssl.create_default_context, cafile=certifi.where())
+            except ImportError:
+                pass
+            print("Imported easyocr")
+            easyocrReader = easyocr.Reader(['en'])
+            lib = "easyocr"
+
+        ocrLib = lib
+        # Vision's language preference API (supportedRecognitionLanguages) needs macOS 12
+        useLangPref = mac_version >= (12, 0)
+        if lib == "ocrmac":
+            visionLevel = "accurate" if accurateVisionWorks() else "fast"
+            print(f"Text reading: Vision {visionLevel} mode")
+            _ocrDispatch = lockedOcrMac
+        else:
+            visionLevel = "accurate"
+            _ocrDispatch = ocrEasy
+        _engineLoaded = True
 
 
 def paddleBounding(b):
@@ -67,10 +100,6 @@ def accurateVisionWorks():
         raise
     except Exception:
         return False
-
-visionLevel = "accurate" if ocrLib != "ocrmac" or accurateVisionWorks() else "fast"
-if ocrLib == "ocrmac":
-    print(f"Text reading: Vision {visionLevel} mode")
 
 def readVision(img):
     try:
@@ -141,7 +170,7 @@ def lockedOcrMac(img):
     finally:
         ocrLock.release()
 
-if ocrLib == "ocrmac":
-    ocrFunc = lockedOcrMac
-elif ocrLib == "easyocr":
-    ocrFunc = ocrEasy
+def ocrFunc(img):
+    """Read text with whichever engine this Mac supports, loading it on first use."""
+    _loadOcrEngine()
+    return _ocrDispatch(img)
