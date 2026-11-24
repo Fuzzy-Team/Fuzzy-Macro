@@ -43,7 +43,8 @@ def loadBlenderData():
 
 def emptyManualPlanterData():
     return {
-        "cycles": [1, 1, 1],
+        # 0 means the slot has not been planted yet: start at its first configured cycle.
+        "cycles": [0, 0, 0],
         "planters": ["", "", ""],
         "fields": ["", "", ""],
         "gatherFields": ["", "", ""],
@@ -72,7 +73,7 @@ def normalizeManualPlanterData(rawData):
                     cycle = int(value)
                 except Exception:
                     cycle = 1
-                normalized[key].append(min(5, max(1, cycle)))
+                normalized[key].append(min(5, max(0, cycle)))
         elif key == "harvestTimes":
             normalized[key] = []
             for value in cleaned:
@@ -227,7 +228,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
         if mode == 1:
             with open(settingsManager.ensureUserFile("manualplanters.txt"), "r") as f:
                 raw = f.read().strip()
-            planterData = ast.literal_eval(raw) if raw else {"planters": ["", "", ""], "fields": ["", "", ""], "gatherFields": ["", "", ""], "harvestTimes": [0, 0, 0], "cycles": [1, 1, 1]}
+            planterData = ast.literal_eval(raw) if raw else {"planters": ["", "", ""], "fields": ["", "", ""], "gatherFields": ["", "", ""], "harvestTimes": [0, 0, 0], "cycles": [0, 0, 0]}
             for key, emptyValue in (("planters", ""), ("fields", ""), ("gatherFields", "")):
                 if key in planterData and index < len(planterData[key]):
                     planterData[key][index] = emptyValue
@@ -1084,8 +1085,9 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
             else: 
                 return False
 
-        # Field of the next manual planter after slot i, or "none". planterData is None on the first pass (cycle 1).
-        # A wrong guess only costs a reset: the planters task resets after the last placement.
+        # Field of the next manual planter after slot i, or "none". A slot with cycle 0 starts at
+        # its first configured cycle. A wrong guess only costs a reset: the planters task resets
+        # after the last placement.
         def nextPlanterField(i, planterData=None):
             for j in range(i + 1, 3):
                 if planterData is None:
@@ -1307,11 +1309,14 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                     if not planterDataRaw.strip():
                         planterData = emptyManualPlanterData()
                         for i in range(3):
-                            if macro.setdat[f"cycle1_{i+1}_planter"] == "none" or macro.setdat[f"cycle1_{i+1}_field"] == "none":
+                            # 0 starts at the first cycle configured for this slot.
+                            nextCycle = goToNextCycle(0, i)
+                            if not nextCycle:
                                 continue
-                            nextField = nextPlanterField(i)
-                            planter = runTask(macro.placePlanterInCycle, args = (i, 1, nextField),resetAfter=False, allowAFB=False, capFailures=True)
+                            nextField = nextPlanterField(i, planterData)
+                            planter = runTask(macro.placePlanterInCycle, args = (i, nextCycle, nextField),resetAfter=False, allowAFB=False, capFailures=True)
                             if planter:
+                                planterData["cycles"][i] = nextCycle
                                 planterData["planters"][i] = planter[0]
                                 planterData["fields"][i] = planter[1]
                                 planterData["harvestTimes"][i] = planter[2]
