@@ -217,11 +217,14 @@ class cloudflaredStream:
                     setInterval(loadCooldowns, 5000);
                     setInterval(renderCooldowns, 1000);
 
-                    document.getElementById('refresh-stream').addEventListener('click', function() {
-                        if (img) {
-                            img.src = "/video_feed?t=" + new Date().getTime();
-                        }
-                    });
+                    const refreshButton = document.getElementById('refresh-stream');
+                    if (refreshButton) {
+                        refreshButton.addEventListener('click', function() {
+                            if (img) {
+                                img.src = "/video_feed?t=" + new Date().getTime();
+                            }
+                        });
+                    }
                 });
             </script>
         </head>
