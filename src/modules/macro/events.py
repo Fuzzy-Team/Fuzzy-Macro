@@ -66,7 +66,7 @@ def vicious_ground_is_night(bgr):
 
 from modules.controls.sleep import pause_aware_time as time
 from modules.macro.game_data import startLocationDimensions
-from modules.screen.imageSearch import captureRegionBGR, findColorObjectRGB, locateImageInScreen
+from modules.screen.imageSearch import captureRegionBGR, colorObjectPresent, locateImageInScreen
 from modules.screen.screenshot import mssScreenshotNP
 
 
@@ -151,15 +151,15 @@ class EventDetectionMixin:
             ]
 
             bgr = bgr[0:bgr.shape[0]- (100*self.robloxWindow.multi)]
-            dayScreen = bgr[int(bgr.shape[0]*2/5):bgr.shape[0]].copy()
+            dayScreen = bgr[int(bgr.shape[0]*2/5):bgr.shape[0]]
             #detect day
             for color, kernel in dayColors:
-                if findColorObjectRGB(dayScreen, color, variance=6, kernel=kernel, mode="box"):
+                if colorObjectPresent(dayScreen, color, variance=6, kernel=kernel):
                     return False
             #day not found, detect Night
-            nightScreen = bgr[int(bgr.shape[0]/2):bgr.shape[0]].copy()
+            nightScreen = bgr[int(bgr.shape[0]/2):bgr.shape[0]]
             for color, kernel in nightColors:
-                if findColorObjectRGB(nightScreen, color, variance=6, kernel=kernel, mode="box"):
+                if colorObjectPresent(nightScreen, color, variance=6, kernel=kernel):
                     return True
                 
             return False
