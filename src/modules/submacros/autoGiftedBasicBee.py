@@ -249,6 +249,7 @@ class AutoGiftedBasicBeeRunner:
 
     def _scroll_inventory_to_top(self):
         previous_hash = None
+        unchanged = 0
         for _ in range(40):
             self._focus_inventory_scroll_area()
             mouse.scroll(100)
@@ -259,7 +260,11 @@ class AutoGiftedBasicBeeRunner:
             )
             current_hash = average_hash(Image.fromarray(screen))
             if previous_hash is not None and previous_hash == current_hash:
-                break
+                unchanged += 1
+                if unchanged >= 3:
+                    break
+            else:
+                unchanged = 0
             previous_hash = current_hash
 
     def _normalize_text(self, text):
