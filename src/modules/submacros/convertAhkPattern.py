@@ -403,9 +403,9 @@ def ahkPatternToPython(ahk):
         elif "else" in code and not "if" in code:
             out[i] = indent + "else:" + comment
         #one line if/else statements
-        elif (ternary := convertTernary(code.partition("𑑛")[2] if "𑑛" in code else code)) is not None:
+        elif convertTernary(code.partition("𑑛")[2] if "𑑛" in code else code) is not None:
             lhs, separator, _ = code.partition("𑑛")
-            replacement = ternary
+            replacement = convertTernary(code.partition("𑑛")[2] if "𑑛" in code else code)
             if separator:
                 replacement = f"{lhs}{separator} {replacement}"
             out[i] = indent + replacement + comment
