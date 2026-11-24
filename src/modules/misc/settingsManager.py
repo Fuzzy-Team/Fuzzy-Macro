@@ -196,6 +196,12 @@ def loadDefaultFields():
     """Load default field settings from hardcoded defaults."""
     return deepcopy_default(DEFAULT_FIELDS)
 
+# Settings files are small but read constantly (timings.txt alone is read dozens of times per
+# gather cycle), so an unchanged file reuses its last parse. Saves drop the entry, and a file
+# rewritten by another process still misses because replacing it gives it a new inode.
+_READ_CACHE = {}  # abspath -> (file stamp, parsed settings)
+
+
 def _writeAtomic(path, content):
     """Write to a temp file then replace, so a reader or a kill mid-write never sees a truncated file."""
     abs_path = os.path.abspath(path)
@@ -207,6 +213,7 @@ def _writeAtomic(path, content):
         with os.fdopen(fd, "w") as f:
             f.write(content)
         os.replace(tmp_path, abs_path)
+        _READ_CACHE.pop(abs_path, None)
     except Exception:
         try:
             if os.path.exists(tmp_path):
@@ -798,6 +805,21 @@ def duplicateProfile(source_name, new_name):
         return False, f"Failed to duplicate profile: {str(e)}"
 
 def readSettingsFile(path, defaults=None):
+    """readSettingsFile, reusing the parse of a file that has not changed since the last read."""
+    key = os.path.abspath(path)
+    try:
+        stat = os.stat(key)
+        stamp = (stat.st_mtime_ns, stat.st_size, stat.st_ino)
+    except OSError:
+        return _readSettingsFileUncached(path, defaults)  # missing: recreated from defaults below
+    cached = _READ_CACHE.get(key)
+    if cached is None or cached[0] != stamp:
+        cached = (stamp, _readSettingsFileUncached(path, defaults))
+        _READ_CACHE[key] = cached
+    return {name: deepcopy_default(value) if isinstance(value, (list, dict, set)) else value
+            for name, value in cached[1].items()}
+
+def _readSettingsFileUncached(path, defaults=None):
     #get each line
     #read the file, format it to:
     #[[key, value], [key, value]]
