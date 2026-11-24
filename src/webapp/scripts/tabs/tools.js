@@ -970,7 +970,7 @@ function syncToolStatusPollers() {
   }
 }
 
-function loadTools() {
+async function loadTools() {
   syncToolSessionState();
   refreshToolStopHotkey();
   initializeAutoClickerTool();
@@ -984,6 +984,8 @@ function loadTools() {
     document.getElementById(getActiveSubtab("activeToolsSubtab", "tools-autoclicker"))
   );
   syncToolStatusPollers();
+  //last, so a failed settings read leaves the tools working
+  loadInputs(await loadAllSettings());
 }
 
 $("#tools-placeholder")
