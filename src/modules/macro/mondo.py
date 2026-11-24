@@ -16,9 +16,8 @@ RED_ONLY_AFTER = 10         # seconds of looking for red and green before only r
 AIM = {200: (7.5, 1.7), 201: (7.5, 0.3), 202: (9.7, 1)}
 
 
-def _firstPixel(frame, color, variation=0, rightToLeft=False, run=0):
-    """First pixel of the colour, scanning rows from the top and each row left to right (or right to
-    left). With run > 0 the colour must also continue for that many pixels below it."""
+def _colorMask(frame, color, variation=0, run=0):
+    """Pixels of the colour, keeping only those that also continue for run pixels below them."""
     bgr = np.array([color & 255, color >> 8 & 255, color >> 16 & 255])
     hits = cv2.inRange(frame, np.clip(bgr - variation, 0, 255).astype(np.uint8),
                        np.clip(bgr + variation, 0, 255).astype(np.uint8)) > 0
@@ -27,6 +26,12 @@ def _firstPixel(frame, color, variation=0, rightToLeft=False, run=0):
         below = np.zeros_like(hits)
         below[:-step] = colored[step:]
         hits &= below
+    return hits
+
+
+def _firstInMask(hits, rightToLeft=False):
+    """First set pixel of a colour mask, scanning rows from the top and each row left to right (or
+    right to left)."""
     if rightToLeft:
         hits = hits[:, ::-1]
     first = int(hits.argmax())
@@ -34,6 +39,12 @@ def _firstPixel(frame, color, variation=0, rightToLeft=False, run=0):
         return None
     row, col = divmod(first, hits.shape[1])
     return (hits.shape[1] - 1 - col if rightToLeft else col), row
+
+
+def _firstPixel(frame, color, variation=0, rightToLeft=False, run=0):
+    """First pixel of the colour, scanning rows from the top and each row left to right (or right to
+    left). With run > 0 the colour must also continue for that many pixels below it."""
+    return _firstInMask(_colorMask(frame, color, variation, run), rightToLeft)
 
 
 def _middle(points):
@@ -52,7 +63,10 @@ class MondoMixin:
         """The health bar's position as the middle of what is found scanning from the left and from
         the right. Red wins; green is only used when asked and there is no red."""
         run = int(frame.shape[0] * 0.002)
-        both = lambda color: _middle([_firstPixel(frame, color, run=run), _firstPixel(frame, color, rightToLeft=True, run=run)])
+        def both(color):
+            # One colour mask serves both scan directions.
+            mask = _colorMask(frame, color, run=run)
+            return _middle([_firstInMask(mask), _firstInMask(mask, rightToLeft=True)])
         return both(HEALTH_RED) or (both(HEALTH_GREEN) if withGreen else None)
 
     def mondoSprinkler(self):
