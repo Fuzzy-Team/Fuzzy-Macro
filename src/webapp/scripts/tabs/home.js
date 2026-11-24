@@ -80,6 +80,9 @@ async function toggleStartStop() {
   }
 }
 
+// Match the backend's 100-entry history (app.py) so the log DOM cannot grow all session.
+const MAX_LOG_ENTRIES = 100;
+
 eel.expose(log);
 function log(time = "", msg = "", color = "") {
   let timeText = "";
@@ -97,6 +100,9 @@ function log(time = "", msg = "", color = "") {
     logEntry.append(part);
   });
   logs.appendChild(logEntry);
+  while (logs.childElementCount > MAX_LOG_ENTRIES) {
+    logs.firstElementChild.remove();
+  }
 
   filterLogs();
   if (!logEntry.hidden) logs.scrollTop = logs.scrollHeight;
