@@ -178,7 +178,7 @@ def convertSleep(statement):
     argument = re.sub(r"^\s*,?\s*", "", argument, count=1).strip()
     # An assignment or comparison is not a Sleep argument. This also covers
     # every compound assignment (//=, %=, <<=, ...) and ==/!=/<=/>=.
-    if re.match(r"^(?:𑑛|=|(?:\+|-|\*|/|//|%|&|\||\^|<<|>>)=|<|>|!)", argument):
+    if re.match(r"^(?:𑑛|:=|=|(?:\+|-|\*|/|//|%|&|\||\^|<<|>>)=|<|>|!)", argument):
         return None
     # AHK v1 dereference: Sleep, %delay% -> delay. Concatenations such as
     # %n%000 deliberately do not match and keep their percent signs.
