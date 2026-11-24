@@ -7,11 +7,8 @@ if legacyCommands.IS_LEGACY:
     app_commands = legacyCommands.app_commands
 else:
     from discord import app_commands
-from modules.screen.screenshot import screenshotRobloxWindow
 import io
-from modules.misc.appManager import closeApp
 from modules.misc.formatting import timestampedEmbedText
-from modules.controls.keyboard import keyboard
 import subprocess
 import sys
 import os
@@ -28,20 +25,6 @@ from modules.controls.sleep import INTERRUPT_SKIP, INTERRUPT_RESET, INTERRUPT_AF
 
 from modules.misc import settingsManager
 from modules.misc.cooldowns import get_cooldown_rows
-from modules.screen.shiftLock import detect_shift_lock, detect_shift_lock_with_retries
-
-# Hourly report dependencies
-try:
-    from modules.reports.hourly import HourlyReport
-    from modules.reports.buffs import BuffDetector
-    from modules.reports.final import FinalReport
-    from modules.screen.robloxWindow import RobloxWindowBounds
-except Exception:
-    # Defensive: if these imports fail, the hourly report command will handle it at runtime
-    HourlyReport = None
-    BuffDetector = None
-    FinalReport = None
-    RobloxWindowBounds = None
 
 # Global settings cache to avoid frequent file reads
 _settings_cache = {}
@@ -601,6 +584,7 @@ def update_setting(setting_key, value):
 
 def _detect_shift_lock_state_with_retries():
     from modules.screen.robloxWindow import RobloxWindowBounds
+    from modules.screen.shiftLock import detect_shift_lock, detect_shift_lock_with_retries
 
     def detect():
         roblox_window = RobloxWindowBounds()
@@ -610,6 +594,7 @@ def _detect_shift_lock_state_with_retries():
     return detect_shift_lock_with_retries(detect, log_failures=True)
 
 def _press_shift_lock_input():
+    from modules.controls.keyboard import keyboard
     keyboard.pagPress("shift")
     time.sleep(0.35)
 
@@ -2469,6 +2454,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     @requires_discord_permission("observation")
     async def screenshot(interaction: discord.Interaction):
         await interaction.response.defer()
+        from modules.screen.screenshot import screenshotRobloxWindow
         img = await asyncio.get_running_loop().run_in_executor(None, screenshotRobloxWindow)
         with io.BytesIO() as imageBinary:
             await asyncio.get_running_loop().run_in_executor(None, img.save, imageBinary, "PNG")
@@ -2949,6 +2935,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     ])
     async def close(interaction: discord.Interaction, action: str = "both"):
         """Close macro and/or Roblox depending on chosen action."""
+        from modules.misc.appManager import closeApp
         try:
             if action == "both":
                 run.value = 0
@@ -3862,6 +3849,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 return
 
             def use_slot():
+                from modules.controls.keyboard import keyboard
                 try:
                     hotbarSlotTimings = settingsManager.loadUserLiteral("hotbar_timings.txt")
                     if isinstance(hotbarSlotTimings, dict):
@@ -4019,13 +4007,15 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     async def hourlyReport(interaction: discord.Interaction):
         await interaction.response.defer()
         try:
-            if HourlyReport is None or BuffDetector is None or RobloxWindowBounds is None:
-                raise ImportError("Hourly report modules are not available")
-
             # Load settings and prepare report objects
             setdat = get_cached_settings()
 
             def _generate():
+                # imported here so the bot process doesn't load cv2/OCR at startup
+                from modules.reports.hourly import HourlyReport
+                from modules.reports.buffs import BuffDetector
+                from modules.screen.robloxWindow import RobloxWindowBounds
+
                 rw = RobloxWindowBounds()
                 try:
                     rw.setRobloxWindowBounds()
@@ -4098,9 +4088,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     async def sessionReport(interaction: discord.Interaction):
         await interaction.response.defer()
         try:
-            if FinalReport is None:
-                raise ImportError("Final report modules are not available")
-
+            from modules.reports.final import FinalReport
             setdat = get_cached_settings()
             finalReportObj = FinalReport()
             sessionStats = await asyncio.get_running_loop().run_in_executor(None, finalReportObj.generateFinalReport, setdat)
