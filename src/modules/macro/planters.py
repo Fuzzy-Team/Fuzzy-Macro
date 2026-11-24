@@ -129,13 +129,19 @@ class PlanterMixin:
     #place the planter and return true if successfully placed
     def placePlanter(self, planter, field, glitter):
         st = time.time()
+        lastHourlyUpdate = st
         self.lastPlanterPlacementFailure = None
         self.glitterUsedOnPlanter = False
         name = planter.lower().replace(" ","").replace("-","")
         hotbarSlot = self.getPlanterHotbarSlot(planter)
 
         def updateHourlyTime():
-            self.hourlyReport.addHourlyStat("misc_time", time.time()-st)
+            # Add only the slice since the previous call: retries call this more
+            # than once, and time.time()-st would record the earlier slice again.
+            nonlocal lastHourlyUpdate
+            now = time.time()
+            self.hourlyReport.addHourlyStat("misc_time", now-lastHourlyUpdate)
+            lastHourlyUpdate = now
 
         def recoverAlreadyPlacedPlanterState():
             if is_stopped():
