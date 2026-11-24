@@ -360,10 +360,10 @@ class ViciousMixin:
             text = " ".join(item[1][0].lower().split())
             # Warning icons can OCR as L, TA, or other short prefixes.
             # Colons identify player chat rather than a system announcement.
-            if re.match(r"^(?!.*:).{0,3}vicious bee is attacking\b", text):
+            if re.match(r"^(?!.*:).{0,3}(?:gifted\s+)?vicious bee is attacking\b", text):
                 if field is None or re.search(r"\bin the " + re.escape(field) + r"\b", text):
                     counts["vicsummon"] += 1
-            if re.match(r"^(?!.*:).{0,3}vicious bee (?:has been )?defeated\b", text):
+            if re.match(r"^(?!.*:).{0,3}(?:gifted\s+)?vicious bee (?:has been )?defeated\b", text):
                 defeat_lines += 1
                 kill_ys.append(min(point[1] for point in item[0]))
             if re.match(r"^\W*\+\s*\d+\s+stingers?\s*\(from vicious bee\b", text):
