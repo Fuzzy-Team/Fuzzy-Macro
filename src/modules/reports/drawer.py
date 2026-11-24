@@ -17,6 +17,22 @@ from modules.reports.buffs import (
 from modules.reports.theme import DEFAULT_THEME, THEMES
 
 
+# Static report icons, decoded and resized once per (path, size). Reports redraw the
+# same handful of assets every time, so this keeps Pillow from re-decoding them.
+_ICON_CACHE = {}
+
+
+def _loadIcon(path, size):
+    key = (path, size)
+    if key not in _ICON_CACHE:
+        try:
+            _ICON_CACHE[key] = Image.open(path).convert("RGBA").resize(size)
+        except FileNotFoundError:
+            _ICON_CACHE[key] = None
+    icon = _ICON_CACHE[key]
+    return icon.copy() if icon is not None else None
+
+
 class HourlyReportDrawer:
     def __init__(self, time_format=24, theme=DEFAULT_THEME):
         t = THEMES.get(theme, THEMES[DEFAULT_THEME])
@@ -81,13 +97,17 @@ class HourlyReportDrawer:
             size -= 4
         return self.getFont(weight, minSize)
 
+    def _drawPanelTitle(self, box, title, titleSize=64):
+        x, y, w, _ = box
+        font = self.getFont("bold", titleSize)
+        bbox = self.draw.textbbox((0, 0), title, font=font)
+        self.draw.text((x + (w - (bbox[2] - bbox[0])) / 2, y + 16), title, font=font, fill=self.bodyColor)
+
     def _drawPanel(self, box, title=None, titleSize=64):
         x, y, w, h = box
         self.draw.rounded_rectangle((x, y, x + w, y + h), radius=20, fill=self.panelColor, outline=self.panelOutline, width=10)
         if title:
-            font = self.getFont("bold", titleSize)
-            bbox = self.draw.textbbox((0, 0), title, font=font)
-            self.draw.text((x + (w - (bbox[2] - bbox[0])) / 2, y + 16), title, font=font, fill=self.bodyColor)
+            self._drawPanelTitle(box, title, titleSize)
 
     def _compositeRGBA(self, overlay, box):
         """Alpha-composite an RGBA overlay onto the canvas at `box` (x0, y0, x1, y1).
@@ -100,11 +120,15 @@ class HourlyReportDrawer:
         x0, y0, x1, y1 = box
         if x1 <= x0 or y1 <= y0:
             return
+        if overlay.mode != "RGBA":
+            overlay = overlay.convert("RGBA")
+        if self.canvas.mode == "RGBA":
+            # Composite onto the canvas region directly instead of copying it out and back.
+            self.canvas.alpha_composite(overlay, (x0, y0))
+            return
         region = self.canvas.crop((x0, y0, x1, y1))
         if region.mode != "RGBA":
             region = region.convert("RGBA")
-        if overlay.mode != "RGBA":
-            overlay = overlay.convert("RGBA")
         self.canvas.paste(Image.alpha_composite(region, overlay), (x0, y0))
 
     def _drawGraphGrid(self, graph, xTicks=6, yTicks=4, timelineTicks=True):
@@ -258,11 +282,9 @@ class HourlyReportDrawer:
             iconX = x + 48 + i * ((w - 96 - iconSize) / max(iconCount - 1, 1))
             iconY = y + 124
             asset = HOURLY_BUFF_ASSETS.get(key, key + "_buff")
-            try:
-                img = Image.open(f"{self.assetPath}/{asset}.png").convert("RGBA").resize((iconSize, iconSize))
+            img = _loadIcon(f"{self.assetPath}/{asset}.png", (iconSize, iconSize))
+            if img is not None:
                 self.canvas.paste(img, (int(iconX), iconY), img)
-            except FileNotFoundError:
-                pass
             value = self._currentBuffValue(uptimeBuffsValues, key)
             if not value and key in hourlyBuffList:
                 idx = hourlyBuffList.index(key)
@@ -310,11 +332,9 @@ class HourlyReportDrawer:
         for i, name in enumerate(names[:3]):
             cx = x + slot * i + slot / 2
             asset = name.replace(" ", "_") + "_planter"
-            try:
-                img = Image.open(f"{self.iconPath}/{asset}.png").convert("RGBA").resize((220, 220))
+            img = _loadIcon(f"{self.iconPath}/{asset}.png", (220, 220))
+            if img is not None:
                 self.canvas.paste(img, (int(cx - 110), y + 110), img)
-            except FileNotFoundError:
-                pass
             field = str(fields[i]).title()
             font = self._fitText(field, slot - 60, "bold", 52, 34)
             bbox = self.draw.textbbox((0, 0), field, font=font)
@@ -384,11 +404,9 @@ class HourlyReportDrawer:
             gh = int(rowH - 8)
             graph = (graphX, gy, graphW, gh)
             self._drawGraphGrid(graph, xTicks=6, yTicks=2, timelineTicks=False)
-            try:
-                img = Image.open(f"{self.assetPath}/{asset}.png").convert("RGBA").resize((110, 110))
+            img = _loadIcon(f"{self.assetPath}/{asset}.png", (110, 110))
+            if img is not None:
                 self.canvas.paste(img, (x + 75, gy + max(0, (gh - 110) // 2)), img)
-            except FileNotFoundError:
-                pass
             labelFont = self.getFont("bold", 36 if len(uptimeBuffList) > 12 else 44)
             if chartType == "multi":
                 colors = colorInfo
@@ -427,10 +445,9 @@ class HourlyReportDrawer:
             "stats": (4420, 4440, 1360, 620),
             "info": (4420, 5160, 1360, 420),
         }
-        for key, region in regions.items():
-            self._drawPanel(region, None)
-        for key, region in statRegions.items():
-            self._drawPanel(region, None)
+        # Each card draws its own panel background, so only the backdrop behind the
+        # sidebar cards is painted here instead of layering the same panels twice.
+        self._drawPanel(regions["stats"], None)
         timeLabels = self._elapsedTimeLabels(sessionTime) if reportTitle == "Session Report" else self._timeLabels()
 
         self._drawPanel(regions["honey/sec"], "HONEY/SEC")
@@ -546,7 +563,11 @@ class HourlyReportDrawer:
         return ' '.join(result)
         
     def getFont(self, weight, fontSize):
-        return ImageFont.truetype(f"hourly_report/Inter/static/Inter_18pt-{weight.title()}.ttf", fontSize)
+        cache = self.__dict__.setdefault("_fontCache", {})
+        key = (weight, fontSize)
+        if key not in cache:
+            cache[key] = ImageFont.truetype(f"hourly_report/Inter/static/Inter_18pt-{weight.title()}.ttf", fontSize)
+        return cache[key]
 
     def getGradientColorAtRatio(self, ratio, gradientSpec):
         #calculates the RGBA color from gradientSpec at a given vertical ratio (0=bottom, 1=top)
