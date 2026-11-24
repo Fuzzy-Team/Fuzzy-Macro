@@ -33,6 +33,8 @@ class fieldDriftCompensation():
         self._sprinkler_use_float16 = False
         self._sprinkler_model_failed = False
         self._sprinkler_warning_shown = False
+        self._sprinkler_target_read = False
+        self._sprinkler_target_label = None
         self._sprinkler_input_size = 736
         self._sprinkler_confidence_threshold = 0.6
         self._sprinkler_nms_threshold = 0.5
@@ -210,12 +212,19 @@ class fieldDriftCompensation():
         return detections
 
     def _target_sprinkler_label(self):
+        # The correction loop re-detects every 20 ms and loadAllSettings re-reads and re-parses
+        # settings.txt + generalsettings.txt (~14 ms), so the type is read once per correction run.
+        if self._sprinkler_target_read:
+            return self._sprinkler_target_label
         try:
             settings = settingsManager.loadAllSettings()
         except Exception:
             return None
-        sprinkler_type = str(settings.get("sprinkler_type", "")).strip().lower()
-        return self._sprinkler_type_map.get(sprinkler_type)
+        self._sprinkler_target_read = True
+        self._sprinkler_target_label = self._sprinkler_type_map.get(
+            str(settings.get("sprinkler_type", "")).strip().lower()
+        )
+        return self._sprinkler_target_label
 
     def getSprinklerInImage(self, imgSRC):
         if not self._load_sprinkler_model():
@@ -427,6 +436,12 @@ class fieldDriftCompensation():
             settings = settingsManager.loadAllSettings()
         except Exception:
             settings = {}
+        # This run already has the settings, so resolve the sprinkler type here once instead of
+        # letting every detection frame re-read the files.
+        self._sprinkler_target_read = True
+        self._sprinkler_target_label = self._sprinkler_type_map.get(
+            str(settings.get("sprinkler_type", "")).strip().lower()
+        )
 
         use_sprinkler_model = bool(settings.get("use_sprinkler_model_for_drift_compensation", False))
         if use_sprinkler_model and self._load_sprinkler_model():
