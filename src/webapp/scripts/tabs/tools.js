@@ -970,9 +970,10 @@ function syncToolStatusPollers() {
   }
 }
 
-function loadTools() {
+async function loadTools() {
   syncToolSessionState();
   refreshToolStopHotkey();
+  loadInputs(await loadAllSettings());
   initializeAutoClickerTool();
   initializeBondTreatCalculator();
   initializeTicketPriceCalculator();
