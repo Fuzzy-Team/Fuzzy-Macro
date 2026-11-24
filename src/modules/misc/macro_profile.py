@@ -56,6 +56,31 @@ def _literal(value):
     return ast.literal_eval(value)
 
 
+def _parse_setting(value, default):
+    """Parse one saved value like _read_settings_file; also reports an unusable typed value."""
+    invalid = False
+    try:
+        parsed = _literal(value)
+    except Exception:
+        parsed = value
+        # Text where a number or true/false belongs would break the macro later, so use
+        # the default. Other settings keep text: the GUI saves some as plain text.
+        if value.isdecimal():
+            parsed = int(value)
+        elif value.replace(".", "", 1).isdecimal():
+            parsed = float(value)
+        elif isinstance(default, bool) and value.lower() in ("true", "false"):
+            parsed = value.lower() == "true"
+        elif isinstance(default, (bool, int, float)):
+            parsed = copy.deepcopy(default)
+            invalid = True
+    if isinstance(parsed, dict) and set(parsed) == {"source", "value"}:
+        parsed = parsed["value"]  # an old GUI bug saved some dropdowns wrapped like this
+    if isinstance(default, str) and not isinstance(parsed, str):
+        parsed = "" if parsed is None else str(parsed)
+    return parsed, invalid
+
+
 def _as_int(value, default):
     try:
         return int(value)
@@ -151,7 +176,7 @@ class MacroProfileStore:
             self._validate(setting, value, defaults, {**profile_data, **general_data})
             target = profile_data if owner == "profile" else general_data
             target[setting] = copy.deepcopy(value)
-            self._write_file(os.path.join(self._profile_dir(profile), filename), target)
+            self._write_file(os.path.join(self._profile_dir(profile), filename), target, changed=(setting,))
             return {**profile_data, **general_data}
 
     def apply_changes(self, profile, scope, changes):
@@ -175,9 +200,11 @@ class MacroProfileStore:
                 self._validate(setting, value, defaults, combined)
             profile_dir = self._profile_dir(profile)
             if next_profile != profile_data:
-                self._write_file(os.path.join(profile_dir, self.PROFILE_FILE), next_profile)
+                self._write_file(os.path.join(profile_dir, self.PROFILE_FILE), next_profile,
+                                 changed=[key for key in changes if owners[key] == "profile"])
             if next_general != general_data:
-                self._write_file(os.path.join(profile_dir, self.GENERAL_FILE), next_general)
+                self._write_file(os.path.join(profile_dir, self.GENERAL_FILE), next_general,
+                                 changed=[key for key in changes if owners[key] == "general"])
 
     def save_field(self, profile, field, settings):
         if not isinstance(settings, dict):
@@ -281,7 +308,8 @@ class MacroProfileStore:
         except UnicodeDecodeError:
             raw = content.decode("utf-8", errors="replace")
             warnings.append(f"{os.path.basename(path)} is not valid UTF-8; unreadable characters were replaced")
-        raw = re.sub(r"(?<![A-Za-z_])(?<!\n)max_convert_time=", "\nmax_convert_time=", raw)
+        if "max_convert_time=" in raw:
+            raw = re.sub(r"(?<![A-Za-z_])(?<!\n)max_convert_time=", "\nmax_convert_time=", raw)
         result = {}
         for line_number, line in enumerate(raw.splitlines(), 1):
             if not line.strip():
@@ -292,25 +320,9 @@ class MacroProfileStore:
                 warnings.append(f"{os.path.basename(path)} line {line_number} is not a setting and was skipped: {line.strip()[:60]!r}")
                 continue
             default = defaults.get(key)
-            try:
-                parsed = _literal(value)
-            except Exception:
-                parsed = value
-                # Text where a number or true/false belongs would break the macro later, so use
-                # the default. Other settings keep text: the GUI saves some as plain text.
-                if value.isdecimal():
-                    parsed = int(value)
-                elif value.replace(".", "", 1).isdecimal():
-                    parsed = float(value)
-                elif isinstance(default, bool) and value.lower() in ("true", "false"):
-                    parsed = value.lower() == "true"
-                elif isinstance(default, (bool, int, float)):
-                    warnings.append(f"{os.path.basename(path)}: {key}={value!r} is not a valid value; using the default ({default!r})")
-                    parsed = copy.deepcopy(default)
-            if isinstance(parsed, dict) and set(parsed) == {"source", "value"}:
-                parsed = parsed["value"]  # an old GUI bug saved some dropdowns wrapped like this
-            if isinstance(default, str) and not isinstance(parsed, str):
-                parsed = "" if parsed is None else str(parsed)
+            parsed, invalid = _parse_setting(value, default)
+            if invalid:
+                warnings.append(f"{os.path.basename(path)}: {key}={value!r} is not a valid value; using the default ({default!r})")
             result[key] = parsed
         return result
 
@@ -516,15 +528,46 @@ class MacroProfileStore:
                 if fcntl is not None:
                     fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
-    @classmethod
-    def _write_file(cls, path, data, fields=False):
+    def _write_file(self, path, data, fields=False, changed=None):
         if fields:
             content = str(data)
         else:
             content = "\n".join(f"{key}={value}" for key, value in data.items())
         if content and not content.endswith("\n"):
             content += "\n"
-        cls._atomic_write(path, content.encode("utf-8"))
+        stamp = self._atomic_write(path, content.encode("utf-8"))
+        if changed is not None and not fields:
+            self._remember_written(path, data, changed, stamp)
+
+    def _remember_written(self, path, data, changed, stamp):
+        """Reuse this write as the next read's parse instead of re-reading the file.
+
+        Only the keys the caller changed are parsed again; every other value came from a
+        read or the defaults and is already in the form a re-read would produce. If that
+        can't be guaranteed (a value with a line break, an unparsable one), the entry is
+        dropped and the next read parses the file as before.
+        """
+        name = os.path.basename(path)
+        if name not in (self.PROFILE_FILE, self.GENERAL_FILE):
+            return
+        defaults = self._profile_defaults if name == self.PROFILE_FILE else self._general_defaults
+        parsing = set(changed)
+        snapshot, warnings = {}, []
+        try:
+            for key, value in data.items():
+                if key in parsing:
+                    text = str(value)
+                    if "\n" in text or "\r" in text:
+                        raise ValueError("line break in value")
+                    default = defaults.get(key)
+                    value, invalid = _parse_setting(text, default)
+                    if invalid:
+                        warnings.append(f"{name}: {key}={text!r} is not a valid value; using the default ({default!r})")
+                snapshot[key] = copy.deepcopy(value) if isinstance(value, (list, dict, set)) else value
+        except Exception:
+            self._read_cache.pop(path, None)
+            return
+        self._read_cache[path] = (stamp, snapshot, warnings)
 
     @staticmethod
     def _atomic_write(path, content):
@@ -535,7 +578,9 @@ class MacroProfileStore:
                 handle.write(content)
                 handle.flush()
                 os.fsync(handle.fileno())
+                written = os.fstat(handle.fileno())
             os.replace(temporary, path)
+            return (written.st_mtime_ns, written.st_size, written.st_ino)
         except Exception:
             try:
                 os.remove(temporary)
