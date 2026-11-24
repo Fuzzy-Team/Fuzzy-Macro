@@ -35,6 +35,27 @@ class MacroProfileValidationError(MacroProfileError):
         return {"setting": self.setting, "reason": self.reason}
 
 
+_INT_LITERAL = re.compile(r"-?(?:0|[1-9][0-9]*)")
+_FLOAT_LITERAL = re.compile(r"-?[0-9]+\.[0-9]+")
+_CONSTANTS = {"True": True, "False": False, "None": None}
+# Bare words ("auto", "no override") are saved unquoted; literal_eval can only reject them.
+_BARE_WORDS = re.compile(r"[A-Za-z_ ]+")
+
+
+def _literal(value):
+    """ast.literal_eval, with the common setting shapes (numbers, True/False/None) parsed directly.
+    A profile has ~1600 lines, and literal_eval on each made every load and save take milliseconds."""
+    if value in _CONSTANTS:
+        return _CONSTANTS[value]
+    if _INT_LITERAL.fullmatch(value):
+        return int(value)
+    if _FLOAT_LITERAL.fullmatch(value):
+        return float(value)
+    if _BARE_WORDS.fullmatch(value):
+        raise ValueError(f"not a literal: {value!r}")
+    return ast.literal_eval(value)
+
+
 def _as_int(value, default):
     try:
         return int(value)
@@ -62,6 +83,7 @@ class MacroProfileStore:
         self._field_defaults = copy.deepcopy(field_defaults)
         self._field_normalizer = field_normalizer
         self._lock = threading.RLock()
+        self._read_cache = {}  # path -> (file stamp, parsed settings, warnings)
 
     def initialize(self, profile):
         """Create missing files and run pending migrations, then return the profile like load()."""
@@ -208,7 +230,17 @@ class MacroProfileStore:
         if not os.path.exists(path):
             return copy.deepcopy(defaults)
         try:
-            return self._read_settings_file(path, defaults, warnings)
+            # Settings are read far more often than they change, so reuse the parse of an unchanged file.
+            stat = os.stat(path)
+            stamp = (stat.st_mtime_ns, stat.st_size, stat.st_ino)
+            cached = self._read_cache.get(path)
+            if cached is None or cached[0] != stamp:
+                read_warnings = []
+                cached = (stamp, self._read_settings_file(path, defaults, read_warnings), read_warnings)
+                self._read_cache[path] = cached
+            warnings.extend(cached[2])
+            return {key: copy.deepcopy(value) if isinstance(value, (list, dict, set)) else value
+                    for key, value in cached[1].items()}
         except Exception as exc:
             errors[os.path.basename(path)] = f"{os.path.basename(path)}: {exc}"
             return copy.deepcopy(defaults)
@@ -261,7 +293,7 @@ class MacroProfileStore:
                 continue
             default = defaults.get(key)
             try:
-                parsed = ast.literal_eval(value)
+                parsed = _literal(value)
             except Exception:
                 parsed = value
                 # Text where a number or true/false belongs would break the macro later, so use
@@ -283,13 +315,14 @@ class MacroProfileStore:
         return result
 
     def _normalize_settings(self, profile_data, general_data):
-        original_profile = copy.deepcopy(profile_data)
-        original_general = copy.deepcopy(general_data)
-        for key, value in self._profile_defaults.items():
-            profile_data.setdefault(key, copy.deepcopy(value))
-        for key, value in self._general_defaults.items():
-            general_data.setdefault(key, copy.deepcopy(value))
-        return profile_data, general_data, (profile_data != original_profile, general_data != original_general)
+        """Fill in missing defaults. A file changed only if a key was added."""
+        changed = []
+        for data, defaults in ((profile_data, self._profile_defaults), (general_data, self._general_defaults)):
+            missing = [key for key in defaults if key not in data]
+            for key in missing:
+                data[key] = copy.deepcopy(defaults[key])
+            changed.append(bool(missing))
+        return profile_data, general_data, tuple(changed)
 
     def _migrate_legacy_settings(self, profile_data, general_data, fields_data):
         """One-time upgrades of settings saved by older versions. Returns (profile changed, general changed)."""
