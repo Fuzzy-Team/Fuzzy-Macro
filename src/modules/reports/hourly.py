@@ -433,8 +433,12 @@ class HourlyReport():
             self.hourlyReportStats["honey_per_min"] = [0]*3 + self.hourlyReportStats["honey_per_min"]
         #failed reads (0) repeat the previous value so they cannot create a gain spike
         from modules.reports.final import FinalReport  # lazy: final imports this module
+        # Heal a failed read at the start of the hour with this hour's first real reading:
+        # the session start can be hours behind, and that jump would also feed the spike cap.
+        hourHoneyBaseline = next((value for value in self.hourlyReportStats["honey_per_min"] if value), 0)
+        hourHoneyBaseline = hourHoneyBaseline or self.hourlyReportStats["start_honey"] or None
         self.hourlyReportStats["honey_per_min"] = FinalReport._normalizeCumulativeHoneySeries(
-            self.hourlyReportStats["honey_per_min"], baseline=self.hourlyReportStats["start_honey"] or None)
+            self.hourlyReportStats["honey_per_min"], baseline=hourHoneyBaseline)
         # Keep the normalized cumulative series intact: it must remain one sample per
         # minute. Filtering cumulative levels drops legitimate samples and breaks rates.
         # one point per minute; minutes with no gain count as 0 so the chart keeps its time axis
