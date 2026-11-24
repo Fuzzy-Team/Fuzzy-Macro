@@ -190,6 +190,9 @@ async function updateMacroMode() {
 async function loadTasks() {
   const setdat = await loadAllSettings();
   let out = "";
+  const planterTimerContainer = document.getElementById("planter-timers-container");
+  const plantersVisible = (setdat.macro_mode || "normal") === "normal" && Number(setdat["planters_mode"]) > 0;
+  if (planterTimerContainer && !plantersVisible) planterTimerContainer.classList.remove("show");
 
   // Update macro mode dropdown to match current settings (only if user is not actively changing it)
   const macroModeDropdown = document.getElementById("macro_mode");
@@ -656,10 +659,7 @@ async function loadTasks() {
         `;
   }
 
-  const planterTimerContainer = document.getElementById(
-    "planter-timers-container"
-  );
-  if (setdat["planters_mode"]) {
+  if (planterTimerContainer && plantersVisible) {
     planterTimerContainer.classList.add("show");
     let planterData;
     const planterContainer =
