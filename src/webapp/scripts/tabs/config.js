@@ -842,6 +842,15 @@ function showImportModal(fileName) {
       profileNameInput.focus();
       profileNameInput.select();
 
+      // Re-opening the modal must not stack Enter handlers, or one Enter press
+      // would import the same file twice.
+      if (profileNameInput._keyHandler) {
+        profileNameInput.removeEventListener(
+          "keydown",
+          profileNameInput._keyHandler
+        );
+      }
+
       // Add keyboard event listener for Enter/Escape
       const handleKeyPress = function (e) {
         if (e.key === "Enter") {
@@ -937,9 +946,11 @@ async function confirmImportProfile() {
 }
 
 // Set up file input event listener (called after HTML is loaded)
+// loadProfiles() runs on every visit to the Profiles subtab, so bind only once.
 function setupFileInputListener() {
   const importFileInput = document.getElementById("import-profile-file");
-  if (importFileInput) {
+  if (importFileInput && importFileInput.dataset.changeBound !== "true") {
+    importFileInput.dataset.changeBound = "true";
     importFileInput.addEventListener("change", function (e) {
       const fileNameDisplay = document.getElementById("import-file-name");
       console.log("File input changed, files:", e.target.files);
@@ -964,7 +975,7 @@ function setupFileInputListener() {
       }
     });
     console.log("File input listener set up successfully");
-  } else {
+  } else if (!importFileInput) {
     console.error("Could not find import-profile-file element");
   }
 }
