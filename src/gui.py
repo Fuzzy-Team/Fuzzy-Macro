@@ -666,9 +666,23 @@ def importPatterns(patterns):
             if ext not in ('.py', '.ahk'):
                 ext = '.py'
             name = root + ext
+            # The macro runs <name>.py, and .ahk files are only converted at app start.
+            # Convert before saving so a failed conversion leaves no unusable pattern.
+            converted = None
+            if ext == ".ahk":
+                from modules.submacros.convertAhkPattern import ahkPatternToPython
+
+                try:
+                    converted = ahkPatternToPython(content)
+                except Exception as e:
+                    results["errors"].append(f"{name}: could not convert AHK pattern: {e}")
+                    continue
             dest_path = os.path.join(target_dir, name)
             with open(dest_path, "w", encoding="utf-8") as f:
                 f.write(content)
+            if converted is not None:
+                with open(os.path.join(target_dir, root + ".py"), "w", encoding="utf-8") as f:
+                    f.write(converted)
             results["saved"].append(name)
         except Exception as e:
             results["errors"].append(f"{name}: {e}")
