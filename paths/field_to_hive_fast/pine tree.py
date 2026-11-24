@@ -7,7 +7,7 @@ time.sleep(0.1)
 for _ in range(4):
     self.keyboard.press(",")
 
-# Zoom in x5
+# Rotate right x5 (RotRight x5)
 for _ in range(5):
     self.keyboard.press(".")
     time.sleep(0.05)
