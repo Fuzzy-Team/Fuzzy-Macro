@@ -106,8 +106,8 @@ class keyboard:
         return self._walkDistance(28 * duration, until)
 
     def walk(self, k, t, applyHaste=True, method='predictive', until=None):
-        keyboard.keyDown(k, False)
         try:
+            keyboard.keyDown(k, False)
             if applyHaste and self.enableHasteCompensation:
                 if method == 'predictive':
                     self.predictiveTimeWait(t, until)
@@ -156,8 +156,8 @@ class keyboard:
 
     #pyautogui without the pause
     def press(self,key, delay = 0.02):
-        keyboard.keyDown(key, False)
         try:
+            keyboard.keyDown(key, False)
             _holdFor(delay)
         finally:
             keyboard.keyUp(key, False)
@@ -210,8 +210,8 @@ class keyboard:
 
     def tileWalk(self, key, tiles, applyHaste = True):
         if applyHaste:
-            self.keyDown(key, False)
             try:
+                self.keyDown(key, False)
                 self.tileWait(tiles)
             finally:
                 self.keyUp(key, False)
