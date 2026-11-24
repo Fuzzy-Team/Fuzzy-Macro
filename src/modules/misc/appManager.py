@@ -15,6 +15,35 @@ def isAppOpenMac(app="roblox"):
     tmp = os.popen("ps -Af").read()
     return app.lower() in tmp.lower()
 
+def _promptAccessibility(ax):
+    """Best-effort native Accessibility prompt; callers report missing even if this fails."""
+    cf = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
+    cf.CFDictionaryCreate.restype = ctypes.c_void_p
+    cf.CFDictionaryCreate.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(ctypes.c_void_p), ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p]
+    cf.CFRelease.restype = None
+    cf.CFRelease.argtypes = [ctypes.c_void_p]
+    ax.AXIsProcessTrustedWithOptions.restype = ctypes.c_bool
+    ax.AXIsProcessTrustedWithOptions.argtypes = [ctypes.c_void_p]
+
+    key = ctypes.c_void_p.in_dll(ax, "kAXTrustedCheckOptionPrompt")
+    value = ctypes.c_void_p.in_dll(cf, "kCFBooleanTrue")
+    if not key.value or not value.value:
+        return
+    keys = (ctypes.c_void_p * 1)(key)
+    values = (ctypes.c_void_p * 1)(value)
+    options = None
+    try:
+        options = cf.CFDictionaryCreate(
+            None, keys, values, 1,
+            ctypes.byref(ctypes.c_void_p.in_dll(cf, "kCFTypeDictionaryKeyCallBacks")),
+            ctypes.byref(ctypes.c_void_p.in_dll(cf, "kCFTypeDictionaryValueCallBacks")),
+        )
+        if options:
+            ax.AXIsProcessTrustedWithOptions(options)
+    finally:
+        if options:
+            cf.CFRelease(options)
+
 def missingPermissions():
     """Names of the macOS permissions Terminal still needs. An API missing on an older macOS is skipped."""
     missing = []
@@ -23,14 +52,27 @@ def missingPermissions():
         ax.AXIsProcessTrusted.restype = ctypes.c_bool
         if not ax.AXIsProcessTrusted():
             missing.append("Accessibility")
+            try:
+                _promptAccessibility(ax)
+            except Exception:
+                pass  # prompt setup is best-effort; Accessibility is already reported
     except (OSError, AttributeError):
         pass  # framework or function missing on this macOS, so skip the check
     try:
         cg = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
-        # Preflight (macOS 11+) never prompts. Request (10.15+) prompts, which also lists Terminal in Settings.
-        check = getattr(cg, "CGPreflightScreenCaptureAccess", None) or cg.CGRequestScreenCaptureAccess
-        check.restype = ctypes.c_bool
-        if not check():
+        preflight = getattr(cg, "CGPreflightScreenCaptureAccess", None)
+        request = getattr(cg, "CGRequestScreenCaptureAccess", None)
+        if preflight is None and request is None:
+            raise AttributeError  # neither API exists on this macOS
+        granted = False
+        if preflight is not None:
+            preflight.restype = ctypes.c_bool
+            granted = bool(preflight())
+        if not granted and request is not None:
+            # Preflight never prompts. Requesting also adds Terminal to the Screen Recording list.
+            request.restype = ctypes.c_bool
+            granted = bool(request())
+        if not granted:
             missing.append("Screen & System Audio Recording")
     except (OSError, AttributeError):
         pass  # framework or function missing on this macOS, so skip the check
