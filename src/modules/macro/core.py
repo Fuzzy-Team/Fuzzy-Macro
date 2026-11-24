@@ -147,6 +147,8 @@ class macro(
         self.hotbarLock = threading.Lock()
         self.unusualSproutLastAnnounced = {}
         self.windyBeeLastAnnounced = {}
+        self.windBoostedField = None  # set by watchWindShrineBoost after a donation
+        self.windBoostedAt = 0
         self.gummyballLevel = None
         self.gummyballLastSeen = 0
         self.buffBarBoostPausedUntil = 0

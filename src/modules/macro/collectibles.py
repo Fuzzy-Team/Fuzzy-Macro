@@ -16,11 +16,54 @@ from modules.macro.game_data import (
     startLocationDimensions,
     windShrineDonationItems,
 )
-from modules.screen.imageSearch import locateImageOnScreen, locateTransparentImageOnScreen
+from modules.screen.imageSearch import captureRegionBGR, locateImageOnScreen, locateTransparentImageOnScreen
 from modules.screen.screenshot import mssScreenshot
+from modules.macro.events import BUFF_BAND_HEIGHT
+
+# Fields the Wind Shrine can boost, checked in this order (first match wins).
+# A field is only searched for when its images/buffs/winds_<field> icon exists.
+WIND_FIELDS = ("sunflower", "dandelion", "mushroom", "clover", "blue flower", "strawberry", "spider",
+               "bamboo", "pineapple", "stump", "rose", "pine tree", "cactus", "pumpkin", "mountain top",
+               "coconut", "pepper")
+WIND_ICON_TOLERANCE = 23  # per colour channel
+WIND_SEARCH_SECONDS = 60  # longest the buff bar is watched after a donation
+WIND_SEARCH_GRACE = 1.5   # extra seconds of watching once the shrine loot walk is done
+WIND_GATHER_MINUTES = 14  # the winds last 15 minutes; gathering moves back a minute early
 
 
 class CollectiblesMixin:
+    def watchWindShrineBoost(self, stop):
+        """Watch the buff bar for the field the Wind Shrine just boosted, until it shows up,
+        stop is set, or WIND_SEARCH_SECONDS pass. Fields in wind_shrine_fields become the gather field."""
+        icons = []
+        for field in WIND_FIELDS:
+            try:
+                self.adjustImage("./images/buffs", f"winds_{field.replace(' ', '_')}")
+                icons.append(field)
+            except FileNotFoundError:
+                continue
+        if not icons:
+            return
+        end = time.time() + WIND_SEARCH_SECONDS
+        while not stop.is_set() and time.time() < end and not is_stopped():
+            w = self.robloxWindow
+            screen = captureRegionBGR(w.mx, w.my, w.mw, BUFF_BAND_HEIGHT)
+            field = next((f for f in icons if self.boostIconVisible(screen, f, "winds", WIND_ICON_TOLERANCE)), None)
+            if field:
+                self.logger.webhook("", f"Wind Shrine boosted {field.title()}", "light blue", "screen")
+                if field in self.setdat.get("wind_shrine_fields", []):
+                    self.windBoostedField = field
+                    self.windBoostedAt = time.time()
+                return
+            sleep(0.05)
+
+    def windGatherField(self):
+        """The Wind Shrine field to gather in instead of the planned one, or None."""
+        field = self.windBoostedField
+        if field in self.setdat.get("wind_shrine_fields", []) and time.time() - self.windBoostedAt < WIND_GATHER_MINUTES * 60:
+            return field
+        return None
+
     def collectWindShrine(self, reached):
         displayName = "Wind Shrine"
         cooldownSeconds = self.collectCooldowns["wind_shrine"]
@@ -197,10 +240,18 @@ class CollectiblesMixin:
         mouse.click()
         time.sleep(2)
         clickWindShrineDialogsUntilGone()
+        # The winds buff shows up while walking off, so the buff bar is watched during the loot walk.
+        stopWindSearch = threading.Event()
+        windSearch = threading.Thread(target=self.watchWindShrineBoost, args=(stopWindSearch,), name="wind-shrine-boost", daemon=True)
+        windSearch.start()
         self.logger.webhook("", f"Offered {item.title()} x{quantity} to Wind Shrine", "bright green", "screen")
         time.sleep(0.5)
         lootWindShrineTokens()
         self.logger.webhook("", "Collected loot from Wind Shrine", "bright green", "screen")
+        graceEnd = time.time() + WIND_SEARCH_GRACE
+        while windSearch.is_alive() and time.time() < graceEnd and not is_stopped():
+            sleep(0.05)
+        stopWindSearch.set()
         return cooldownSeconds
 
     def scheduleFieldBoosterGlitterExtension(self):

@@ -141,6 +141,7 @@ DEFAULT_PROFILE_SETTINGS = {'fields_enabled': [True, False, False, False, False]
  'wind_shrine': False,
  'wind_shrine_item': 'field dice',
  'wind_shrine_quantity': 1,
+ 'wind_shrine_fields': [],
  'memory_match_rewards': [],
  'blender_enable': False,
  'blender_slots': 5,
