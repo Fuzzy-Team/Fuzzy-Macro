@@ -1,6 +1,6 @@
 import threading
 import traceback
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
 from modules.controls.sleep import InterruptRequested, is_paused, is_stopped, pause_aware_time as time, paused_seconds, sleep, wait_while_paused
@@ -28,7 +28,7 @@ class MobMixin:
 
     def isMondoPrepWindow(self):
         #the last "mondo_prep_time" seconds before the hour, when mondo is about to spawn
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         seconds_to_hour = 3600 - (now.minute * 60 + now.second)
         return seconds_to_hour <= self.setdat["mondo_prep_time"]
 
@@ -37,7 +37,7 @@ class MobMixin:
         minute = self.getCurrentMinute()
         if self.isMondoHopOn():
             #hopping keeps looking for mondos until MONDO_HOP_UNTIL, and a mondo that was just done doesn't block the next server
-            now = datetime.now()
+            now = datetime.now(timezone.utc)
             return (now.minute + now.second/60 < MONDO_HOP_UNTIL or self.isMondoPrepWindow()) and self.hasRespawned("mondo", 20*60)
         #set respawn time to 20mins
         #mostly just to prevent the macro from going to mondo over and over again for the 10mins
@@ -48,7 +48,7 @@ class MobMixin:
         self.mondoHopped = True
         servers = 0
         while not is_stopped():
-            now = datetime.now()
+            now = datetime.now(timezone.utc)
             if now.minute + now.second/60 >= MONDO_HOP_UNTIL:
                 return False    #too late; the main loop takes us back to the private server
             servers += 1
@@ -92,7 +92,7 @@ class MobMixin:
             mondo_buff_wait = self.setdat["mondo_buff_wait"]
             self.logger.webhook("", f"Damaging Mondo for {mondo_buff_wait:g} minutes", "yellow")
             self.enableShiftLock()
-            result = self.mondoFight(datetime.now() + timedelta(minutes=mondo_buff_wait))
+            result = self.mondoFight(datetime.now(timezone.utc) + timedelta(minutes=mondo_buff_wait))
             if is_stopped():
                 self.clear_task_status()
                 return False
@@ -175,7 +175,7 @@ class MobMixin:
                 if not self.isMondoHopOn():
                     self.saveTiming("mondo")
             if self.isMondoHopOn() and not is_stopped():
-                now = datetime.now()
+                now = datetime.now(timezone.utc)
                 if now.minute + now.second/60 < MONDO_HOP_UNTIL:
                     self.logger.webhook("", "Mondo hop: this mondo is done, hopping to another server", "light blue")
                     self.clear_task_status()
