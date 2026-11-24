@@ -5,7 +5,9 @@ def _escapeAppleScript(value):
     return str(value).replace("\\", "\\\\").replace('"', '\\"')
 
 def msgBox(title, text):
-    script = f'''tell application "System Events" to display dialog "{_escapeAppleScript(text)}" with title "{_escapeAppleScript(title)}"'''
+    # StandardAdditions can display the dialog from osascript without targeting
+    # System Events, so it needs no Automation permission.
+    script = f'''display dialog "{_escapeAppleScript(text)}" with title "{_escapeAppleScript(title)}"'''
     pause_hang_watchdog()
     subprocess.run(["osascript", "-e", script])
 
@@ -14,14 +16,12 @@ def msgBoxOkCancel(title, text):
     
     #appleScript
     script = f'''
-    tell application "System Events"
-        try
-            display dialog "{_escapeAppleScript(text)}" with title "{_escapeAppleScript(title)}" buttons {{"Cancel", "OK"}} default button "OK"
-            return "OK"
-        on error
-            return "Cancel"
-        end try
-    end tell
+    try
+        set response to display dialog "{_escapeAppleScript(text)}" with title "{_escapeAppleScript(title)}" buttons {{"Cancel", "OK"}} default button "OK" cancel button "Cancel"
+        return button returned of response
+    on error number -128
+        return "Cancel"
+    end try
     '''
     
     pause_hang_watchdog()
