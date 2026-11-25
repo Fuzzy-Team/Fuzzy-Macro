@@ -703,9 +703,13 @@ def _create_backup(destination, backup_path, protected_folders, protected_files)
         raise
 
 
+def _raise_walk_error(error):
+    raise error
+
+
 def _write_backup_zip(destination, zip_path, excluded_folders, protected_files, skip_abs):
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        for root, dirs, files in os.walk(destination):
+        for root, dirs, files in os.walk(destination, onerror=_raise_walk_error):
             # skip the backup file itself and src extraction folders
             rel_root = os.path.relpath(root, destination)
             if rel_root == ".":
@@ -728,8 +732,12 @@ def _write_backup_zip(destination, zip_path, excluded_folders, protected_files, 
                 arcname = os.path.join(rl, f) if rl else f
                 if os.path.abspath(absf) in skip_abs:
                     continue
-                # Sockets, pipes and broken symlinks have no content to back up.
-                if not os.path.isfile(absf):
+                # Sockets, pipes and broken symlinks have no content to back up; other stat errors fail the backup.
+                try:
+                    mode = os.stat(absf).st_mode
+                except FileNotFoundError:
+                    continue
+                if not stat.S_ISREG(mode):
                     continue
                 zf.write(absf, arcname)
 
