@@ -256,8 +256,6 @@ class macro(
     #get the size of the roblox window and update the relevant variables
     def setRobloxWindowInfo(self, setYOffset=True):
         self.robloxWindow.setRobloxWindowBounds(setYOffset=setYOffset)
-        if setYOffset:
-            self.logger.webhook("", f"Detect Y Offset: {self.robloxWindow.contentYOffset}", "dark brown")
 
     def _redetect_y_offset_after_resume(self):
         with self._gatherInputLock:

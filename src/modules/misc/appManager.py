@@ -167,6 +167,21 @@ def getWindowSize(windowName):
     # Window not found, most likely fullscreen (but unfocused)
     return 0, 0, mw, mh
 
+def enterRobloxFullscreen():
+    """Make a windowed Roblox fullscreen so its title bar is gone and screen coordinates start at the top of the game."""
+    import Quartz
+    import ApplicationServices as AX
+    # The pid comes from the live window list. NSWorkspace's list goes stale in the macro's child process.
+    for win in Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListExcludeDesktopElements | Quartz.kCGWindowListOptionOnScreenOnly, Quartz.kCGNullWindowID):
+        if f'{win.get(Quartz.kCGWindowOwnerName, "")} {win.get(Quartz.kCGWindowName, "")}'.strip() == "Roblox Roblox":
+            err, windows = AX.AXUIElementCopyAttributeValue(AX.AXUIElementCreateApplication(win[Quartz.kCGWindowOwnerPID]), "AXWindows", None)
+            if err == 0 and windows:
+                err, fullscreen = AX.AXUIElementCopyAttributeValue(windows[0], "AXFullScreen", None)
+                if err == 0 and not fullscreen:
+                    AX.AXUIElementSetAttributeValue(windows[0], "AXFullScreen", True)
+                    time.sleep(1.5) # the fullscreen animation
+            return
+
 
 # Set the functions to use macOS implementations
 openApp = openAppMac

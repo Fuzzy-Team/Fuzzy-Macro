@@ -475,9 +475,8 @@ class RejoinMixin:
             if not rejoinSuccess:
                 continue
             appManager.openApp("Roblox")
-            # Match the normal-join path: detect the content offset after the
-            # client has loaded, then only toggle fullscreen when that offset
-            # shows Roblox is not already fullscreen.
+            # Match the normal-join path: once the client has loaded, make sure
+            # it is fullscreen and read its bounds.
             self.setRobloxWindowInfo(setYOffset=True)
 
             self.startDetect()

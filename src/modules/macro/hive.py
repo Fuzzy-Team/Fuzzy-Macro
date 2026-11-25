@@ -396,8 +396,7 @@ class HiveMixin:
             if is_stopped():
                 return _finish_reset(False)
 
-            if self.robloxWindow.contentYOffset == 0:
-                self.robloxWindow.setRobloxWindowBounds()
+            self.robloxWindow.setRobloxWindowBounds()
 
             self.canDetectNight = True
             self.location = "spawn"
