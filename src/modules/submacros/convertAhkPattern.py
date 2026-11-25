@@ -189,6 +189,35 @@ def convertSleep(statement):
         return None
     return f"sleep(({argument}) / 1000)"
 
+def convertCondition(text):
+    """Rewrite the AHK-only operators left in a condition into Python.
+
+    `=`, `&&` and `||` are already handled by the global replacements; `!`,
+    `!=` and `<>` need lookahead, and quoted text must keep its contents.
+    """
+    out = []
+    quoted = False
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if char == '"':
+            quoted = not quoted
+        elif quoted:
+            pass
+        elif text.startswith("<>", index):
+            out.append("!=")
+            index += 2
+            continue
+        elif char == "!" and not text.startswith("=", index + 1):
+            out.append("not ")
+            index += 1
+            while index < len(text) and text[index].isspace():
+                index += 1
+            continue
+        out.append(char)
+        index += 1
+    return "".join(out)
+
 def ahkPatternToPython(ahk):
 
     def checkOrder(string, pattern):
@@ -258,7 +287,7 @@ def ahkPatternToPython(ahk):
         if code:
             isElseHeader = bool(re.match(r"^\}?\s*(?:else\s+if|elseif|else)\b", code))
             isIfHeader = bool(re.match(r"^\}?\s*(?:if|else\s+if|elseif)\b", code))
-            isLoopHeader = bool(re.match(r"^loop\b", code))
+            isLoopHeader = bool(re.match(r"^(?:loop|\}?\s*while)\b", code))
             isHeader = isIfHeader or isElseHeader or isLoopHeader
             hasOpenBrace = code.endswith("{")
 
@@ -402,6 +431,15 @@ def ahkPatternToPython(ahk):
 
         elif "else" in code and not "if" in code:
             out[i] = indent + "else:" + comment
+        #while loops use the same expression syntax as if, so normalise the
+        #condition instead of emitting AHK operators into Python
+        elif re.match(r"^\}?\s*while\b", code):
+            condition = re.sub(r"^\}?\s*while\b", "", code, count=1).strip()
+            if condition.endswith("{"):
+                condition = condition[:-1].rstrip()
+            #`while := ...` is an assignment to a variable named while, not a loop
+            if condition and not condition.startswith("𑑛"):
+                out[i] = indent + f"while {convertCondition(condition)}:" + comment
         #one line if/else statements
         elif convertTernary(code.partition("𑑛")[2] if "𑑛" in code else code) is not None:
             lhs, separator, _ = code.partition("𑑛")

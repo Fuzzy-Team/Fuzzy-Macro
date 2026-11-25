@@ -340,6 +340,11 @@ class webhookQueue:
         self.queue.put(data)
 
 class log:
+    # The bot process is the only reader of discordMessageQueue. With bot delivery
+    # configured but no bot running (e.g. a blank token) nothing drains it, so cap the
+    # backlog instead of letting a long unattended session grow it without bound.
+    MAX_BOT_QUEUE_BACKLOG = 500
+
     def __init__(self, logQueue, enableWebhook, webhookURL, sendScreenshots, hourlyReportOnly=False, robloxWindow: RobloxWindowBounds = None, enableDiscordPing=False, discordUserID=None, pingSettings=None, webhookTimeFormat=24, enableDiscordBot=False, discordMessageQueue=None, routeSettings=None):
         self.logQueue = logQueue
         self.webhookURL = webhookURL
@@ -439,6 +444,12 @@ class log:
     def _send_discord_bot(self, channel_id, title, desc, time, color, imagePath=None, ping_user_id=None, time_format=None, fields=None, temporaryImage=False):
         if not self.enableDiscordBot or not self.discordMessageQueue:
             return None
+        # Checked before the snapshot so a dropped message does not leak its temp copy.
+        try:
+            if self.discordMessageQueue.qsize() >= self.MAX_BOT_QUEUE_BACKLOG:
+                return None
+        except (EOFError, OSError):
+            pass  # manager already gone; the put below reports the failure
         # the bot reads the file after the macro has moved on, so give it its own copy
         imageCopy = self._snapshot_image(imagePath, fallback=not temporaryImage)
         data = {

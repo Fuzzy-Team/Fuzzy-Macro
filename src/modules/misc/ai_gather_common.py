@@ -673,7 +673,7 @@ def recording_thread(runtime, debug_log_fn=None):
                     runtime,
                     after_id=last_frame_id,
                     timeout=frame_interval,
-                    copy=True,
+                    copy=False,
                 )
                 if frame is None:
                     frame = grab_frame(runtime)
@@ -940,13 +940,18 @@ def find_sprinkler(
     confidence_threshold,
     max_distance,
     target_label=None,
+    soft_confidence_threshold=None,
+    soft_radius=2.5,
 ):
+    """Find the sprinkler. Bees and effects covering it lower the model's confidence, so
+    with a soft threshold a weaker detection still counts when it sits within soft_radius
+    tiles of where the dead-reckoned position says the sprinkler should be."""
     if runtime.get("sprinkler_session") is None:
         runtime["last_sprinkler_status"] = "model_missing"
         return None
 
     if frame is None:
-        frame, _, _ = get_latest_frame(runtime, copy=True)
+        frame, _, _ = get_latest_frame(runtime, copy=False)
         if frame is None:
             frame = grab_frame(runtime)
     if runtime.get("sprinkler_model_kind") == "opencv_onnx":
@@ -955,7 +960,10 @@ def find_sprinkler(
         image = preprocess_coreml_image(frame, SPRINKLER_INPUT_WIDTH, SPRINKLER_INPUT_HEIGHT)
     with sprinkler_infer_lock(runtime):
         output = run_model(runtime, "sprinkler", image)
-    detections = decode_detections(runtime, "sprinkler", output, confidence_threshold)
+    decode_threshold = confidence_threshold
+    if soft_confidence_threshold is not None:
+        decode_threshold = min(confidence_threshold, soft_confidence_threshold)
+    detections = decode_detections(runtime, "sprinkler", output, decode_threshold)
 
     scale_x = runtime["capture"]["width"] / float(SPRINKLER_INPUT_WIDTH)
     scale_y = runtime["capture"]["height"] / float(SPRINKLER_INPUT_HEIGHT)
@@ -977,6 +985,12 @@ def find_sprinkler(
 
         if distance > max_distance:
             continue
+
+        if confidence < confidence_threshold:
+            expected_x = -runtime.get("current_x", 0.0)
+            expected_y = -runtime.get("current_y", 0.0)
+            if math.hypot(tx - expected_x, ty - expected_y) > soft_radius:
+                continue
 
         if distance < best_any_distance:
             best_any_distance = distance
@@ -1102,6 +1116,11 @@ def maybe_apply_sprinkler_anchor(
     max_passive_distance,
     force=False,
     debug_log_fn=None,
+    # the shared anchor dict also carries these detection settings, which
+    # refresh_sprinkler_anchor uses; a result that is already found does not.
+    confidence_threshold=None,
+    max_distance=None,
+    target_label=None,
 ):
     if not sprinkler_anchor_should_run(
         runtime,
@@ -1129,6 +1148,7 @@ def refresh_sprinkler_anchor(
     confidence_threshold,
     max_distance,
     target_label=None,
+    soft_confidence_threshold=None,
     force=False,
     frame=None,
     debug_log_fn=None,
@@ -1147,6 +1167,7 @@ def refresh_sprinkler_anchor(
         confidence_threshold=confidence_threshold,
         max_distance=max_distance,
         target_label=target_label,
+        soft_confidence_threshold=soft_confidence_threshold,
     )
     return apply_sprinkler_anchor_result(
         runtime,
@@ -1426,7 +1447,7 @@ def sprinkler_scanner_loop(
                 runtime,
                 after_id=after_id,
                 timeout=max(interval, 0.02),
-                copy=True,
+                copy=False,
             )
             if frame is None:
                 time.sleep(0.01)
@@ -1623,7 +1644,7 @@ def next_scan_frame(runtime, scan_interval):
         runtime,
         after_id=after_id,
         timeout=max(scan_interval, 0.02),
-        copy=True,
+        copy=False,
     )
     if frame is None:
         return grab_frame(runtime)
@@ -1732,7 +1753,7 @@ def move_if_far_enough(tx, ty, min_distance, move_fn):
 def prepare_recording(runtime, frame, filename_prefix, record_video, record_video_fps, debug_log_fn):
     """Make sure a video writer exists for the debug recording. Returns False when not recording."""
     if runtime.get("video_writer") is None:
-        mailbox_frame, _, _ = get_latest_frame(runtime, copy=True)
+        mailbox_frame, _, _ = get_latest_frame(runtime, copy=False)
         frame = mailbox_frame if mailbox_frame is not None else grab_frame(runtime)
 
     writer = ensure_video_writer(

@@ -540,6 +540,7 @@ class PlanterMixin:
 
         # Exhausted attempts — move on but warn the user
         self.logger.webhook("", f"Planter {planter.title()} still not found in inventory after {attempts} attempts. Keeping planter state and retrying later.", "orange", "screen")
+        updateHourlyTime()
         return False
 
     def confirmPlanterHarvest(self, planter):

@@ -8,7 +8,6 @@ from difflib import SequenceMatcher
 import cv2
 from modules.misc.imageManipulation import average_hash
 import numpy as np
-import pyautogui as pag
 from PIL import Image
 
 import modules.controls.mouse as mouse
@@ -378,11 +377,15 @@ class AutoGiftedBasicBeeRunner:
         item_y = self._roblox_window.my + item_pos[1]
         mouse.moveTo(item_x, item_y)
         time.sleep(0.15)
-        pag.mouseDown(button="left")
-        time.sleep(0.1)
-        mouse.moveTo(int(bee_slot[0]), int(bee_slot[1]), delay=0.25)
-        time.sleep(0.1)
-        pag.mouseUp(button="left")
+        # Use the shared helpers so the press carries the click state macOS 27 needs, and so a
+        # failed drag move cannot leave the button held.
+        try:
+            mouse.mouseDown()
+            time.sleep(0.1)
+            mouse.moveTo(int(bee_slot[0]), int(bee_slot[1]), delay=0.25)
+            time.sleep(0.1)
+        finally:
+            mouse.mouseUp()
 
     def _get_confirm_prompt_ocr(self):
         import modules.screen.ocr as ocr
