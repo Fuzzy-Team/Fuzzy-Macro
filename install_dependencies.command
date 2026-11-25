@@ -193,8 +193,13 @@ if [ "$python_ver" = '3.9' ] || { [ "$python_ver" = '3.8' ] && version_at_least 
 	# Use pip --force-reinstall to ensure a compatible opencv and numpy
 	# This installs the latest opencv-headless below 4.11 and enforces numpy<2
 	install_pip_package "opencv-python-headless<4.11 numpy<2" "--force-reinstall"
-	# Keep torch aligned with the version tested by coremltools.
-	install_pip_package "torch==2.7.0 torchvision==0.22.0" "--force-reinstall"
+	# Keep torch aligned with the version tested by coremltools. PyTorch publishes no Intel
+	# macOS wheels after 2.2.2, so Intel takes the newest one pip can find.
+	if [ "$chip" = "arm64" ]; then
+		install_pip_package "torch==2.7.0 torchvision==0.22.0" "--force-reinstall"
+	else
+		install_pip_package "torch torchvision"
+	fi
 	install_pip_package "coremltools"
 	install_pip_package "ocrmac"
 	install_pip_package "pyobjc-framework-ColorSync<12.0"
