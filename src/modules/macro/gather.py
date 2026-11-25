@@ -617,11 +617,6 @@ class GatherMixin:
                     inactiveChecks = 0
                 time.sleep(1)
 
-        gooThread = threading.Thread(target=gooTimerThread, daemon=True)
-        gooThread.start()
-        if inactiveHoneyResetEnabled:
-            inactiveHoneyThread = threading.Thread(target=inactiveHoneyTimerThread, daemon=True)
-            inactiveHoneyThread.start()
         mouse.moveBy(10,5)
         self.keyboard.releaseMovement()
 
@@ -681,6 +676,11 @@ class GatherMixin:
                     gatherSession.finish(gatherNameSpace)
 
         try:
+            gooThread = threading.Thread(target=gooTimerThread, daemon=True)
+            gooThread.start()
+            if inactiveHoneyResetEnabled:
+                inactiveHoneyThread = threading.Thread(target=inactiveHoneyTimerThread, daemon=True)
+                inactiveHoneyThread.start()
             if not self.acquireInventoryForGather():
                 stopGather()
                 return
