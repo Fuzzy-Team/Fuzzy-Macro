@@ -63,9 +63,16 @@ def fastClick():
     finally:
         pynputMouse.release(Button.left)
 
+#-1 when something on this Mac (a mouse utility, the system setting) reverses the macro's scrolls; set by the quest log's check
+scrollDirection = 1
+
+def setScrollDirection(direction):
+    global scrollDirection
+    scrollDirection = direction
+
 def scroll(clicks, pause = False):
     if virtual_display.active(): virtual_display.state(require_window=True)
-    pag.scroll(clicks, _pause = pause)
+    pag.scroll(clicks * scrollDirection, _pause = pause)
 
 def getPos():
     return virtual_display.to_local(*pag.position())

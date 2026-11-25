@@ -813,6 +813,33 @@ class QuestMixin:
                 prevHash = hash
             self.questMenuStep = 0
 
+        def calibrateScrollDirection():
+            """Scroll one notch and see which way the list moved; reverse the scroll direction if it moved the wrong way."""
+            def movement(before, after):
+                # +1 when the content moved up (scrolled down), -1 when it moved down, None when it did not move.
+                a, b = before.astype(np.int16), after.astype(np.int16)
+                if np.abs(a - b).mean() < 0.5:
+                    return None
+                limit = a.shape[0] // 4
+                up = min(np.abs(a[k:] - b[:-k]).mean() for k in range(1, limit))
+                down = min(np.abs(a[:-k] - b[k:]).mean() for k in range(1, limit))
+                if min(up, down) > 0.8 * max(up, down):
+                    return None
+                return 1 if up < down else -1
+            for notch in (-1, 1):  # at the top the list can only move down, so try the other way if it did not
+                before = screenshotQuest(self.robloxWindow.mh)
+                mouse.scroll(notch, True)
+                time.sleep(0.15)
+                moved = movement(before, screenshotQuest(self.robloxWindow.mh))
+                if moved is not None:
+                    if moved != -notch:
+                        mouse.setScrollDirection(-mouse.scrollDirection)
+                    self.scrollCalibrated = True
+                    return
+
+        if manageQuestUi and not reuseMenu and not getattr(self, "scrollCalibrated", False):
+            calibrateScrollDirection()
+
         # Return to the step where this giver's quest was last seen. The title match below
         # confirms it, and a miss rescrolls from the top with the menu still open.
         recordedStep = self.questGiverSteps.get(questGiver) if reuseMenu and self.questMenuStep is not None else None
