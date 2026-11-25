@@ -265,6 +265,9 @@ class AFBMixin:
 
     def _AFBRun(self, gatherInterrupt, turnOffShiftLock):
         returnVal = None
+        # Only true when the inventory dice search ran and left the inventory open.
+        # Initialized here because the cleanup below runs even when the dice branch is skipped.
+        closeInventoryAfterDice = False
         leftField = False
         def failedExit():
             return leftField if gatherInterrupt else None
@@ -338,12 +341,22 @@ class AFBMixin:
 
                     diceCoords = None
                     if diceslot == 0:
-                        diceCoords = self.findItemInInventory(self.setdat['AFB_dice'])
-                        if is_stopped():
-                            return failedExit()
-                        if diceCoords is None:
-                            self.logger.webhook("", f"{str(dice).title()}: Not found in inventory", "red")
-                            attempts = 0 # skip the attempts, the failure path below puts the camera back and starts the cooldown
+                        try:
+                            diceCoords = self.findItemInInventory(self.setdat['AFB_dice'])
+                        except FileNotFoundError:
+                            # A dice with no image in images/inventory (Smooth Dice has none) can never
+                            # be found by image search. Skip the dice loop instead of raising, which
+                            # would take the macro down mid-gather.
+                            self.logger.webhook("", f"{str(dice).title()}: No inventory image, use a hotbar slot", "red")
+                            attempts = 0
+                        else:
+                            # the search leaves the inventory open, so the failure path below closes it
+                            closeInventoryAfterDice = True
+                            if is_stopped():
+                                return failedExit()
+                            if diceCoords is None:
+                                self.logger.webhook("", f"{str(dice).title()}: Not found in inventory", "red")
+                                attempts = 0 # skip the attempts, the failure path below puts the camera back and starts the cooldown
 
                     for attempt in range(attempts):
                         bluetexts = ""
@@ -450,7 +463,7 @@ class AFBMixin:
                 if glitter:
                     self.saveAFB("AFB_glitter_cd")
                     self.AFBglitter = False
-                if diceslot == 0:
+                if closeInventoryAfterDice:
                     self.toggleInventory("close")
                 return failedExit()
         return failedExit()
