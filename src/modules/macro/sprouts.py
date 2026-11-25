@@ -84,12 +84,15 @@ class SproutMixin:
         if not self.setdat.get("sticker_sprout_watch", False):
             return False
         cooldownReady = self.hasRespawned("sticker_sprout", self.collectCooldowns.get("sticker_sprout", 3*60*60))
-        if cooldownReady:
-            text = self.readBlueText()
-            if self.isStickerSproutSpawnMessage(text):
-                self.stickerSproutDetectedAt = time.time()
-        recentlyDetected = self.stickerSproutDetectedAt and time.time() - self.stickerSproutDetectedAt < 10 * 60
-        return cooldownReady and (recentlyDetected or self.isScheduledStickerSproutWindow())
+        if not cooldownReady:
+            return False
+        # Already ready by a recent announcement or the schedule: reading the screen can't change the answer.
+        if self.isScheduledStickerSproutWindow() or (self.stickerSproutDetectedAt and time.time() - self.stickerSproutDetectedAt < 10 * 60):
+            return True
+        if self.isStickerSproutSpawnMessage(self.readBlueText()):
+            self.stickerSproutDetectedAt = time.time()
+            return True
+        return False
 
     def extractSproutRarity(self, text):
         if "sprout" not in text:
