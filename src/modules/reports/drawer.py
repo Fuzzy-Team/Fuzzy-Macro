@@ -566,7 +566,8 @@ class HourlyReportDrawer:
         cache = self.__dict__.setdefault("_fontCache", {})
         key = (weight, fontSize)
         if key not in cache:
-            cache[key] = ImageFont.truetype(f"hourly_report/Inter/static/Inter_18pt-{weight.title()}.ttf", fontSize)
+            fileWeight = {"bold": "Bold", "medium": "Medium", "semibold": "SemiBold"}[weight]
+            cache[key] = ImageFont.truetype(f"hourly_report/Inter/static/Inter_18pt-{fileWeight}.ttf", fontSize)
         return cache[key]
 
     def getGradientColorAtRatio(self, ratio, gradientSpec):
