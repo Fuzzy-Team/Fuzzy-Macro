@@ -121,7 +121,15 @@ class QuestMixin:
             idle = 0
             while (objective and objective["status"] == "incomplete" and objective["remaining"] is not None and idle < 5
                    and time.time() < deadline and not is_stopped()):
-                if not self.useItemInInventory(QUEST_ITEMS["jellybean"][0]):
+                # Find the beans once and use a batch, so each bean skips the inventory search.
+                with self.inventoryInteraction():
+                    spot = self._findItemInInventory(QUEST_ITEMS["jellybean"][0])
+                    if spot:
+                        for _ in range(max(1, min(15, objective["remaining"]))):
+                            if not self.useItemInInventory(x=spot[0], y=spot[1], closeInventoryAfter=False):
+                                break
+                        self.toggleInventory("close")
+                if not spot:
                     outOfBeans = True
                     break
                 time.sleep(2)
