@@ -249,7 +249,9 @@ class AFBMixin:
         glitterReady = glitter and self.hasAFBRespawned("AFB_glitter_cd", rebuff * 60)
         canUseGlitter = glitterReady and afbGlitter
         canUseDice = diceReady and not afbGlitter
-        return bool(canUseGlitter or canUseDice) and not self.failed
+        # The dice/glitter cooldowns already suppress a retry after a failed
+        # roll; _AFBRun clears the latch when the next boost is actually due.
+        return bool(canUseGlitter or canUseDice)
 
     def AFB(self, gatherInterrupt = False, turnOffShiftLock = False):  # Auto Field Boost - WOOHOO
         """Returns the target fields on a boost. On a gather interrupt, other exits return whether
@@ -290,6 +292,11 @@ class AFBMixin:
         diceReady = self.hasAFBRespawned("AFB_dice_cd", rebuff * 60)
         glitterReady = glitter and self.hasAFBRespawned("AFB_glitter_cd", rebuff * 60)
 
+        # A failed roll armed the cooldowns above; clear the latch once a boost is
+        # due again so the interrupt below can take AFB back to the hive.
+        if diceReady or (glitterReady and self.AFBglitter):
+            self.failed = False
+
         if gatherInterrupt:
             canUseGlitter = glitterReady and self.AFBglitter
             canUseDice = diceReady and not self.AFBglitter
@@ -305,7 +312,6 @@ class AFBMixin:
                 leftField = True
 
         if diceReady or (glitterReady and self.AFBglitter):
-            self.failed = False
             if self.setdat["Auto_Field_Boost"]:
                 if self.AFBglitter and glitterReady:
                     if is_stopped():
