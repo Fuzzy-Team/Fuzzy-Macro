@@ -1265,9 +1265,17 @@ class QuestMixin:
 
         def notchHeight(before, after):
             """How far one scroll notch moved the list: the offset that lines the two screens up."""
-            a = cv2.cvtColor(np.array(before), cv2.COLOR_RGBA2GRAY).astype(np.int16)
-            b = cv2.cvtColor(np.array(after), cv2.COLOR_RGBA2GRAY).astype(np.int16)
-            return min(range(1, a.shape[0] // 2), key=lambda offset: np.abs(a[offset:] - b[:-offset]).mean())
+            a = cv2.cvtColor(np.array(before), cv2.COLOR_RGBA2GRAY)
+            b = cv2.cvtColor(np.array(after), cv2.COLOR_RGBA2GRAY)
+
+            def best(a, b, offsets):
+                a, b = a.astype(np.int16), b.astype(np.int16)
+                return min(offsets, key=lambda offset: np.abs(a[offset:] - b[:-offset]).mean())
+
+            # Search a quarter-size copy first, then settle the exact offset on the full frame.
+            small = lambda frame: cv2.resize(frame, None, fx=0.25, fy=0.25, interpolation=cv2.INTER_AREA)
+            coarse = best(small(a), small(b), range(1, a.shape[0] // 8)) * 4
+            return best(a, b, range(max(1, coarse - 4), min(a.shape[0] // 2, coarse + 5)))
 
         def readRowsBelow():
             """A long quest runs past the bottom of the screen: scroll on and read the rows below by their text."""
