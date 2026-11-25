@@ -533,6 +533,9 @@ class MacroProfileStore:
         if fields:
             content = str(data)
         else:
+            for key, value in data.items():
+                if "\n" in str(value) or "\r" in str(value):
+                    raise MacroProfileValidationError(str(key), "value cannot contain line breaks")
             content = "\n".join(f"{key}={value}" for key, value in data.items())
         if content and not content.endswith("\n"):
             content += "\n"
