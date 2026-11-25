@@ -43,6 +43,7 @@ RECORD_VIDEO_FPS = 12.0
 CONTINUOUS_SCAN_INTERVAL = 0.08
 FEED_READ_INTERVAL = 3.0
 FEED_LINE_LIFETIME = 6.0
+PETALS_PER_READ = 3
 PETAL_FEED_LINE = re.compile(r"\+\s*(\d[\d,.]*)\s*hon\w*\s*\(\s*from\s+(\w+)\s+bloom\s*pet")
 CONTINUOUS_MIN_REPLAN_DISTANCE = 0.08
 TARGET_LOCK_LOST_TIMEOUT = 0.9
@@ -178,10 +179,12 @@ def _anchor_kwargs():
 
 
 def _petal_feed_loop(counts, stop_event):
-    """Adds up honey from caught petals using the honey feed. The feed keeps one line per petal
-    colour ("+21,300 Honey (from Blue Bloom Petal)") and raises its amount as more petals land,
-    so a rise is more petals. A colour that left the feed, or comes back lower, is a new bloom.
-    Reads once more after the stop so petals from the last few seconds are counted."""
+    """Estimates petals caught from the honey feed. The feed keeps one line per petal colour
+    ("+21,300 Honey (from Blue Bloom Petal)") and raises its amount as each petal lands, so a rise
+    is at least one more petal. Petals are worth very different amounts, so a rise only counts as
+    several petals when it's at least 1.5x the last petal, and as no more than PETALS_PER_READ.
+    A colour that left the feed, or comes back lower, is a new bloom. Reads once more after the
+    stop so petals from the last few seconds are counted."""
     tracked = {}
     while True:
         stopping = stop_event.wait(FEED_READ_INTERVAL)
@@ -190,12 +193,16 @@ def _petal_feed_loop(counts, stop_event):
         for amount, colour in PETAL_FEED_LINE.findall(self.readBlueText()):
             lines[colour] = max(lines.get(colour, 0), int(re.sub(r"\D", "", amount)))
         for colour, amount in lines.items():
-            last_amount, last_seen = tracked.get(colour, (0, 0.0))
+            last_amount, last_seen, per_petal = tracked.get(colour, (0, 0.0, 0))
             if now - last_seen > FEED_LINE_LIFETIME or amount < last_amount:
                 counts["blooms"] += 1
-                last_amount = 0
-            counts["honey"] += max(amount - last_amount, 0)
-            tracked[colour] = (max(amount, last_amount), now)
+                last_amount, per_petal = 0, 0
+            rise = amount - last_amount
+            if rise > 0:
+                petals = min(PETALS_PER_READ, max(1, int(rise / (per_petal * 1.5)))) if per_petal else 1
+                counts["petals"] += petals
+                per_petal = rise / petals
+            tracked[colour] = (max(amount, last_amount), now, per_petal)
         if stopping:
             return
 
@@ -205,7 +212,7 @@ def _ensure_petal_counter(runtime):
     if thread is not None and thread.is_alive():
         return
     # Each gather gets its own totals, so a read that outlives the gather can't add to the next one.
-    counts = {"blooms": 0, "honey": 0}
+    counts = {"blooms": 0, "petals": 0}
     stop_event = threading.Event()
     thread = threading.Thread(target=_petal_feed_loop, args=(counts, stop_event), daemon=True)
     runtime["petal_counts"] = counts
@@ -222,10 +229,10 @@ def onGatherEnd():
     thread = runtime.pop("petal_feed_thread", None)
     if thread is not None:
         thread.join(timeout=2.0)
-    counts = runtime.pop("petal_counts", None) or {"blooms": 0, "honey": 0}
+    counts = runtime.pop("petal_counts", None) or {"blooms": 0, "petals": 0}
     agc.shutdown_runtime(runtime, _debug_log)
     if counts["blooms"]:
-        self.logger.webhook("", f"Blooms AI: caught petals from {counts['blooms']} blooms for {counts['honey']:,} honey", "light blue")
+        self.logger.webhook("", f"Blooms AI: caught about {counts['petals']} petals from {counts['blooms']} blooms", "light blue")
 
 
 def _record_debug_frame(runtime, frame, detections, target):
@@ -294,7 +301,7 @@ def _annotate_recording_frame(runtime, frame):
             f"active_bloom=({active_bloom.get('tx', 0.0):.2f},{active_bloom.get('ty', 0.0):.2f}) contact={overlay.get('bloom_contact_distance', 0.0):.2f}/{BLOOM_CONTACT_MAX_TOTAL_MOVE:.2f}"
         )
     petal_counts = overlay.get("petal_counts") or {}
-    status_lines.append(f"petal blooms={petal_counts.get('blooms', 0)} petal honey={petal_counts.get('honey', 0):,}")
+    status_lines.append(f"petal blooms={petal_counts.get('blooms', 0)} petals={petal_counts.get('petals', 0)}")
     orbit_center = overlay.get("petal_orbit_center")
     if isinstance(orbit_center, (tuple, list)) and len(orbit_center) == 2:
         seconds_left = max(0.0, float(overlay.get("petal_orbit_deadline", 0.0)) - time.time())
