@@ -97,7 +97,8 @@ class MacroProfileStore:
     MIGRATION_FILE = ".migration_version"
     # One-time upgrades, in order. Append new ones to the end and never reorder or remove
     # them: each profile stores how many have run, so the version bumps by itself.
-    MIGRATIONS = ("_migrate_legacy_settings", "_migrate_priority_tasks")
+    # The priority step runs a second time to add the quest giver tasks introduced after it first ran.
+    MIGRATIONS = ("_migrate_legacy_settings", "_migrate_priority_tasks", "_migrate_priority_tasks")
     # Gather patterns that lost their version suffix. Saved and imported `shape` values are mapped on load.
     PATTERN_RENAMES = {"bamb_dupe_v11": "bamb_dupe", "pine_dupe_v12": "pine_dupe", "octo_v4": "octo"}
 

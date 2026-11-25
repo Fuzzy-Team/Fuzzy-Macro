@@ -4,8 +4,11 @@ import time
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
 import modules.macro.planter_bonus_loot as bonusLoot
+from modules.macro.game_data import quest_data
 from modules.misc.badgeData import badge_id_from_task, gather_overrides, get_badge, resolve_gather_field, setting_key
-from modules.quest_planning import quest_giver_order, choose_quest_gather, is_gather_objective, allowed_fields, quest_uses_ant_challenge, kill_objective_mob
+from modules.quest_planning import (quest_giver_order, choose_quest_gather, is_gather_objective, allowed_fields,
+                                    quest_uses_ant_challenge, kill_objective_mob, manual_objective_name, objective_allowed,
+                                    FIXED_LINE_GIVERS, QUEST_BLENDER_SETTING, QUEST_VICIOUS_SETTING)
 from modules.controls.sleep import (
     InterruptRequested,
     INTERRUPT_NONE,
@@ -25,6 +28,8 @@ from modules.controls.sleep import (
 
 # Quest titles that are primarily bloom-petal objectives and can be skipped by setting.
 HARDCODED_PETAL_IGNORE_TITLES = {"petal tabbouleh", "petals", "mashed blooms"}
+# Collects a quest row can ask for even when their own setting is off (see questWantsCollect).
+QUEST_COLLECTS = ("wind_shrine", "memory_match", "mega_memory_match", "extreme_memory_match")
 
 
 def loadBlenderData():
@@ -194,12 +199,14 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
     
     taskCompleted = True
     questCache = {}
+    emptyHandIns = {}
     questScanScreens = None
     macro.questGatherInterruptMobs = {}
     macro.questTaskWatchers = {}
     macro.deferredQuestObjectives = set()
     macro.completedQuestWatchTasks = set()
     macro.completedQuestWatchObjectives = set()
+    macro.manualQuestNotices = {}
     
     macro.start()
     lastIdleClick = time.time()
@@ -349,6 +356,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                 "tunnelBear": "kill_tunnel_bear",
                 "stumpSnail": "kill_stump_snail",
                 "stingerHunt": "stinger_hunt",
+                "shareJellyBeans": "use_jellybean",
             }
             return taskKeys.get(functionName)
 
@@ -530,6 +538,28 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
         except Exception:
             return False
 
+    def switchOffQuestGiver(questGiver):
+        key = questGiver.replace(" ", "_") + "_quest"
+        macro.setdat[key] = False
+        settingsManager.saveProfileSetting(key, False)
+        macro.logger.webhook(f"{questGiver.title()}: no more quests", "Switched this quest giver off.", "light blue",
+                             ping_category="ping_quests", route_category="quests")
+
+    def noticeManualObjectives(questGiver):
+        """Tell the user once when everything left in a quest is theirs to do."""
+        rows = [row for row in (macro.questObservations.get(questGiver) or []) if row["status"] != "complete"]
+        if not rows or any(objective_allowed(row, macro.setdat) and not macro.questItemIsShort(row["id"]) for row in rows) \
+                or all(row["status"] == "unknown" for row in rows):
+            return
+        names = [manual_objective_name(row["action"]) for row in rows]
+        notice = (rows[0]["title"], tuple(names))
+        if macro.manualQuestNotices.get(questGiver) == notice:
+            return
+        macro.manualQuestNotices[questGiver] = notice
+        macro.logger.webhook(f"{questGiver.title()} - {rows[0]['title'].title()}",
+                             "Waiting on you for:\n" + "\n".join(names), "light blue",
+                             ping_category="ping_quests", route_category="quests")
+
     def handleQuest(questGiver, executeQuest=True, keepMenuOpen=False):
         nonlocal questScanScreens, taskCompleted
         cached = questGiver in questCache and questCache[questGiver] is not None and not taskCompleted
@@ -556,9 +586,20 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                 return [], []
             if submitting:
                 macro.hourlyReport.addHourlyStat("quests_completed", 1)
+            # A fixed list of quests ended: the giver was reached and has nothing more to hand out.
+            # Off after the last quest of its list, or after three hand-ins in a row that brought nothing
+            # (a quest read can miss, and a quest can be locked, so one empty answer is not enough).
+            if (objectives is None and questGiver in FIXED_LINE_GIVERS and not is_stopped()
+                    and macro.findQuest(questGiver) is None and not is_stopped()):
+                emptyHandIns[questGiver] = emptyHandIns.get(questGiver, 0) + 1
+                if (submitting and title == list(quest_data[questGiver])[-1]) or emptyHandIns[questGiver] >= 3:
+                    switchOffQuestGiver(questGiver)
+            else:
+                emptyHandIns.pop(questGiver, None)
             questCache.pop(questGiver, None)
             macro.completedQuestWatchTasks.clear()
             macro.completedQuestWatchObjectives.clear()
+        noticeManualObjectives(questGiver)
         requiredTasks, feeds = [], []
         macro.questGatherInterruptMobs.pop(questGiver, None)
         for task, watchers in macro.questTaskWatchers.items():
@@ -568,6 +609,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
             tasks = []
             if kind == "kill":
                 mob = kill_objective_mob(objective)
+                mob = {"kingbeetle": "king_beetle", "tunnelbear": "tunnel_bear"}.get(mob, mob)
                 if "ant" in mob and mob != "mantis":
                     tasks = ["ant_challenge", "ant_pass_dispenser"]
                 else:
@@ -575,19 +617,38 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                     if mob in regularMobData:
                         macro.questGatherInterruptMobs.setdefault(questGiver, set()).add(mob)
                 watchTask = "kill_" + mob
+            elif kind == "collect" and target == "field-booster":
+                tasks = ["field_booster"]
+                watchTask = None
             elif kind == "collect":
                 tasks = [target.replace("-", "_")]
                 watchTask = "collect_" + tasks[0]
             elif kind == "feed":
                 amount, item = target.split("_", 1)
                 feeds.append((item, 25 if amount == "*" else int(amount)))
-                watchTask = "feed_" + item
+                watchTask = "feed_" + item.replace(" ", "_")
             elif quest_uses_ant_challenge(objective, macro.setdat):
                 tasks = ["ant_challenge", "ant_pass_dispenser"]
                 watchTask = objective
             elif kind == "token" and target == "honey":
                 tasks = ["honeytoken"]
                 watchTask = None
+            elif kind == "use" and target.endswith("jellybean") and macro.setdat.get("quest_use_jelly_beans"):
+                tasks = ["jelly_beans"]
+                watchTask = "use_jellybean"
+            elif kind == "donate" and macro.setdat.get("quest_donate_wind_shrine"):
+                macro.questTaskWatchers.setdefault("collect_wind_shrine", []).append((questGiver, objective))
+                continue
+            elif kind == "vicious" and macro.setdat.get(QUEST_VICIOUS_SETTING):
+                tasks = ["vicious_quest_hop"]
+                watchTask = None
+            elif kind == "craft" and macro.setdat.get(QUEST_BLENDER_SETTING, "none") != "none":
+                tasks = ["blender_quest_craft"]
+                watchTask = None
+            elif kind == "pairs" and macro.setdat.get("quest_play_memory_match"):
+                for task in ("collect_memory_match", "collect_mega_memory_match", "collect_extreme_memory_match"):
+                    macro.questTaskWatchers.setdefault(task, []).append((questGiver, objective))
+                continue
             else:
                 continue
             requiredTasks.extend(tasks)
@@ -625,6 +686,55 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
             if taskName == "honeytoken":
                 continue
 
+            if taskName == "jelly_beans":
+                # Rows backed off for a while are not worth a trip; leave the loop free to wait or gather.
+                if macro.pendingJellyBeanRows():
+                    runTask(macro.shareJellyBeans, resetAfter=False)
+                    taskCompleted = True
+                continue
+
+            if taskName == "field_booster":
+                # Any booster counts, so take whichever is off cooldown.
+                ready = [name for name in macroModule.fieldBoosterData if macro.hasRespawned(name, macro.collectCooldowns[name])]
+                if ready:
+                    runTask(macro.collect, args=(ready[0],))
+                    taskCompleted = True
+                continue
+
+            if taskName == "vicious_quest_hop":
+                if macro.pendingQuestObjectives("vicious"):
+                    questMode = macro.setdat.get("macro_mode", "normal") == "quest"
+                    macro.questVicHopped = True
+                    try:
+                        runTask(macro.viciousHop, resetAfter=False, allowAFB=False)
+                    finally:
+                        # Only Quest Mode keeps hopping; elsewhere go home after this one search.
+                        if not questMode:
+                            macro.questVicHopped = False
+                    if not questMode:
+                        runTask(macro.rejoin, resetAfter=False)
+                    taskCompleted = True
+                continue
+
+            if taskName == "blender_quest_craft":
+                rows = macro.pendingQuestObjectives("craft")
+                blenderData = loadBlenderData()
+                if rows and time.time() >= blenderData["collectTime"]:
+                    craft = (macro.setdat[QUEST_BLENDER_SETTING], macro.questItemsLeft(rows[0]))
+                    collectTimeBefore = blenderData["collectTime"]
+                    runTask(macro.blender, args=(blenderData, craft))
+                    # A craft that started moves the collect time; if it did not, leave the row alone for a while.
+                    if loadBlenderData()["collectTime"] == collectTimeBefore:
+                        macro.questItemShort[rows[0]["id"]] = time.time()
+                    taskCompleted = True
+                continue
+
+            if taskName in ("king_beetle", "tunnel_bear"):
+                if macro.hasRespawned(taskName, bossCooldowns[taskName], applyMobRespawnBonus=True):
+                    runTask(macro.kingBeetle if taskName == "king_beetle" else macro.tunnelBear)
+                    taskCompleted = True
+                continue
+
             if taskName in regularMobData:
                 killedInAnyField = False
                 for field in regularMobData[taskName]:
@@ -633,6 +743,12 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                         killedInAnyField = True
                 if killedInAnyField:
                     taskCompleted = True
+
+    def returnFromQuestVicHop():
+        """Rejoin the user's own server once no quest needs vicious bees any more."""
+        if macro.questVicHopped and not macro.pendingQuestObjectives("vicious"):
+            macro.questVicHopped = False
+            runTask(macro.rejoin, resetAfter=False)
 
     def runReadyQuestInterruptMobs():
         """Kill ready quest mobs before the normal task queue starts gathering."""
@@ -683,7 +799,9 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
         return [objective for giver in quest_giver_order(macro.setdat)
                 for objective in (getattr(macro, "questObservations", {}).get(giver) or [])
                 if is_gather_objective(objective, macro.setdat) and objective["status"] != "complete"
-                and objective["id"] not in macro.deferredQuestObjectives]
+                and objective["id"] not in macro.deferredQuestObjectives and not macro.questItemIsShort(objective["id"])
+                # Item rows only need a trip while there is something to use.
+                and (objective["kind"] != "use" or (objective["status"] == "incomplete" and macro.questItemsLeft(objective) > 0))]
 
     def runQuestGathers():
         nonlocal questScanScreens, taskCompleted
@@ -839,6 +957,11 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
         if mode not in ("bug", "boost", "resources") and any(giver not in questCache and canClaimTimedBearQuest(giver)
                                  for giver in quest_giver_order(macro.setdat)):
             return True
+        if (mode == "quest" and macro.setdat.get(QUEST_BLENDER_SETTING, "none") != "none"
+                and macro.pendingQuestObjectives("craft")):
+            blender = loadBlenderData()
+            if time.time() >= blender["collectTime"]:
+                return True
         tasks = macro.questTaskWatchers if mode == "quest" else get_task_list_order(macro.setdat)
         for task in tasks:
             if task.startswith("kill_"):
@@ -852,7 +975,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                     return True
             elif task.startswith("collect_") and mode != "bug":
                 item = task[8:]
-                if not macro.setdat.get(item, False):
+                if not (macro.setdat.get(item, False) or macro.questWantsCollect(item)):
                     continue
                 if item == "sticker_stack":
                     if macro.hasStickerStackRespawned():
@@ -1013,14 +1136,27 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
 
         if macro.setdat.get("macro_mode", "normal") == "quest":
             # Hand in every finished quest before starting work on any quest, new or old.
-            claimed = [handleQuest(giver) for giver in quest_giver_order(macro.setdat)
+            # While hopping for Vicious Bees there is no hive to hand in at, so only read the quest log.
+            hopping = macro.questVicHopped
+            claimed = [handleQuest(giver, executeQuest=not hopping) for giver in quest_giver_order(macro.setdat)
                        if canClaimTimedBearQuest(giver)]
+            returnFromQuestVicHop()
             for requiredTasks, feeds in claimed:
+                if macro.questVicHopped:
+                    requiredTasks, feeds = [task for task in requiredTasks if task == "vicious_quest_hop"], []
                 for task in requiredTasks:
                     macro.setdat[task] = True
                 runQuestSupportTasks(requiredTasks)
                 for item, quantity in feeds:
                     runTask(macro.feedBee, args=(item, quantity), resetAfter=False)
+            if macro.questVicHopped:
+                # Keep hopping until the quest log shows the vicious bees done, rather than working in a public server.
+                continue
+            for name in QUEST_COLLECTS:
+                if macro.questWantsCollect(name) and macro.hasRespawned(name, macro.collectCooldowns[name]):
+                    runTask(macro.collect, args=(name,))
+                    macro.backOffFailedQuestCollect(name)
+                    taskCompleted = True
             runQuestGathers()
             waitForReadyTask()
             continue
@@ -1178,9 +1314,12 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                 for requiredTasks, feeds in claimed:
                     for task in requiredTasks:
                         macro.setdat[task] = True
-                for _, feeds in claimed:
+                for requiredTasks, feeds in claimed:
                     for item, quantity in feeds:
                         runTask(macro.feedBee, args=(item, quantity), resetAfter=False)
+                    runQuestSupportTasks([task for task in requiredTasks
+                                          if task in ("jelly_beans", "field_booster", "vicious_quest_hop", "blender_quest_craft")])
+                returnFromQuestVicHop()
                 return True
 
             if taskId.startswith("badge_"):
@@ -1246,11 +1385,12 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                 
                 # Regular collect items
                 if collectName in macroModule.collectData:
-                    if macro.setdat[collectName] and macro.hasRespawned(collectName, macro.collectCooldowns[collectName]):
+                    if (macro.setdat[collectName] or macro.questWantsCollect(collectName)) and macro.hasRespawned(collectName, macro.collectCooldowns[collectName]):
                         if collectName == "wreath" and not isBackpackReadyForWreath():
                             macro.logger.webhook("", "Honey Wreath ready, but backpack is not full yet. Deferring claim", "dark brown", "screen")
                             return False
                         runTask(macro.collect, args=(collectName,))
+                        macro.backOffFailedQuestCollect(collectName)
                         executedTasks.add(taskId)
                         return True
             

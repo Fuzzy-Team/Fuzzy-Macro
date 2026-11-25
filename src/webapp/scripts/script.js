@@ -921,6 +921,11 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
       badge_mountain_top: "Badge: Mountain Top",
       badge_goo: "Badge: Goo",
       badge_honey: "Badge: Honey",
+      quest_panda_bear: "Quest: Panda Bear",
+      quest_science_bear: "Quest: Science Bear",
+      quest_mother_bear: "Quest: Mother Bear",
+      quest_onett: "Quest: Onett",
+      quest_spirit_bear: "Quest: Spirit Bear",
       blender: "Blender",
       planters: "Planters",
     };

@@ -1,0 +1,35 @@
+# Fly toward Pepper and follow its route up past the Coconut palm.
+self.keyboard.press(".")
+self.keyboard.slowPress("e")
+sleep(0.12)
+self.keyboard.keyDown("w")
+self.keyboard.slowPress("space")
+self.keyboard.slowPress("space")
+sleep(4.2)
+self.keyboard.slowPress(",")
+sleep(1.5)
+self.keyboard.keyUp("w")
+self.keyboard.slowPress("space")
+sleep(0.5)
+self.keyboard.walk("d",2.5)
+self.keyboard.walk("w",0.6)
+for _ in range(3):
+    self.keyboard.keyDown("w")
+    self.keyboard.slowPress('space')
+    sleep(0.2)
+    self.keyboard.keyUp("w")
+self.keyboard.walk('w',2)
+self.keyboard.keyDown("w")
+self.keyboard.slowPress('space')
+sleep(0.2)
+self.keyboard.keyUp("w")
+sleep(0.5)
+# Spirit Bear's white disk is on the ledge to the right of the palm: hop right onto the ledge and along it until his prompt shows.
+for _ in range(10):
+    if self.isBesideE(["talk", "spirit"]):
+        break
+    self.keyboard.keyDown("d")
+    self.keyboard.slowPress("space")
+    sleep(0.3)
+    self.keyboard.keyUp("d")
+    sleep(0.4)

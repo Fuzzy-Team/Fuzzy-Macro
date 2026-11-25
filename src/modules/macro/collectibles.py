@@ -37,11 +37,13 @@ class CollectiblesMixin:
         def getShrineItemAliases(value):
             normalizedValue = normalizeShrineItemName(value)
             aliases = {normalizedValue}
+            # A full item name must not also accept longer ones containing it ("treat" and "star treat").
+            isKnownItem = any(normalizeShrineItemName(knownItem) == normalizedValue for knownItem in windShrineDonationItems)
             for knownItem in windShrineDonationItems:
                 if normalizeShrineItemName(knownItem) == normalizedValue:
                     aliases.add(normalizeShrineItemName(knownItem))
                     continue
-                if normalizedValue and normalizedValue in normalizeShrineItemName(knownItem):
+                if normalizedValue and not isKnownItem and normalizedValue in normalizeShrineItemName(knownItem):
                     aliases.add(normalizeShrineItemName(knownItem))
             if normalizedValue.endswith("y"):
                 aliases.add(normalizedValue[:-1] + "ies")
@@ -83,7 +85,8 @@ class CollectiblesMixin:
                 if result:
                     dialogVisible = True
                     _score, loc = result
-                    clickY = searchY + loc[1] + shrineScaleY(35)
+                    # The middle of the "Click to continue" line, which sits just inside the bottom of the box.
+                    clickY = searchY + (loc[1] + dialogImg.shape[0] // 2) // self.robloxWindow.multi
                 else:
                     try:
                         dialogText = ''.join([x[1][0] for x in ocr.ocrRead(mssScreenshot(searchX, searchY, searchW, searchH))]).lower()
@@ -110,7 +113,7 @@ class CollectiblesMixin:
                 if not result:
                     break
                 _score, loc = result
-                mouse.moveTo(clickX, searchY + loc[1] + shrineScaleY(35))
+                mouse.moveTo(clickX, searchY + (loc[1] + dialogImg.shape[0] // 2) // self.robloxWindow.multi)
                 mouse.click()
                 time.sleep(0.2)
 
@@ -138,6 +141,12 @@ class CollectiblesMixin:
         item = str(self.setdat.get("wind_shrine_item", "field dice")).replace("_", " ").lower()
         itemAliases = getShrineItemAliases(item)
         quantity = max(1, int(self.setdat.get("wind_shrine_quantity", 1) or 1))
+        # A waiting quest donation goes first, in place of the settings' item for this visit.
+        questDonation = next(iter(self.pendingQuestObjectives("donate")), None)
+        if questDonation:
+            item = questDonation["action"].partition("_")[2].partition("_")[2]
+            itemAliases = getShrineItemAliases(item)
+            quantity = self.questItemsLeft(questDonation)
         time.sleep(2)
 
         # Open the shrine item selector from the initial dialog.
@@ -165,8 +174,12 @@ class CollectiblesMixin:
         nextY = selectorCenterY - shrineScaleY(45)
         for _ in range(80):
             selectedItemText = readSelectedShrineItem(nameX, nameY, nameW, nameH)
+            knownNames = [normalizeShrineItemName(known) for known in windShrineDonationItems]
+            # "treat" is not the selected item when the shrine shows "star treat".
             if len(selectedItemText) >= 3 and any(
-                alias in selectedItemText or selectedItemText in alias for alias in itemAliases
+                (alias in selectedItemText or selectedItemText in alias)
+                and not any(alias in known and known != alias and known in selectedItemText for known in knownNames)
+                for alias in itemAliases
             ):
                 foundItem = True
                 break
@@ -182,12 +195,16 @@ class CollectiblesMixin:
         if not foundItem:
             self.logger.webhook("", f"Wind Shrine offering failed: could not find {item.title()} in shrine selector", "red", "screen")
             self.keyboard.press("e")
+            if questDonation:
+                self.questItemShort[questDonation["id"]] = time.time()
             return None
 
         addX = selectorCenterX + shrineScaleX(157)
         addY = selectorCenterY + shrineScaleY(40)
         mouse.moveTo(addX, addY)
         for _ in range(max(0, quantity - 1)):
+            if is_stopped():
+                return None
             mouse.click()
             time.sleep(0.04)
 
@@ -198,6 +215,8 @@ class CollectiblesMixin:
         time.sleep(2)
         clickWindShrineDialogsUntilGone()
         self.logger.webhook("", f"Offered {item.title()} x{quantity} to Wind Shrine", "bright green", "screen")
+        if questDonation:
+            self.questItemUses[questDonation["id"]] = self.questItemUses.get(questDonation["id"], 0) + quantity
         time.sleep(0.5)
         lootWindShrineTokens()
         self.logger.webhook("", "Collected loot from Wind Shrine", "bright green", "screen")
@@ -617,7 +636,7 @@ class CollectiblesMixin:
                 self.logger.webhook("", f"Solving: {displayName}", "dark brown", "screen")
                 self.canDetectNight = False
                 try:
-                    self.memoryMatch.solveMemoryMatch(mmType, self.setdat.get("memory_match_rewards", []))
+                    self.memoryMatch.solveMemoryMatch(mmType, self.memoryMatchRewards())
                 finally:
                     self.canDetectNight = True
                 time.sleep(2)
@@ -680,7 +699,9 @@ class CollectiblesMixin:
         time.sleep(0.1)
         mouse.click()
 
-    def blender(self, blenderData):
+    def blender(self, blenderData, questCraft=None):
+        """questCraft: (item, quantity) a quest asked for, crafted instead of the next Blender slot.
+        The slot cycle is left as it was. Returns False when the quest item can't be crafted."""
         self.set_task_status("blender", activity="blender")
         itemNo = blenderData["item"]
         st = time.time()
@@ -757,7 +778,7 @@ class CollectiblesMixin:
 
         #check if item is none (settings got changed but user did not reset the blender data)
         #or first blender of the reset, or a stale saved slot
-        if blenderData["collectTime"] == 0 or staleItem:
+        if not questCraft and (blenderData["collectTime"] == 0 or staleItem):
             itemNo = getNextItem() #get the first item
             if not itemNo and blenderData["collectTime"] <= 0: #no items available and no craft to collect
                 blenderData["item"] = itemNo
@@ -823,6 +844,7 @@ class CollectiblesMixin:
         #check if blender is done and click on end crafting
         doneImg = self.adjustImage("images/menu", "blenderdone")
         res = locateImageInScreen(doneImg, screen, 0.75)
+        collected = bool(res)
         if res:
             print("done")
             clickOnBlenderElement(*res[1])
@@ -865,7 +887,13 @@ class CollectiblesMixin:
                 cancelCraft()
         
         #time to craft
-        if not itemNo: #if itemNo is 0, there are no items to craft. The macro has collected the last item to craft
+        if questCraft and collected:
+            # Read the quest log again before crafting more, so a batch it already counts is not crafted twice.
+            self.closeBlenderGUI()
+            blenderData["collectTime"] = time.time()
+            saveBlenderData()
+            return True
+        if not questCraft and not itemNo: #if itemNo is 0, there are no items to craft. The macro has collected the last item to craft
             self.closeBlenderGUI()
             if is_stopped():
                 updateHourlyTime()
@@ -874,7 +902,7 @@ class CollectiblesMixin:
             blenderData["collectTime"] = -1 #set collectTime to -1 (disable blender)
             saveBlenderData()
             return
-        item = self.setdat[f"blender_item_{itemNo}"]
+        item = questCraft[0] if questCraft else self.setdat[f"blender_item_{itemNo}"]
         #click to the item
         itemDisplay = item.title()
         mouse.moveTo(self.robloxWindow.mx+(self.robloxWindow.mw/2+240), self.robloxWindow.my+(math.floor(self.robloxWindow.mh*0.48))+128)
@@ -887,6 +915,11 @@ class CollectiblesMixin:
         #check if the item can be crafted
         canMake = self.adjustImage("images/menu", "blendermake")
         if not locateImageOnScreen(canMake, x, y, 560, 480, 0.8):
+            if questCraft:
+                self.logger.webhook("", f"Unable to craft {itemDisplay} for a quest", "orange", "screen")
+                self.closeBlenderGUI()
+                updateHourlyTime()
+                return False
             skipUnavailableCraft(f"Unable to craft {itemDisplay}")
             return
         #open the crafting menu
@@ -899,7 +932,7 @@ class CollectiblesMixin:
         #set the quantity
         mouse.moveTo(self.robloxWindow.mx+(self.robloxWindow.mw/2-60), self.robloxWindow.my+(math.floor(self.robloxWindow.mh*0.48))+140)
         #check if max
-        if self.setdat[f"blender_quantity_max_{itemNo}"]:
+        if not questCraft and self.setdat[f"blender_quantity_max_{itemNo}"]:
             #get a screenshot of the quantity
             #add more
             #get another screenshot
@@ -932,7 +965,7 @@ class CollectiblesMixin:
                 quantity = 0
         else: 
             #normal quantity
-            quantity = self.setdat[f"blender_quantity_{itemNo}"]
+            quantity = questCraft[1] if questCraft else self.setdat[f"blender_quantity_{itemNo}"]
             for _ in range(quantity-1): #-1 because the quantity starts from 1
                 if is_stopped():
                     updateHourlyTime()
@@ -948,10 +981,11 @@ class CollectiblesMixin:
         mouse.click()
         #go to next item
         #decrement the repeat count
-        if not self.setdat[f"blender_repeat_inf_{itemNo}"]:
-            self.setdat = {**self.setdat, **settingsManager.incrementProfileSetting(f"blender_repeat_{itemNo}", -1)}
-            self.updateGUI.value = 1
-        blenderData["item"] = getNextItem()
+        if not questCraft:
+            if not self.setdat[f"blender_repeat_inf_{itemNo}"]:
+                self.setdat = {**self.setdat, **settingsManager.incrementProfileSetting(f"blender_repeat_{itemNo}", -1)}
+                self.updateGUI.value = 1
+            blenderData["item"] = getNextItem()
         #calculate the time to collect the blender
         craftTime = quantity*5*60 #5mins per item
         blenderData["collectTime"] = time.time() + craftTime
@@ -963,6 +997,7 @@ class CollectiblesMixin:
         #store the data
         saveBlenderData()
         self.closeBlenderGUI()
+        return True
 
     def claimStickerStack(self):
         time.sleep(1)
