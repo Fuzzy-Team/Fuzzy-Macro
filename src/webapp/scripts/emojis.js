@@ -184,7 +184,12 @@ const questGiverEmojis = {
     honey_bee_quest: "🐝",
     bucko_bee_quest: "💙",
     riley_bee_quest: "❤️",
-    black_bear_quest: "🐻"
+    black_bear_quest: "🐻",
+    panda_bear_quest: "🐼",
+    science_bear_quest: "🔬",
+    mother_bear_quest: "🐻",
+    onett_quest: "🧑‍💻",
+    spirit_bear_quest: "👻"
 }
 
 const diceIcons = {
