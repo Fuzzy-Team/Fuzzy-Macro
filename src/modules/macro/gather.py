@@ -817,7 +817,10 @@ class GatherMixin:
                                 currentSproutRarity = sproutInfo["rarity"]
                             if self.isSproutCompletionMessage(sproutInfo.get("text", "")):
                                 sproutCompletionMessageSeen = True
-                        if sproutCompletionMessageSeen and not self.blueSproutMessageVisible():
+                        # blueSproutMessageInfo() read this tick's blue text already, and it is None
+                        # exactly when that text has no "sprout" in it, so a second capture would
+                        # only report the same frame.
+                        if sproutCompletionMessageSeen and sproutInfo is None:
                             self.logger.webhook("Sprouts", f"Detected sprout pop message; planting next sprout ({self.sproutBeansUsed + 1}/{self._sproutBeanLimit()}).", "light blue", "screen", route_category="activities")
                             plantSproutBean()
                         else:
