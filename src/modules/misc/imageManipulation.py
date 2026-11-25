@@ -32,8 +32,15 @@ def pillowToCv2(img):
 
 #resize the image based on the user's screen coordinates
 #cached, so callers share the returned array and must not modify it in place
-@lru_cache(maxsize=None)
+#a missing image is cached too (as None), so items that only have an OCR lookup don't rescan the folder every call
 def adjustImage(folder, imageName, display_type):
+    img = _loadImage(folder, imageName, display_type)
+    if img is None:
+        raise FileNotFoundError(f"Could not find the image named {imageName} in {folder}")
+    return img
+
+@lru_cache(maxsize=None)
+def _loadImage(folder, imageName, display_type):
     #get a list of all images and find the name of the one that matches
     images = os.listdir(folder)
     for x in images:
@@ -45,7 +52,7 @@ def adjustImage(folder, imageName, display_type):
             img = Image.open(f"{folder}/{x}")
             break
     else:
-        raise FileNotFoundError(f"Could not find the image named {imageName} in {folder}")
+        return None
     #get original size of image
     width, height = img.size
     #calculate the scaling value 
