@@ -351,6 +351,7 @@ class CollectiblesMixin:
                     if wasPaused:
                         # a pause was waited out: hold left click again once the checks above pass
                         mouse.mouseDown()
+                    time.sleep(0.25)
             finally:
                 mouse.mouseUp()
 
