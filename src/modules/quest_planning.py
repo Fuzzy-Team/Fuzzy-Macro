@@ -258,6 +258,11 @@ def objective_matches_text(action, text):
         return bool(re.search(r"\bvicious\b", text.lower())) and bool(words.intersection(("defeat", "kill", "slay", "destroy")))
     if kind == "craft":
         return "blender" in words
+    if kind == "challenge":
+        return {"ant", "challenge"}.issubset(words)
+    if kind == "manual":
+        # Rows only the user can do are matched by their wording, so they get a status on scrolled screens too.
+        return {singular(word) for word in re.findall(r"[a-z]+", target)}.issubset(words)
     return False
 
 

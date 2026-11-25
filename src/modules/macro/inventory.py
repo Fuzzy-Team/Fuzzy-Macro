@@ -313,7 +313,7 @@ class InventoryMixin:
         if bestY is None:
             if not (self.run is not None and is_stopped()) and not (stop_event is not None and stop_event.is_set()):
                 self.logger.webhook("", f"Could not find {itemName} in inventory", "orange")
-            return
+            return None
         bestY //= self.robloxWindow.multi
         return (40, bestY+80)
 

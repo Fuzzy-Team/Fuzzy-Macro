@@ -1349,7 +1349,7 @@ class QuestMixin:
                 cv2.putText(screenOriginal, objectives[i], (x, max(0, drawY-10)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
 
             # Only the new givers have quests long enough to run off the screen; the older givers' scans stay as they were.
-            if questGiver in FIXED_LINE_GIVERS and not bottomIsQuestEnd and "unknown" in observedStatuses:
+            if (questGiver in FIXED_LINE_GIVERS or questGiver == "black bear") and not bottomIsQuestEnd and "unknown" in observedStatuses:
                 readRowsBelow()
         else:
             i = 0

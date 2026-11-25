@@ -957,6 +957,11 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
         if mode not in ("bug", "boost", "resources") and any(giver not in questCache and canClaimTimedBearQuest(giver)
                                  for giver in quest_giver_order(macro.setdat)):
             return True
+        if (mode == "quest" and macro.setdat.get(QUEST_BLENDER_SETTING, "none") != "none"
+                and macro.pendingQuestObjectives("craft")):
+            blender = loadBlenderData()
+            if blender["collectTime"] > -1 and time.time() > blender["collectTime"]:
+                return True
         tasks = macro.questTaskWatchers if mode == "quest" else get_task_list_order(macro.setdat)
         for task in tasks:
             if task.startswith("kill_"):
