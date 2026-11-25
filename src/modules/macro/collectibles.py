@@ -785,6 +785,10 @@ class CollectiblesMixin:
                 blenderData["collectTime"] = -1
                 saveBlenderData()
                 return
+        elif questCraft and not itemNo:
+            # A quest craft sets collectTime, so the regular Blender would skip its
+            # first-run init and find no item. Pick the first slot now.
+            blenderData["item"] = getNextItem()
 
         for _ in range(2):
             if is_stopped():
