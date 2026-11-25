@@ -460,7 +460,7 @@ class ViciousMixin:
             self.logger.webhook("Vic Hop", f"Could not load Vicious Bee detection model: {exc}", "red", "screen")
             if self.questVicHopped:
                 # A quest's hop must not stop the whole macro; leave its Vicious rows alone for a while.
-                self.questVicHopped = False
+                # The flag stays set so the main loop rejoins the home server, as an earlier hop may have left us in a public one.
                 for objective in self.pendingQuestObjectives("vicious"):
                     self.questItemShort[objective["id"]] = time.time()
             elif self.run is not None:
