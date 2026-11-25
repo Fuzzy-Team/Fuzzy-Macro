@@ -433,7 +433,10 @@ def runApp(macroTarget):
             # was using, just as the normal stop path does.
             displaySession.close()
             nextRestartAt = 0.0
-            appManager.closeApp("Roblox")
+            try:
+                appManager.closeApp("Roblox")
+            except RuntimeError as exc:
+                print(f"Could not close Roblox: {exc}")
             duration_text = "until disabled" if duration_seconds is None else f"for {duration_seconds / 60:g} minute(s)"
             logger.webhook(
                 "Macro Standby Enabled",
@@ -815,7 +818,10 @@ def runApp(macroTarget):
             keyboardModule.releaseMovement()
             mouse.mouseUp()
             time.sleep(0.2)
-            appManager.closeApp("Roblox")
+            try:
+                appManager.closeApp("Roblox")
+            except RuntimeError as exc:
+                print(f"Could not close Roblox: {exc}")
             # Stop can arrive while Roblox is closing. A paused reconnect (6)
             # is not a cancellation: it still needs a replacement process so
             # /resume has something to resume.
