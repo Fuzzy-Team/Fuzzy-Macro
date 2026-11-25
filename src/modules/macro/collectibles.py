@@ -779,7 +779,10 @@ class CollectiblesMixin:
         #check if item is none (settings got changed but user did not reset the blender data)
         #or first blender of the reset, or a stale saved slot
         if not questCraft and (blenderData["collectTime"] == 0 or staleItem):
-            itemNo = getNextItem() #get the first item
+            # item already names the next slot; only advance when that saved
+            # slot cannot be crafted (a fresh reset stores slot 1 here).
+            if not canCraftSlot(itemNo):
+                itemNo = getNextItem() #get the first item
             if not itemNo and blenderData["collectTime"] <= 0: #no items available and no craft to collect
                 blenderData["item"] = itemNo
                 blenderData["collectTime"] = -1
