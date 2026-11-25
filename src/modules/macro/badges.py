@@ -175,7 +175,8 @@ class BadgeMixin:
 
         if result is None:
             result = {"status": "not_found", "tier": None, "click_x": 150, "click_y": 200, "display_name": displayName}
-            if logDetection:
+            # A stop mid-scroll ends the search early, which isn't a real "not found".
+            if logDetection and not is_stopped():
                 self.logger.webhook("Badge", f"{displayName}: not found", "orange", "screen", route_category="badges")
 
         if manageUi and not keepBadgeMenuOpen and not is_stopped():
