@@ -186,13 +186,19 @@ class EventDetectionMixin:
             
             return False
         
+        # Night lasts 200s once detected; stay out of the shared background tick meanwhile.
+        if self.nightEndsAt:
+            if time.time() < self.nightEndsAt:
+                return
+            self.nightEndsAt = 0
+            self.night = False
+            self.nightDetectStreaks = 0
+
         if self.canDetectNight and isNight():
             self.night = True
             self.moonSproutsStart = self.sproutBeansUsed
             self.logger.webhook("","Night detected","purple", "screen", ping_category="ping_night")
-            time.sleep(200) #wait for night to end
-            self.night = False
-            self.nightDetectStreaks = 0
+            self.nightEndsAt = time.time() + 200
 
     def viciousSkyIsNight(self):
         """Check the sky at spawn without resetting or claiming a hive."""
