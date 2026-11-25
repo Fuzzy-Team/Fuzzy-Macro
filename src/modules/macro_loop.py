@@ -592,7 +592,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
             if (objectives is None and questGiver in FIXED_LINE_GIVERS and not is_stopped()
                     and macro.findQuest(questGiver) is None and not is_stopped()):
                 emptyHandIns[questGiver] = emptyHandIns.get(questGiver, 0) + 1
-                if title == list(quest_data[questGiver])[-1] or emptyHandIns[questGiver] >= 3:
+                if (submitting and title == list(quest_data[questGiver])[-1]) or emptyHandIns[questGiver] >= 3:
                     switchOffQuestGiver(questGiver)
             else:
                 emptyHandIns.pop(questGiver, None)
@@ -721,7 +721,9 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                 blenderData = loadBlenderData()
                 if rows and time.time() >= blenderData["collectTime"]:
                     craft = (macro.setdat[QUEST_BLENDER_SETTING], macro.questItemsLeft(rows[0]))
-                    if runTask(macro.blender, args=(blenderData, craft)) is False:
+                    runTask(macro.blender, args=(blenderData, craft))
+                    # A craft that started moves the collect time; if it did not, leave the row alone for a while.
+                    if loadBlenderData()["collectTime"] == blenderData["collectTime"]:
                         macro.questItemShort[rows[0]["id"]] = time.time()
                     taskCompleted = True
                 continue
@@ -1128,10 +1130,14 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
 
         if macro.setdat.get("macro_mode", "normal") == "quest":
             # Hand in every finished quest before starting work on any quest, new or old.
-            claimed = [handleQuest(giver) for giver in quest_giver_order(macro.setdat)
+            # While hopping for Vicious Bees there is no hive to hand in at, so only read the quest log.
+            hopping = macro.questVicHopped
+            claimed = [handleQuest(giver, executeQuest=not hopping) for giver in quest_giver_order(macro.setdat)
                        if canClaimTimedBearQuest(giver)]
             returnFromQuestVicHop()
             for requiredTasks, feeds in claimed:
+                if macro.questVicHopped:
+                    requiredTasks, feeds = [task for task in requiredTasks if task == "vicious_quest_hop"], []
                 for task in requiredTasks:
                     macro.setdat[task] = True
                 runQuestSupportTasks(requiredTasks)
