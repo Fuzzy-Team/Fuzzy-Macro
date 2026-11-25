@@ -17,7 +17,6 @@ Requirements:
 """
 
 import math
-import re
 import threading
 import time
 
@@ -52,14 +51,12 @@ ANCHOR_MAX_PASSIVE_DISTANCE = 8.0
 LEASH_HARD_MARGIN = 2.5
 BLOOM_LABEL = "Bloom"
 PETAL_ORBIT_RADIUS = 3.5
-PETAL_ORBIT_EDGE_MARGIN = 1.5
+PETAL_ORBIT_LEASH_FRACTION = 0.7
 PETAL_ORBIT_DURATION = 5.0
 PETAL_ORBIT_MIN_CORNERS = 3
 PETAL_ORBIT_CORNERS = 6
 BLOOM_MAX_DISTANCE = 20.0
 BLOOM_EDGE_MARGIN = 1.0
-FEED_READ_INTERVAL = 0.5
-FEED_RECENT_READS = 6
 BLOOM_SETTLE_DISTANCE = 0.25
 BLOOM_MIN_CONFIDENCE = 0.50
 BLOOM_SPRINKLER_ANCHOR_INTERVAL = 0.35
@@ -173,39 +170,8 @@ def _anchor_kwargs():
     }
 
 
-def _petal_feed_loop(runtime, stop_event):
-    """Counts caught petals from the honey feed lines ("+120 Honey (from Green Bloom Petal)").
-    A line stays on screen for a few seconds, so only a rise over the recent reads is a new petal."""
-    recent = []
-    while not stop_event.wait(FEED_READ_INTERVAL):
-        lines = len(re.findall(r"bloom\s*petal", self.readBlueText()))
-        new = lines - max(recent, default=0)
-        if new > 0:
-            runtime["petals_caught"] = runtime.get("petals_caught", 0) + new
-        recent = (recent + [lines])[-FEED_RECENT_READS:]
-
-
-def _ensure_petal_counter(runtime):
-    thread = runtime.get("petal_feed_thread")
-    if thread is not None and thread.is_alive():
-        return
-    stop_event = threading.Event()
-    thread = threading.Thread(target=_petal_feed_loop, args=(runtime, stop_event), daemon=True)
-    runtime["petal_feed_stop"] = stop_event
-    runtime["petal_feed_thread"] = thread
-    thread.start()
-
-
 def onGatherEnd():
-    runtime = _runtime_state()
-    stop_event = runtime.get("petal_feed_stop")
-    if stop_event is not None:
-        stop_event.set()
-    popped = runtime.pop("blooms_popped", 0)
-    petals = runtime.pop("petals_caught", 0)
-    agc.shutdown_runtime(runtime, _debug_log)
-    if popped or petals:
-        self.logger.webhook("", f"Blooms AI: {popped} blooms popped, {petals} petals caught", "light blue")
+    agc.shutdown_runtime(_runtime_state(), _debug_log)
 
 
 def _record_debug_frame(runtime, frame, detections, target):
@@ -236,8 +202,6 @@ def _record_debug_frame(runtime, frame, detections, target):
         "petal_orbit_center": tuple(runtime["petal_orbit_center"]) if isinstance(runtime.get("petal_orbit_center"), (tuple, list)) else None,
         "petal_orbit_deadline": runtime.get("petal_orbit_deadline", 0.0),
         "petal_orbit_index": runtime.get("petal_orbit_index"),
-        "blooms_popped": runtime.get("blooms_popped", 0),
-        "petals_caught": runtime.get("petals_caught", 0),
         "updated_at": now,
     })
     runtime["latest_recording_overlay"] = overlay
@@ -274,7 +238,6 @@ def _annotate_recording_frame(runtime, frame):
         status_lines.append(
             f"active_bloom=({active_bloom.get('tx', 0.0):.2f},{active_bloom.get('ty', 0.0):.2f}) contact={overlay.get('bloom_contact_distance', 0.0):.2f}/{BLOOM_CONTACT_MAX_TOTAL_MOVE:.2f}"
         )
-    status_lines.append(f"blooms popped={overlay.get('blooms_popped', 0)} petals caught={overlay.get('petals_caught', 0)}")
     orbit_center = overlay.get("petal_orbit_center")
     if isinstance(orbit_center, (tuple, list)) and len(orbit_center) == 2:
         seconds_left = max(0.0, float(overlay.get("petal_orbit_deadline", 0.0)) - time.time())
@@ -363,12 +326,26 @@ def _token_metrics():
     return metrics
 
 
+def _leash_distance(x, y):
+    """Distance from the sprinkler with each axis scaled by the field's half size on that axis,
+    so the narrow side counts one-for-one and a long field lets the character roam along its length.
+    FIELD_DIMENSIONS is the (forward, right) half size."""
+    try:
+        forward, right = (float(value) for value in FIELD_DIMENSIONS)
+        narrow = min(forward, right)
+        if narrow <= 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        return math.hypot(x, y)
+    return math.hypot(x * narrow / right, y * narrow / forward)
+
+
 def _find_best_token(runtime, detections):
     scan_time = time.time()
     metrics = _token_metrics()
     current_x = runtime["current_x"]
     current_y = runtime["current_y"]
-    current_dist = math.hypot(current_x, current_y)
+    current_dist = _leash_distance(current_x, current_y)
     candidates = []
     visible_blooms = []
     rejected = []
@@ -409,9 +386,9 @@ def _find_best_token(runtime, detections):
             rejected.append({"name": token_name, "reason": "too_far", "confidence": confidence, "distance": distance, "tx": tx, "ty": ty})
             continue
 
-        future_dist = math.hypot(future_x, future_y)
+        future_dist = _leash_distance(future_x, future_y)
         # Walks run long under haste, so skip blooms the approach could carry off the field.
-        if future_dist > metrics["hard_leash"] - BLOOM_EDGE_MARGIN:
+        if future_dist > metrics["hard_leash"] - min(BLOOM_EDGE_MARGIN, 0.2 * metrics["hard_leash"]):
             rejected.append({"name": token_name, "reason": "hard_leash", "confidence": confidence, "distance": distance, "future_dist": future_dist, "tx": tx, "ty": ty})
             continue
         proximity = 1.0 / (0.3 + distance) ** metrics["proximity_exp"]
@@ -690,7 +667,6 @@ def _start_petal_orbit(runtime):
     runtime["petal_orbit_deadline"] = time.time() + PETAL_ORBIT_DURATION
     runtime["petal_orbit_index"] = None
     runtime["active_bloom"] = None
-    runtime["blooms_popped"] = runtime.get("blooms_popped", 0) + 1
     agc.clear_locked_target(runtime)
     return True
 
@@ -717,7 +693,7 @@ def _execute_petal_orbit(runtime):
 
     # Pull corners that would leave the field back inside the leash. Walks run
     # long under haste, so keep the corners well short of the edge.
-    max_radius = max(_token_metrics()["max_leash"] - PETAL_ORBIT_EDGE_MARGIN, PETAL_ORBIT_EDGE_MARGIN)
+    max_radius = _token_metrics()["max_leash"] * PETAL_ORBIT_LEASH_FRACTION
     # Each lap adds a corner, so the loop widens from a triangle toward a hexagon
     # and sweeps the whole petal ring. A lap starts at the nearest corner.
     corners = PETAL_ORBIT_MIN_CORNERS
@@ -727,7 +703,7 @@ def _execute_petal_orbit(runtime):
             angle = 2.0 * math.pi * index / corners
             point_x = float(center[0]) + PETAL_ORBIT_RADIUS * math.cos(angle)
             point_y = float(center[1]) + PETAL_ORBIT_RADIUS * math.sin(angle)
-            point_radius = math.hypot(point_x, point_y)
+            point_radius = _leash_distance(point_x, point_y)
             if point_radius > max_radius:
                 point_x *= max_radius / point_radius
                 point_y *= max_radius / point_radius
@@ -1146,7 +1122,6 @@ else:
             sprinkler_apply_fn=_apply_bloom_sprinkler_result,
         )
         _refresh_bloom_sprinkler_anchor(runtime)
-        _ensure_petal_counter(runtime)
 
         target = agc.locked_target(runtime) or agc.latest_target(runtime)
         bloom_mode = runtime.get("bloom_mode", "patrol")
