@@ -83,10 +83,13 @@ class QuestMixin:
                 self.logger.webhook("", f"Used {used} {name} for {objective['giver'].title()}", "bright green",
                                     route_category="quests")
 
+    def pendingJellyBeanRows(self):
+        return [objective for objective in self.pendingQuestObjectives("use")
+                if QUEST_ITEMS[quest_item(objective)][2] == "hub"]
+
     def shareJellyBeans(self):
         """One trip to a public Hive Hub server for every Jelly Bean row, using beans until each row is done."""
-        rows = [objective for objective in self.pendingQuestObjectives("use")
-                if QUEST_ITEMS[quest_item(objective)][2] == "hub"]
+        rows = self.pendingJellyBeanRows()
         if not rows:
             return
         # Always public: a private server has nobody to share with.
@@ -120,7 +123,8 @@ class QuestMixin:
         if outOfBeans:
             for objective in rows:
                 self.questItemShort[objective["id"]] = time.time()
-        self.rejoin(placeId=MAIN_GAME_PLACE_ID, claimHive=True)
+        if not is_stopped():
+            self.rejoin(placeId=MAIN_GAME_PLACE_ID, claimHive=True)
 
     def readQuestObjective(self, objective):
         """Re-read the quest log and return this row as it now stands, or None if it couldn't be read."""

@@ -199,6 +199,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
     
     taskCompleted = True
     questCache = {}
+    emptyHandIns = {}
     questScanScreens = None
     macro.questGatherInterruptMobs = {}
     macro.questTaskWatchers = {}
@@ -586,9 +587,15 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
             if submitting:
                 macro.hourlyReport.addHourlyStat("quests_completed", 1)
             # A fixed list of quests ended: the giver was reached and has nothing more to hand out.
+            # Off after the last quest of its list, or after three hand-ins in a row that brought nothing
+            # (a quest read can miss, and a quest can be locked, so one empty answer is not enough).
             if (objectives is None and questGiver in FIXED_LINE_GIVERS and not is_stopped()
-                    and title == list(quest_data[questGiver])[-1] and macro.findQuest(questGiver) is None and not is_stopped()):
-                switchOffQuestGiver(questGiver)
+                    and macro.findQuest(questGiver) is None and not is_stopped()):
+                emptyHandIns[questGiver] = emptyHandIns.get(questGiver, 0) + 1
+                if title == list(quest_data[questGiver])[-1] or emptyHandIns[questGiver] >= 3:
+                    switchOffQuestGiver(questGiver)
+            else:
+                emptyHandIns.pop(questGiver, None)
             questCache.pop(questGiver, None)
             macro.completedQuestWatchTasks.clear()
             macro.completedQuestWatchObjectives.clear()
@@ -680,8 +687,10 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                 continue
 
             if taskName == "jelly_beans":
-                runTask(macro.shareJellyBeans, resetAfter=False)
-                taskCompleted = True
+                # Rows backed off for a while are not worth a trip; leave the loop free to wait or gather.
+                if macro.pendingJellyBeanRows():
+                    runTask(macro.shareJellyBeans, resetAfter=False)
+                    taskCompleted = True
                 continue
 
             if taskName == "field_booster":
@@ -694,11 +703,15 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
 
             if taskName == "vicious_quest_hop":
                 if macro.pendingQuestObjectives("vicious"):
+                    questMode = macro.setdat.get("macro_mode", "normal") == "quest"
                     macro.questVicHopped = True
-                    runTask(macro.viciousHop, resetAfter=False, allowAFB=False)
-                    if macro.setdat.get("macro_mode", "normal") != "quest":
+                    try:
+                        runTask(macro.viciousHop, resetAfter=False, allowAFB=False)
+                    finally:
                         # Only Quest Mode keeps hopping; elsewhere go home after this one search.
-                        macro.questVicHopped = False
+                        if not questMode:
+                            macro.questVicHopped = False
+                    if not questMode:
                         runTask(macro.rejoin, resetAfter=False)
                     taskCompleted = True
                 continue
