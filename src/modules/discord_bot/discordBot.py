@@ -1447,27 +1447,6 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         except Exception:
             return {}
 
-    def _get_available_patterns(current_shape: Optional[str] = None) -> List[str]:
-        try:
-            patterns_dir = settingsManager.getPatternsDir()
-            pattern_names = []
-            for entry in os.listdir(patterns_dir):
-                if entry.endswith(".py"):
-                    pattern_names.append(entry[:-3])
-            pattern_names = sorted(set(pattern_names))
-            if current_shape and current_shape not in pattern_names:
-                pattern_names.insert(0, current_shape)
-            if not pattern_names:
-                return ["e_lol"]
-            if len(pattern_names) > 25:
-                kept = pattern_names[:25]
-                if current_shape and current_shape not in kept:
-                    kept[-1] = current_shape
-                return kept
-            return pattern_names
-        except Exception:
-            return [current_shape] if current_shape else ["e_lol"]
-
     def _normalize_return_value(value: str) -> str:
         if not value:
             return "walk"
@@ -2142,6 +2121,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         def __init__(self, current_key: str):
             options = [
                 discord.SelectOption(label="Shape", value="shape", default=(current_key == "shape")),
+                discord.SelectOption(label="Shape (more)", value="shape_more", default=(current_key == "shape_more")),
                 discord.SelectOption(label="Size", value="size", default=(current_key == "size")),
                 discord.SelectOption(label="Width", value="width", default=(current_key == "width")),
                 discord.SelectOption(label="Turn", value="turn", default=(current_key == "turn")),
@@ -2161,8 +2141,11 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     class PatternDropdownValueSelect(discord.ui.Select):
         def __init__(self, setting_key: str, field_data: Dict):
             current_value = str(field_data.get(setting_key, ""))
-            if setting_key == "shape":
-                values = _get_available_patterns(current_shape=current_value)
+            if setting_key in {"shape", "shape_more"}:
+                # Discord selects hold 25 options, so shapes beyond 25 live under "Shape (more)".
+                current_value = str(field_data.get("shape", ""))
+                patterns = settingsManager.getAvailablePatterns()
+                values = (patterns[25:50] if setting_key == "shape_more" else patterns[:25]) or ["e_lol"]
                 options = [discord.SelectOption(label=v, value=v, default=(v == current_value)) for v in values]
             elif setting_key == "size":
                 options = [
@@ -2193,14 +2176,15 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         async def callback(self, interaction: discord.Interaction):
             raw_value = self.values[0]
             save_value = raw_value
-            if self.setting_key in {"width", "turn_times"}:
+            save_key = "shape" if self.setting_key == "shape_more" else self.setting_key
+            if save_key in {"width", "turn_times"}:
                 save_value = int(raw_value)
-            success, message = _save_slot_field_setting(self.view.slot_index, self.setting_key, save_value)
+            success, message = _save_slot_field_setting(self.view.slot_index, save_key, save_value)
             await _update_fields_message(
                 interaction,
                 slot_index=self.view.slot_index,
                 section_key=self.view.section_key,
-                status_message=(message if success else f"Failed to update {self.setting_key}."),
+                status_message=(message if success else f"Failed to update {save_key}."),
                 dropdown_key=self.setting_key,
             )
 
