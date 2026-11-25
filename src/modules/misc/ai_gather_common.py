@@ -940,7 +940,12 @@ def find_sprinkler(
     confidence_threshold,
     max_distance,
     target_label=None,
+    soft_confidence_threshold=None,
+    soft_radius=2.5,
 ):
+    """Find the sprinkler. Bees and effects covering it lower the model's confidence, so
+    with a soft threshold a weaker detection still counts when it sits within soft_radius
+    tiles of where the dead-reckoned position says the sprinkler should be."""
     if runtime.get("sprinkler_session") is None:
         runtime["last_sprinkler_status"] = "model_missing"
         return None
@@ -955,7 +960,10 @@ def find_sprinkler(
         image = preprocess_coreml_image(frame, SPRINKLER_INPUT_WIDTH, SPRINKLER_INPUT_HEIGHT)
     with sprinkler_infer_lock(runtime):
         output = run_model(runtime, "sprinkler", image)
-    detections = decode_detections(runtime, "sprinkler", output, confidence_threshold)
+    decode_threshold = confidence_threshold
+    if soft_confidence_threshold is not None:
+        decode_threshold = min(confidence_threshold, soft_confidence_threshold)
+    detections = decode_detections(runtime, "sprinkler", output, decode_threshold)
 
     scale_x = runtime["capture"]["width"] / float(SPRINKLER_INPUT_WIDTH)
     scale_y = runtime["capture"]["height"] / float(SPRINKLER_INPUT_HEIGHT)
@@ -977,6 +985,12 @@ def find_sprinkler(
 
         if distance > max_distance:
             continue
+
+        if confidence < confidence_threshold:
+            expected_x = -runtime.get("current_x", 0.0)
+            expected_y = -runtime.get("current_y", 0.0)
+            if math.hypot(tx - expected_x, ty - expected_y) > soft_radius:
+                continue
 
         if distance < best_any_distance:
             best_any_distance = distance
@@ -1129,6 +1143,7 @@ def refresh_sprinkler_anchor(
     confidence_threshold,
     max_distance,
     target_label=None,
+    soft_confidence_threshold=None,
     force=False,
     frame=None,
     debug_log_fn=None,
@@ -1147,6 +1162,7 @@ def refresh_sprinkler_anchor(
         confidence_threshold=confidence_threshold,
         max_distance=max_distance,
         target_label=target_label,
+        soft_confidence_threshold=soft_confidence_threshold,
     )
     return apply_sprinkler_anchor_result(
         runtime,

@@ -30,6 +30,7 @@ INPUT_WIDTH = agc.INPUT_WIDTH
 INPUT_HEIGHT = agc.INPUT_HEIGHT
 MODEL_DIR = agc.MODEL_DIR
 SPRINKLER_CONFIDENCE_THRESHOLD = 0.6
+SPRINKLER_SOFT_CONFIDENCE_THRESHOLD = 0.35
 PETAL_CONFIDENCE_THRESHOLD = 0.50
 RUNTIME_VERSION = 43
 MIN_TOKEN_DISTANCE = 0.3
@@ -152,6 +153,7 @@ def _runtime_state():
 def _sprinkler_kwargs():
     return {
         "confidence_threshold": SPRINKLER_CONFIDENCE_THRESHOLD,
+        "soft_confidence_threshold": SPRINKLER_SOFT_CONFIDENCE_THRESHOLD,
         "max_distance": MAX_SPRINKLER_DISTANCE,
         "target_label": TARGET_SPRINKLER_LABEL,
     }
@@ -164,6 +166,7 @@ def _anchor_kwargs():
         "anchor_refresh_interval": ANCHOR_REFRESH_INTERVAL,
         "max_passive_distance": ANCHOR_MAX_PASSIVE_DISTANCE,
         "confidence_threshold": SPRINKLER_CONFIDENCE_THRESHOLD,
+        "soft_confidence_threshold": SPRINKLER_SOFT_CONFIDENCE_THRESHOLD,
         "max_distance": MAX_SPRINKLER_DISTANCE,
         "target_label": TARGET_SPRINKLER_LABEL,
         "debug_log_fn": _debug_log,
