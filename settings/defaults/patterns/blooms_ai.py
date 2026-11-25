@@ -195,6 +195,10 @@ def onGatherEnd():
     stop_event = runtime.get("petal_feed_stop")
     if stop_event is not None:
         stop_event.set()
+    # Let a read in progress finish so its petals are counted now, not in the next gather.
+    thread = runtime.pop("petal_feed_thread", None)
+    if thread is not None:
+        thread.join(timeout=2.0)
     popped = runtime.pop("blooms_popped", 0)
     petals = runtime.pop("petals_caught", 0)
     agc.shutdown_runtime(runtime, _debug_log)
