@@ -146,7 +146,8 @@ class CollectiblesMixin:
         if questDonation:
             item = questDonation["action"].partition("_")[2].partition("_")[2]
             itemAliases = getShrineItemAliases(item)
-            quantity = self.questItemsLeft(questDonation)
+            # A long row is donated over several visits; the quest log is read again before the next one.
+            quantity = min(self.questItemsLeft(questDonation), 500)
         time.sleep(2)
 
         # Open the shrine item selector from the initial dialog.
