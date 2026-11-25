@@ -19,6 +19,20 @@ from modules.screen.imageSearch import locateImageOnScreen
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP, mssScreenshotPillowRGBA
 
 
+# What the OCR tends to read in place of the number at the end of a numbered title ("Star Journey 3").
+DIGIT_LOOKALIKES = {"l": "1", "i": "1", "|": "1", "!": "1", "j": "1", "7": "1", "z": "2", "8": "3",
+                    "s": "5", "b": "6", "g": "6"}
+
+
+def matchQuestTitle(giver, text):
+    """The giver's quest title closest to the OCR text; a lone misread character at the end is read as its digit first."""
+    titles = quest_data[giver]
+    head, _, last = text.rpartition(" ")
+    if head and last in DIGIT_LOOKALIKES and f"{head} {DIGIT_LOOKALIKES[last]}" in titles:
+        return f"{head} {DIGIT_LOOKALIKES[last]}"
+    return fuzzywuzzy.process.extractOne(text, titles.keys())[0]
+
+
 class QuestMixin:
     def recordQuestObjectives(self, giver, title, actions, statuses, remaining=None):
         if not hasattr(self, "questObservations"):
@@ -851,7 +865,7 @@ class QuestMixin:
                 if questGiver == "brown bear":
                     questTitle = questTitleRaw
                 else:
-                    questTitle, _ = fuzzywuzzy.process.extractOne(questTitleRaw, quest_data[questGiver].keys())
+                    questTitle = matchQuestTitle(questGiver, questTitleRaw)
                 if logDetection:
                     self.logger.webhook("", f"Quest Title: {questTitle}", "light blue")
                 break
@@ -884,7 +898,7 @@ class QuestMixin:
                     if questGiver == "brown bear":
                         questTitle = text
                     else:
-                        questTitle, _ = fuzzywuzzy.process.extractOne(text, quest_data[questGiver].keys())
+                        questTitle = matchQuestTitle(questGiver, text)
                     if logDetection:
                         self.logger.webhook("", f"Quest Title: {questTitle}", "light blue")
                     break
