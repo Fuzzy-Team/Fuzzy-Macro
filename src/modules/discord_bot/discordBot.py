@@ -2454,8 +2454,12 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     @requires_discord_permission("observation")
     async def screenshot(interaction: discord.Interaction):
         await interaction.response.defer()
-        from modules.screen.screenshot import screenshotRobloxWindow
-        img = await asyncio.get_running_loop().run_in_executor(None, screenshotRobloxWindow)
+
+        def _screenshot():
+            from modules.screen.screenshot import screenshotRobloxWindow
+            return screenshotRobloxWindow()
+
+        img = await asyncio.get_running_loop().run_in_executor(None, _screenshot)
         with io.BytesIO() as imageBinary:
             await asyncio.get_running_loop().run_in_executor(None, img.save, imageBinary, "PNG")
             imageBinary.seek(0)
@@ -3676,8 +3680,11 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         # Not running: this process focuses Roblox (joining the game first if it isn't open) and clicks through the inventory itself
         await interaction.response.defer()
         try:
-            from modules.macro.inventory import findItemWithoutMacro
-            message, image = await asyncio.get_event_loop().run_in_executor(None, findItemWithoutMacro, name, _discord_message_queue)
+            def _find_item():
+                from modules.macro.inventory import findItemWithoutMacro
+                return findItemWithoutMacro(name, _discord_message_queue)
+
+            message, image = await asyncio.get_running_loop().run_in_executor(None, _find_item)
             if image is None:
                 await interaction.followup.send(f"❌ {message}")
                 return
@@ -4066,10 +4073,12 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             # Separate Item Monitor report when enabled
             if setdat.get("item_monitor", True):
                 try:
-                    from modules.reports.item_monitor import generate_item_report
+                    def _item_report(snapshot):
+                        from modules.reports.item_monitor import generate_item_report
+                        return generate_item_report(snapshot, setdat, report_type="hourly")
                     snapshot = getattr(hr, "itemMonitorSnapshot", None)
                     if snapshot and snapshot.get("collected_items"):
-                        path, item_fields = generate_item_report(snapshot, setdat, report_type="hourly")
+                        path, item_fields = await asyncio.get_running_loop().run_in_executor(None, _item_report, snapshot)
                         if path and os.path.exists(path):
                             from discord import Embed
                             embed = Embed(title="Item Monitor", color=0x9966FF)
@@ -4089,10 +4098,14 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     async def sessionReport(interaction: discord.Interaction):
         await interaction.response.defer()
         try:
-            from modules.reports.final import FinalReport
             setdat = get_cached_settings()
-            finalReportObj = FinalReport()
-            sessionStats = await asyncio.get_running_loop().run_in_executor(None, finalReportObj.generateFinalReport, setdat)
+
+            def _final_report():
+                from modules.reports.final import FinalReport
+                report = FinalReport()
+                return report, report.generateFinalReport(setdat)
+
+            finalReportObj, sessionStats = await asyncio.get_running_loop().run_in_executor(None, _final_report)
 
             if sessionStats and os.path.exists("finalReport.png"):
                 embed_fields = getattr(finalReportObj, "lastEmbedFields", None)
