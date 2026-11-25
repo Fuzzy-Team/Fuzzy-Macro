@@ -321,11 +321,13 @@ class HourlyReportDrawer:
         fields = []
         times = []
         if planterData:
+            plantedFields = planterData.get("fields", [])
+            harvestTimes = planterData.get("harvestTimes", [])
             for i, name in enumerate(planterData.get("planters", [])[:3]):
                 if name:
                     names.append(name)
-                    fields.append(planterData.get("fields", [""] * 3)[i])
-                    times.append(planterData.get("harvestTimes", [0] * 3)[i] - time.time())
+                    fields.append(plantedFields[i] if i < len(plantedFields) else "")
+                    times.append((harvestTimes[i] if i < len(harvestTimes) else 0) - time.time())
         if not names:
             names, fields, times = ["unknown", "unknown", "unknown"], ["None", "None", "None"], [0, 0, 0]
         slot = w / 3
