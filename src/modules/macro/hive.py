@@ -103,6 +103,7 @@ class HiveMixin:
                 if liveGatherReport:
                     liveGatherReport.stop()
                 self.converting = False
+                self.hourlyReport.addHourlyStat("converting_time", time.time()-st)
                 return False
             
             #check if the macro is done converting/not converting
@@ -134,7 +135,11 @@ class HiveMixin:
                         if self.enableNightDetection:
                             self.keyboard.press(".")
                         self.converting = False
-                        self.reset(convert=False)
+                        try:
+                            self.hourlyReport.addHourlyStat("converting_time", time.time()-st)
+                        finally:
+                            # A failed report save must not skip the reset that recovers the stalled convert.
+                            self.reset(convert=False)
                         return False
 
             # Clicking during conversion keeps the equipped tool active. Allow users
