@@ -17,6 +17,7 @@ Requirements:
 """
 
 import math
+import re
 import threading
 import time
 
@@ -39,6 +40,8 @@ DEBUG_MODE = False
 RECORD_VIDEO = False
 RECORD_VIDEO_FPS = 12.0
 CONTINUOUS_SCAN_INTERVAL = 0.08
+FEED_READ_INTERVAL = 0.5
+FEED_RECENT_READS = 6
 CONTINUOUS_MIN_REPLAN_DISTANCE = 0.08
 TARGET_LOCK_LOST_TIMEOUT = 0.9
 TARGET_LOCK_SWITCH_SCORE_MULTIPLIER = 2.25
@@ -164,8 +167,39 @@ def _anchor_kwargs():
     }
 
 
+def _petal_feed_loop(runtime, stop_event):
+    """Counts caught petals from the honey feed lines ("+120 Honey (from Green Bloom Petal)").
+    A line stays on screen for a few seconds, so only a rise over the recent reads is a new petal."""
+    recent = []
+    while not stop_event.wait(FEED_READ_INTERVAL):
+        lines = len(re.findall(r"bloom\s*petal", self.readBlueText()))
+        new = lines - max(recent, default=0)
+        if new > 0:
+            runtime["petals_caught"] = runtime.get("petals_caught", 0) + new
+        recent = (recent + [lines])[-FEED_RECENT_READS:]
+
+
+def _ensure_petal_counter(runtime):
+    thread = runtime.get("petal_feed_thread")
+    if thread is not None and thread.is_alive():
+        return
+    stop_event = threading.Event()
+    thread = threading.Thread(target=_petal_feed_loop, args=(runtime, stop_event), daemon=True)
+    runtime["petal_feed_stop"] = stop_event
+    runtime["petal_feed_thread"] = thread
+    thread.start()
+
+
 def onGatherEnd():
-    agc.shutdown_runtime(_runtime_state(), _debug_log)
+    runtime = _runtime_state()
+    stop_event = runtime.get("petal_feed_stop")
+    if stop_event is not None:
+        stop_event.set()
+    popped = runtime.pop("blooms_popped", 0)
+    petals = runtime.pop("petals_caught", 0)
+    agc.shutdown_runtime(runtime, _debug_log)
+    if popped or petals:
+        self.logger.webhook("", f"Blooms AI: {popped} blooms popped, {petals} petals caught", "light blue")
 
 
 def _record_debug_frame(runtime, frame, detections, target):
@@ -196,6 +230,8 @@ def _record_debug_frame(runtime, frame, detections, target):
         "petal_orbit_center": tuple(runtime["petal_orbit_center"]) if isinstance(runtime.get("petal_orbit_center"), (tuple, list)) else None,
         "petal_orbit_deadline": runtime.get("petal_orbit_deadline", 0.0),
         "petal_orbit_index": runtime.get("petal_orbit_index"),
+        "blooms_popped": runtime.get("blooms_popped", 0),
+        "petals_caught": runtime.get("petals_caught", 0),
         "updated_at": now,
     })
     runtime["latest_recording_overlay"] = overlay
@@ -232,6 +268,7 @@ def _annotate_recording_frame(runtime, frame):
         status_lines.append(
             f"active_bloom=({active_bloom.get('tx', 0.0):.2f},{active_bloom.get('ty', 0.0):.2f}) contact={overlay.get('bloom_contact_distance', 0.0):.2f}/{BLOOM_CONTACT_MAX_TOTAL_MOVE:.2f}"
         )
+    status_lines.append(f"blooms popped={overlay.get('blooms_popped', 0)} petals caught={overlay.get('petals_caught', 0)}")
     orbit_center = overlay.get("petal_orbit_center")
     if isinstance(orbit_center, (tuple, list)) and len(orbit_center) == 2:
         seconds_left = max(0.0, float(overlay.get("petal_orbit_deadline", 0.0)) - time.time())
@@ -635,6 +672,7 @@ def _start_petal_orbit(runtime):
     runtime["petal_orbit_deadline"] = now + PETAL_ORBIT_DURATION
     runtime["petal_orbit_index"] = None
     runtime["active_bloom"] = None
+    runtime["blooms_popped"] = runtime.get("blooms_popped", 0) + 1
     agc.clear_locked_target(runtime)
     return True
 
@@ -1069,6 +1107,7 @@ else:
             sprinkler_apply_fn=_apply_bloom_sprinkler_result,
         )
         _refresh_bloom_sprinkler_anchor(runtime)
+        _ensure_petal_counter(runtime)
 
         target = agc.locked_target(runtime) or agc.latest_target(runtime)
         bloom_mode = runtime.get("bloom_mode", "patrol")
