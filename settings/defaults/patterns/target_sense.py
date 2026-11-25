@@ -345,6 +345,7 @@ class TargetSense(SensePattern):
             if self.search_error:
                 error, self.search_error = self.search_error, None
                 raise error
+            self.look()
             self.scan()
             self.priority = target_priority()
             if self.priority == "x_flame" and boost["timers"]["new_x_flame"] != boost["x_flame_window"]:
