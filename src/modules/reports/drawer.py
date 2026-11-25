@@ -22,11 +22,11 @@ from modules.reports.theme import DEFAULT_THEME, THEMES
 _ICON_CACHE = {}
 
 
-def _loadIcon(path, size):
-    key = (path, size)
+def _loadIcon(path, size, resample=None):
+    key = (path, size, resample)
     if key not in _ICON_CACHE:
         try:
-            _ICON_CACHE[key] = Image.open(path).convert("RGBA").resize(size)
+            _ICON_CACHE[key] = Image.open(path).convert("RGBA").resize(size, resample)
         except FileNotFoundError:
             _ICON_CACHE[key] = None
     icon = _ICON_CACHE[key]

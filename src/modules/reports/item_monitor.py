@@ -17,6 +17,7 @@ from PIL import Image, ImageDraw
 
 from modules import bitmap_matcher
 from modules.misc.formatting import formatHMS, millify
+from modules.reports.drawer import _loadIcon
 from modules.screen.screenshot import mssScreenshotPillowRGBA
 
 # Capture size (client pixels at 1x). Retina uses * multi.
@@ -365,8 +366,8 @@ def generate_item_report(snapshot, setdat=None, report_type="hourly", output_pat
     drawer = ItemReportDrawer(time_format=time_format, theme=theme)
     canvas = drawer.draw(snapshot, report_type=report_type)
     w, h = canvas.size
-    canvas = canvas.resize((int(w * 1.2), int(h * 1.2)))
-    canvas.convert("RGB").save(output_path)
+    canvas = canvas.convert("RGB").resize((int(w * 1.2), int(h * 1.2)))
+    canvas.save(output_path)
 
     fields = []
     for item in ItemMonitor.sorted_items(collected)[:15]:
@@ -518,12 +519,9 @@ class ItemReportDrawer:
             )
 
             icon_size = 100
-            try:
-                icon = Image.open(f"{self.assetPath}/items/{item['icon']}.png").convert("RGBA")
-                icon = icon.resize((icon_size, icon_size), Image.Resampling.LANCZOS)
+            icon = _loadIcon(f"{self.assetPath}/items/{item['icon']}.png", (icon_size, icon_size), Image.Resampling.LANCZOS)
+            if icon is not None:
                 self.canvas.paste(icon, (cx + (card_w - icon_size) // 2, cy + 50), icon)
-            except Exception:
-                pass
 
             name_font = self._fitText(item["name"], card_w - 20, weight="semibold", size=28, minSize=14)
             name_bbox = self.draw.textbbox((0, 0), item["name"], font=name_font)
@@ -661,12 +659,9 @@ class ItemReportDrawer:
             )
 
             icon_size = 100
-            try:
-                icon = Image.open(f"{self.assetPath}/items/{item['icon']}.png").convert("RGBA")
-                icon = icon.resize((icon_size, icon_size), Image.Resampling.LANCZOS)
+            icon = _loadIcon(f"{self.assetPath}/items/{item['icon']}.png", (icon_size, icon_size), Image.Resampling.LANCZOS)
+            if icon is not None:
                 self.canvas.paste(icon, (int(cx + (card_w - icon_size) / 2), int(cy + 40)), icon)
-            except Exception:
-                pass
 
             name_font = self._fitText(item["name"], card_w - 20, weight="bold", size=30, minSize=16)
             name_bbox = self.draw.textbbox((0, 0), item["name"], font=name_font)
