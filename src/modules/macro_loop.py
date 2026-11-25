@@ -585,7 +585,8 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
             if submitting:
                 macro.hourlyReport.addHourlyStat("quests_completed", 1)
             # A fixed list of quests ended: the giver was reached and has nothing more to hand out.
-            if objectives is None and questGiver in FIXED_LINE_GIVERS and macro.findQuest(questGiver) is None:
+            if (objectives is None and questGiver in FIXED_LINE_GIVERS and not is_stopped()
+                    and macro.findQuest(questGiver) is None and not is_stopped()):
                 switchOffQuestGiver(questGiver)
             questCache.pop(questGiver, None)
             macro.completedQuestWatchTasks.clear()
@@ -694,6 +695,10 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                 if macro.pendingQuestObjectives("vicious"):
                     macro.questVicHopped = True
                     runTask(macro.viciousHop, resetAfter=False, allowAFB=False)
+                    if macro.setdat.get("macro_mode", "normal") != "quest":
+                        # Only Quest Mode keeps hopping; elsewhere go home after this one search.
+                        macro.questVicHopped = False
+                        runTask(macro.rejoin, resetAfter=False)
                     taskCompleted = True
                 continue
 

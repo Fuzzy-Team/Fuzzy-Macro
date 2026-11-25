@@ -258,7 +258,7 @@ class InventoryMixin:
         try:
             itemImg = self.adjustImage("./images/inventory", itemName)
         except FileNotFoundError:
-            return self._findItemInInventoryByText(itemName)
+            return self._findItemInInventoryByText(itemName, stop_event)
         #itemImg = cv2.cvtColor(itemImg, cv2.COLOR_RGB2GRAY)
 
         itemOCRName = itemName.lower().replace("planter", "") #the name of the item used to check with the ocr to verify its correct
@@ -317,7 +317,7 @@ class InventoryMixin:
         bestY //= self.robloxWindow.multi
         return (40, bestY+80)
 
-    def _findItemInInventoryByText(self, itemName):
+    def _findItemInInventoryByText(self, itemName, stop_event=None):
         """For items with no template image: read the inventory with OCR and return the click position
         in the same form as _findItemInInventory (the click lands on the item's row)."""
         def key(text):
@@ -333,6 +333,8 @@ class InventoryMixin:
         time.sleep(0.3)
         prevHash = None
         for _ in range(180):
+            if self.checkPauseAndWait(stop_event=stop_event):
+                return None
             page = mssScreenshot(self.robloxWindow.mx, self.robloxWindow.my+90, 310, self.robloxWindow.mh-180)
             partial = None
             for bbox, (text, _conf) in ocr.ocrRead(page):

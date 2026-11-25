@@ -91,13 +91,19 @@ class QuestMixin:
             return
         # Always public: a private server has nobody to share with.
         if not self.goToField("hive hub", usePrivateServer=False):
+            # Leave these rows alone for a while instead of travelling again on the next pass.
+            for objective in rows:
+                self.questItemShort[objective["id"]] = time.time()
             return
         outOfBeans = False
+        # A long row (hundreds of beans) must not keep the macro in the hub for hours.
+        deadline = time.time() + 15 * 60
         for objective in rows:
             # Beans shared for one quest count for the others too, so look again before starting a row.
             objective = self.readQuestObjective(objective)
             idle = 0
-            while objective and objective["status"] == "incomplete" and objective["remaining"] is not None and idle < 5:
+            while (objective and objective["status"] == "incomplete" and objective["remaining"] is not None and idle < 5
+                   and time.time() < deadline and not is_stopped()):
                 if not self.useItemInInventory(QUEST_ITEMS["jellybean"][0]):
                     outOfBeans = True
                     break
@@ -108,8 +114,8 @@ class QuestMixin:
                     idle = 0 if objective["remaining"] is not None and objective["remaining"] < before else idle + 1
             if outOfBeans:
                 break
-            # Nobody picked them up (or the count could not be read): leave the row for later.
-            if objective and objective["status"] == "incomplete":
+            # Nobody picked them up, the count could not be read or the time ran out: leave the row for later.
+            if not objective or objective["status"] == "incomplete":
                 self.questItemShort[objective["id"]] = time.time()
         if outOfBeans:
             for objective in rows:
@@ -1324,7 +1330,8 @@ class QuestMixin:
                 cv2.rectangle(screenOriginal, (x, drawY), (x+w, drawY+h), color, 2)
                 cv2.putText(screenOriginal, objectives[i], (x, max(0, drawY-10)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
 
-            if not bottomIsQuestEnd and "unknown" in observedStatuses:
+            # Only the new givers have quests long enough to run off the screen; the older givers' scans stay as they were.
+            if questGiver in FIXED_LINE_GIVERS and not bottomIsQuestEnd and "unknown" in observedStatuses:
                 readRowsBelow()
         else:
             i = 0
