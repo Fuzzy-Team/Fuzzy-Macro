@@ -228,7 +228,9 @@ class AFBMixin:
         limitHours = float(self.setdat.get("AFB_limit", 0) or 0)
         if self.setdat["AFB_limit_on"] and limitHours > 0:
             limitTiming = self.getAFBtiming("AFB_limit")
-            if not limitTiming or limitTiming <= 0:
+            # A timing entry written as text (partial write, manual edit) must be
+            # treated as never done, the same guard hasAFBRespawned() applies.
+            if not isinstance(limitTiming, (int, float)) or limitTiming <= 0:
                 self.saveAFB("AFB_limit")
             elif self.hasAFBRespawned("AFB_limit", limitHours * 60 * 60, timing=limitTiming):
                 self.logger.webhook("AFB", "Time limit reached: Skipping", "red")
