@@ -746,7 +746,12 @@ def _execute_bloom_sequence(runtime):
             return True
         bloom = _active_bloom_detection(runtime)
         if bloom and now - runtime.get("bloom_work_started", now) > BLOOM_WORK_TIMEOUT:
-            bloom = None
+            # The bees are not popping it, so there are no petals to collect.
+            _debug_log("bloom work timed out, abandoning bloom", min_interval=0.25, key="bloom_timeout")
+            runtime["bloom_mode"] = "patrol"
+            runtime["active_bloom"] = None
+            agc.clear_locked_target(runtime)
+            return False
         if bloom:
             runtime["bloom_last_visible_time"] = now
             tx = float(bloom.get("tx", 0.0))
@@ -945,7 +950,7 @@ def _apply_bloom_sprinkler_result(runtime, result):
 def _bloom_sprinkler_anchor_should_run(runtime):
     now = time.time()
     # A frame grabbed while walking shows the sprinkler at the wrong offset.
-    if now - runtime.get("last_move_end", 0.0) < ANCHOR_SETTLE_TIME:
+    if runtime.get("movement_active") or now - runtime.get("last_move_end", 0.0) < ANCHOR_SETTLE_TIME:
         return False
     force = force_anchor_needed(runtime)
     if not force and now - runtime.get("last_anchor_time", 0.0) < BLOOM_SPRINKLER_ANCHOR_INTERVAL:
