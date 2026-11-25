@@ -673,7 +673,7 @@ def recording_thread(runtime, debug_log_fn=None):
                     runtime,
                     after_id=last_frame_id,
                     timeout=frame_interval,
-                    copy=True,
+                    copy=False,
                 )
                 if frame is None:
                     frame = grab_frame(runtime)
@@ -946,7 +946,7 @@ def find_sprinkler(
         return None
 
     if frame is None:
-        frame, _, _ = get_latest_frame(runtime, copy=True)
+        frame, _, _ = get_latest_frame(runtime, copy=False)
         if frame is None:
             frame = grab_frame(runtime)
     if runtime.get("sprinkler_model_kind") == "opencv_onnx":
@@ -1628,7 +1628,7 @@ def next_scan_frame(runtime, scan_interval):
         runtime,
         after_id=after_id,
         timeout=max(scan_interval, 0.02),
-        copy=True,
+        copy=False,
     )
     if frame is None:
         return grab_frame(runtime)
@@ -1737,7 +1737,7 @@ def move_if_far_enough(tx, ty, min_distance, move_fn):
 def prepare_recording(runtime, frame, filename_prefix, record_video, record_video_fps, debug_log_fn):
     """Make sure a video writer exists for the debug recording. Returns False when not recording."""
     if runtime.get("video_writer") is None:
-        mailbox_frame, _, _ = get_latest_frame(runtime, copy=True)
+        mailbox_frame, _, _ = get_latest_frame(runtime, copy=False)
         frame = mailbox_frame if mailbox_frame is not None else grab_frame(runtime)
 
     writer = ensure_video_writer(
