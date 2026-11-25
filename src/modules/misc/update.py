@@ -9,6 +9,7 @@ import sys
 import requests
 import zipfile
 import shutil
+import tempfile
 from io import BytesIO
 from modules.misc.messageBox import msgBox
 
@@ -106,6 +107,21 @@ def _download_update_zip(zip_link, progress_callback, start_percent=35, end_perc
         return zipfile.ZipFile(data)
     finally:
         req.close()
+
+
+def _extract_update_zip(zipf):
+    """Extract into a fresh temp dir and return (temp_dir, release_folder)."""
+    temp_dir = tempfile.mkdtemp(prefix="fuzzy-update-")
+    try:
+        zipf.extractall(temp_dir)
+        entries = os.listdir(temp_dir)
+        extracted = os.path.join(temp_dir, entries[0]) if len(entries) == 1 else None
+        if not extracted or not os.path.isdir(extracted):
+            raise OSError("Update zip does not contain a single release folder")
+        return temp_dir, extracted
+    except Exception:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        raise
 
 
 def _git_blob_sha(path):
@@ -890,124 +906,104 @@ def update(t="main", update_channel="stable", progress_callback=None):
         _report_update_progress(progress_callback, 30, "Creating backup")
         _create_backup(destination, backup_path, [], protected_files)
         _mark_backup_pending(destination)
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"[updater] Backup failed: {exc}")
+        _report_update_progress(progress_callback, 100, "Update failed: could not create backup")
+        msgBox("Update failed", "Could not create a backup. Update aborted.")
+        return False
 
     # download zip
     try:
         _report_update_progress(progress_callback, 35, f"Downloading v{remote_version}")
         zipf = _download_update_zip(zip_link, progress_callback, 35, 65)
         _report_update_progress(progress_callback, 68, "Extracting update")
-        zipf.extractall(destination)
+        temp_dir, extracted = _extract_update_zip(zipf)
     except Exception:
         _report_update_progress(progress_callback, 100, "Update failed: could not download or extract")
         msgBox("Update failed", "Could not download or extract update zip.")
         return False
 
-    # find extracted folder (likely starts with 'Fuzzy-Macro')
-    _report_update_progress(progress_callback, 72, "Locating extracted files")
-    extracted = None
-    for f in os.listdir(destination):
-        if f.startswith("Fuzzy-Macro") and os.path.isdir(os.path.join(destination, f)):
-            extracted = os.path.join(destination, f)
-            break
-    if not extracted:
-        # fallback: try any new directory containing 'src'
-        for f in os.listdir(destination):
-            p = os.path.join(destination, f)
-            if os.path.isdir(p) and os.path.exists(os.path.join(p, "src")):
-                extracted = p
-                break
-    if not extracted:
-        _report_update_progress(progress_callback, 100, "Update failed: extracted folder missing")
-        msgBox("Update failed", "Could not locate extracted update folder.")
-        return False
-
-    # merge files, overwriting existing, but skip protected folders
     try:
-        _report_update_progress(progress_callback, 78, "Applying update files")
-        _apply_update_files(
-            extracted, destination, protected_folders, protected_files, progress_callback
-        )
-    except Exception:
-        _report_update_progress(progress_callback, 100, "Update failed: could not apply files")
-        msgBox("Update failed", "Error while applying update files.")
-        return False
-
-    try:
-        _report_update_progress(progress_callback, 84, "Checking AI models")
-        _check_ai_models()
-    except Exception as e:
-        print(f"[models] Could not check/download AI models: {e}")
-
-    # Merge patterns from shipped defaults into the user's patterns folder.
-    # settings/patterns is protected above so user edits survive the generic
-    # overwrite; defaults/patterns is updated normally and is the catalog of
-    # official patterns to add (without replacing existing user copies).
-    try:
-        _report_update_progress(progress_callback, 86, "Merging patterns")
-        src_patterns = _resolve_update_pattern_source(extracted)
-        dst_patterns = os.path.join(destination, "settings", "patterns")
-        _merge_patterns(src_patterns, dst_patterns, pattern_overwrite_exceptions)
-    except Exception:
-        # non-fatal: don't interrupt whole update for pattern merge issues
-        pass
-
-    try:
-        _clean_new_duplicates(dst_patterns)
-    except Exception:
-        pass
-
-    # cleanup the extracted folder
-    try:
-        _report_update_progress(progress_callback, 92, "Cleaning up update files")
-        shutil.rmtree(extracted)
-    except Exception:
-        pass
-
-    # ensure run_macro.command is executable if present
-    run_macroPath = os.path.join(destination, "run_macro.command")
-    if os.path.exists(run_macroPath):
+        # merge files, overwriting existing, but skip protected folders
         try:
-            st = os.stat(run_macroPath)
-            os.chmod(run_macroPath, st.st_mode | stat.S_IEXEC)
+            _report_update_progress(progress_callback, 78, "Applying update files")
+            _apply_update_files(
+                extracted, destination, protected_folders, protected_files, progress_callback
+            )
+        except Exception:
+            _report_update_progress(progress_callback, 100, "Update failed: could not apply files")
+            msgBox("Update failed", "Error while applying update files.")
+            return False
+
+        try:
+            _report_update_progress(progress_callback, 84, "Checking AI models")
+            _check_ai_models()
+        except Exception as e:
+            print(f"[models] Could not check/download AI models: {e}")
+
+        # Merge patterns from shipped defaults into the user's patterns folder.
+        # settings/patterns is protected above so user edits survive the generic
+        # overwrite; defaults/patterns is updated normally and is the catalog of
+        # official patterns to add (without replacing existing user copies).
+        try:
+            _report_update_progress(progress_callback, 86, "Merging patterns")
+            src_patterns = _resolve_update_pattern_source(extracted)
+            dst_patterns = os.path.join(destination, "settings", "patterns")
+            _merge_patterns(src_patterns, dst_patterns, pattern_overwrite_exceptions)
+        except Exception:
+            # non-fatal: don't interrupt whole update for pattern merge issues
+            pass
+
+        try:
+            _clean_new_duplicates(dst_patterns)
         except Exception:
             pass
-    # Remove any leftover commit marker since this was a normal update
-    try:
-        webapp_commit = os.path.join(destination, "src", "webapp", "updated_commit.txt")
-        if os.path.exists(webapp_commit):
-            os.remove(webapp_commit)
-    except Exception:
-        pass
-    # Attempt to run install dependencies script (non-blocking). Fail silently.
-    try:
-        _report_update_progress(progress_callback, 96, "Finishing update")
-        install_script = os.path.join(destination, "install_dependencies.command")
-        if os.path.exists(install_script):
-            try:
-                st = os.stat(install_script)
-                os.chmod(install_script, st.st_mode | stat.S_IEXEC)
-            except Exception:
-                pass
-            try:
-                import subprocess
-                # Detached, fully silent run: redirect stdin/stdout/stderr and
-                # start a new session so the process isn't tied to this updater.
-                subprocess.Popen(["sh", install_script],
-                                 stdout=subprocess.DEVNULL,
-                                 stderr=subprocess.DEVNULL,
-                                 stdin=subprocess.DEVNULL,
-                                 start_new_session=True,
-                                 close_fds=True)
-            except Exception:
-                pass
-    except Exception:
-        pass
 
-    _report_update_progress(progress_callback, 100, "Update complete")
-    msgBox("Update success", "Update complete. You can now relaunch the macro")
-    return True
+        # ensure run_macro.command is executable if present
+        run_macroPath = os.path.join(destination, "run_macro.command")
+        if os.path.exists(run_macroPath):
+            try:
+                st = os.stat(run_macroPath)
+                os.chmod(run_macroPath, st.st_mode | stat.S_IEXEC)
+            except Exception:
+                pass
+        # Remove any leftover commit marker since this was a normal update
+        try:
+            webapp_commit = os.path.join(destination, "src", "webapp", "updated_commit.txt")
+            if os.path.exists(webapp_commit):
+                os.remove(webapp_commit)
+        except Exception:
+            pass
+        # Attempt to run install dependencies script (non-blocking). Fail silently.
+        try:
+            _report_update_progress(progress_callback, 96, "Finishing update")
+            install_script = os.path.join(destination, "install_dependencies.command")
+            if os.path.exists(install_script):
+                try:
+                    st = os.stat(install_script)
+                    os.chmod(install_script, st.st_mode | stat.S_IEXEC)
+                except Exception:
+                    pass
+                try:
+                    import subprocess
+                    # Detached, fully silent run: redirect stdin/stdout/stderr and
+                    # start a new session so the process isn't tied to this updater.
+                    subprocess.Popen(["sh", install_script],
+                                     stdout=subprocess.DEVNULL,
+                                     stderr=subprocess.DEVNULL,
+                                     stdin=subprocess.DEVNULL,
+                                     start_new_session=True,
+                                     close_fds=True)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        _report_update_progress(progress_callback, 100, "Update complete")
+        msgBox("Update success", "Update complete. You can now relaunch the macro")
+        return True
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 def update_from_commit(commit_hash, progress_callback=None):
@@ -1046,118 +1042,99 @@ def update_from_commit(commit_hash, progress_callback=None):
         _report_update_progress(progress_callback, 15, "Creating backup")
         _create_backup(destination, backup_path, [], protected_files)
         _mark_backup_pending(destination)
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"[updater] Backup failed: {exc}")
+        _report_update_progress(progress_callback, 100, "Update failed: could not create backup")
+        msgBox("Update failed", "Could not create a backup. Update aborted.")
+        return False
 
     # download zip for the commit
     try:
         _report_update_progress(progress_callback, 35, f"Downloading {commit_hash}")
         zipf = _download_update_zip(remote_zip, progress_callback, 35, 65)
         _report_update_progress(progress_callback, 68, "Extracting update")
-        zipf.extractall(destination)
+        temp_dir, extracted = _extract_update_zip(zipf)
     except Exception:
         _report_update_progress(progress_callback, 100, "Update failed: could not download or extract")
         msgBox("Update failed", "Could not download or extract update zip for the specified commit.")
         return False
 
-    # find extracted folder
-    _report_update_progress(progress_callback, 72, "Locating extracted files")
-    extracted = None
-    for f in os.listdir(destination):
-        if f.startswith("Fuzzy-Macro") and os.path.isdir(os.path.join(destination, f)):
-            extracted = os.path.join(destination, f)
-            break
-    if not extracted:
-        for f in os.listdir(destination):
-            p = os.path.join(destination, f)
-            if os.path.isdir(p) and os.path.exists(os.path.join(p, "src")):
-                extracted = p
-                break
-    if not extracted:
-        _report_update_progress(progress_callback, 100, "Update failed: extracted folder missing")
-        msgBox("Update failed", "Could not locate extracted update folder.")
-        return False
-
     try:
-        _report_update_progress(progress_callback, 78, "Applying update files")
-        _apply_update_files(
-            extracted, destination, protected_folders, protected_files, progress_callback
-        )
-    except Exception:
-        _report_update_progress(progress_callback, 100, "Update failed: could not apply files")
-        msgBox("Update failed", "Error while applying update files.")
-        return False
-
-    try:
-        _report_update_progress(progress_callback, 84, "Checking AI models")
-        _check_ai_models()
-    except Exception as e:
-        print(f"[models] Could not check/download AI models: {e}")
-
-    # merge patterns similar to update()
-    try:
-        _report_update_progress(progress_callback, 86, "Merging patterns")
-        src_patterns = _resolve_update_pattern_source(extracted)
-        dst_patterns = os.path.join(destination, "settings", "patterns")
-        _merge_patterns(src_patterns, dst_patterns, pattern_overwrite_exceptions)
-    except Exception:
-        pass
-
-    try:
-        _clean_new_duplicates(dst_patterns)
-    except Exception:
-        pass
-
-    # cleanup the extracted folder
-    try:
-        _report_update_progress(progress_callback, 92, "Cleaning up update files")
-        shutil.rmtree(extracted)
-    except Exception:
-        pass
-
-    # ensure run_macro.command is executable if present
-    run_macroPath = os.path.join(destination, "run_macro.command")
-    if os.path.exists(run_macroPath):
         try:
-            st = os.stat(run_macroPath)
-            os.chmod(run_macroPath, st.st_mode | stat.S_IEXEC)
+            _report_update_progress(progress_callback, 78, "Applying update files")
+            _apply_update_files(
+                extracted, destination, protected_folders, protected_files, progress_callback
+            )
+        except Exception:
+            _report_update_progress(progress_callback, 100, "Update failed: could not apply files")
+            msgBox("Update failed", "Error while applying update files.")
+            return False
+
+        try:
+            _report_update_progress(progress_callback, 84, "Checking AI models")
+            _check_ai_models()
+        except Exception as e:
+            print(f"[models] Could not check/download AI models: {e}")
+
+        # merge patterns similar to update()
+        try:
+            _report_update_progress(progress_callback, 86, "Merging patterns")
+            src_patterns = _resolve_update_pattern_source(extracted)
+            dst_patterns = os.path.join(destination, "settings", "patterns")
+            _merge_patterns(src_patterns, dst_patterns, pattern_overwrite_exceptions)
         except Exception:
             pass
 
-    # Write a marker file in webapp so the UI can show the commit hash next to version
-    try:
-        webapp_commit = os.path.join(destination, "src", "webapp", "updated_commit.txt")
-        with open(webapp_commit, "w") as fh:
-            fh.write(commit_hash[:7])
-    except Exception:
-        pass
-    # Attempt to run install dependencies script (non-blocking). Fail silently.
-    try:
-        _report_update_progress(progress_callback, 96, "Finishing update")
-        install_script = os.path.join(destination, "install_dependencies.command")
-        if os.path.exists(install_script):
-            try:
-                st = os.stat(install_script)
-                os.chmod(install_script, st.st_mode | stat.S_IEXEC)
-            except Exception:
-                pass
-            try:
-                import subprocess
-                # Detached, fully silent run
-                subprocess.Popen(["sh", install_script],
-                                 stdout=subprocess.DEVNULL,
-                                 stderr=subprocess.DEVNULL,
-                                 stdin=subprocess.DEVNULL,
-                                 start_new_session=True,
-                                 close_fds=True)
-            except Exception:
-                pass
-    except Exception:
-        pass
+        try:
+            _clean_new_duplicates(dst_patterns)
+        except Exception:
+            pass
 
-    _report_update_progress(progress_callback, 100, "Update complete")
-    msgBox("Update success", "Update complete. You can now relaunch the macro")
-    return True
+        # ensure run_macro.command is executable if present
+        run_macroPath = os.path.join(destination, "run_macro.command")
+        if os.path.exists(run_macroPath):
+            try:
+                st = os.stat(run_macroPath)
+                os.chmod(run_macroPath, st.st_mode | stat.S_IEXEC)
+            except Exception:
+                pass
+
+        # Write a marker file in webapp so the UI can show the commit hash next to version
+        try:
+            webapp_commit = os.path.join(destination, "src", "webapp", "updated_commit.txt")
+            with open(webapp_commit, "w") as fh:
+                fh.write(commit_hash[:7])
+        except Exception:
+            pass
+        # Attempt to run install dependencies script (non-blocking). Fail silently.
+        try:
+            _report_update_progress(progress_callback, 96, "Finishing update")
+            install_script = os.path.join(destination, "install_dependencies.command")
+            if os.path.exists(install_script):
+                try:
+                    st = os.stat(install_script)
+                    os.chmod(install_script, st.st_mode | stat.S_IEXEC)
+                except Exception:
+                    pass
+                try:
+                    import subprocess
+                    # Detached, fully silent run
+                    subprocess.Popen(["sh", install_script],
+                                     stdout=subprocess.DEVNULL,
+                                     stderr=subprocess.DEVNULL,
+                                     stdin=subprocess.DEVNULL,
+                                     start_new_session=True,
+                                     close_fds=True)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        _report_update_progress(progress_callback, 100, "Update complete")
+        msgBox("Update success", "Update complete. You can now relaunch the macro")
+        return True
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 def check_for_updates_silent(update_channel="stable"):
