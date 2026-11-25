@@ -526,7 +526,7 @@ def capture_loop(runtime, interval, debug_log_fn=None):
                 pass
 
 
-def ensure_capture_thread(runtime, interval=0.016, debug_log_fn=None):
+def ensure_capture_thread(runtime, interval=0.04, debug_log_fn=None):
     init_frame_mailbox(runtime)
     thread = runtime.get("capture_thread")
     if thread is not None and thread.is_alive():
@@ -1602,6 +1602,13 @@ def shutdown_runtime(runtime, debug_log_fn):
 
 def start_runtime(runtime, initialise_fn, debug_log_fn, ready_message_fn):
     """Fill `runtime` from initialise_fn; on failure leave it not ready with the error text."""
+    # A closed mss session cannot be reused, so it is only released when the runtime is rebuilt.
+    session = (runtime.get("capture") or {}).get("session")
+    if session is not None:
+        try:
+            session.close()
+        except Exception:
+            pass
     try:
         runtime.clear()
         runtime.update(initialise_fn())
@@ -1616,7 +1623,7 @@ def start_runtime(runtime, initialise_fn, debug_log_fn, ready_message_fn):
 
 def start_scanners(runtime, scan_fn, scan_interval, sprinkler_kwargs, anchor_kwargs, debug_log_fn, sprinkler_apply_fn=None):
     """Start the capture, token and sprinkler threads, running one scan first if none has happened."""
-    ensure_capture_thread(runtime, interval=0.016, debug_log_fn=debug_log_fn)
+    ensure_capture_thread(runtime, interval=0.04, debug_log_fn=debug_log_fn)
     wait_for_capture_ready(runtime, timeout=1.0)
     if not runtime.get("latest_scan_time"):
         scan_fn(runtime)
