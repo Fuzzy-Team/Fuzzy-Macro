@@ -698,7 +698,16 @@ def clearManualPlanters():
 def getManualPlanterData():
     planterDataRaw = settingsManager.loadUserText("manualplanters.txt")
     if planterDataRaw.strip():
-        return ast.literal_eval(planterDataRaw)
+        try:
+            planterData = ast.literal_eval(planterDataRaw)
+        except Exception:
+            planterData = None
+        # a hand-edited or old file can be a list; the home tab reads these three lists
+        if isinstance(planterData, dict):
+            for key in ("planters", "fields", "harvestTimes"):
+                if not isinstance(planterData.get(key), list):
+                    planterData[key] = []
+            return planterData
     # nothing planted yet; the home tab reads .planters
     return {"planters": []}
 
