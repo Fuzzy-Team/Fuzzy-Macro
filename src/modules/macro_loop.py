@@ -224,26 +224,68 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
         index = -1 if index is None or index == "" else int(index)
         if index < 0:
             return
+        planter = command.get("planter", "")
+        field = command.get("field", "")
+
+        # The command waits in a queue while the macro keeps harvesting and replanting,
+        # so the slot it names can already hold the next planter by the time it runs.
+        # Clear the row that still holds this planter, and only when one does.
+        def slotToClear(planterNames, fieldNames, preferIndex):
+            if not isinstance(planterNames, list) or not isinstance(fieldNames, list):
+                return None
+
+            def clean(value):
+                return str(value or "").strip().lower().replace("_", " ").replace("-", " ")
+
+            def matches(slot):
+                return (slot < len(planterNames) and slot < len(fieldNames)
+                        and clean(planterNames[slot]) == clean(planter)
+                        and clean(fieldNames[slot]) == clean(field))
+
+            if matches(preferIndex):
+                return preferIndex
+            return next((slot for slot in range(len(planterNames)) if matches(slot)), None)
+
+        def reportStaleSlot():
+            macro.logger.webhook("", f"{str(planter).title()} is no longer in {str(field).title()}; its timer was already cleared", "dark brown")
 
         if mode == 1:
-            with open(settingsManager.ensureUserFile("manualplanters.txt"), "r") as f:
-                raw = f.read().strip()
-            planterData = ast.literal_eval(raw) if raw else {"planters": ["", "", ""], "fields": ["", "", ""], "gatherFields": ["", "", ""], "harvestTimes": [0, 0, 0], "cycles": [0, 0, 0]}
-            for key, emptyValue in (("planters", ""), ("fields", ""), ("gatherFields", "")):
-                if key in planterData and index < len(planterData[key]):
-                    planterData[key][index] = emptyValue
-            if "harvestTimes" in planterData and index < len(planterData["harvestTimes"]):
-                planterData["harvestTimes"][index] = 0
+            try:
+                with open(settingsManager.ensureUserFile("manualplanters.txt"), "r") as f:
+                    raw = f.read().strip()
+                planterData = normalizeManualPlanterData(ast.literal_eval(raw) if raw else {})
+            except Exception as error:
+                macro.logger.webhook("", f"Could not clear the collected planter's timer: {error}", "orange")
+                return
+            slot = slotToClear(planterData["planters"], planterData["fields"], index)
+            if slot is None:
+                reportStaleSlot()
+                return
+            for key in ("planters", "fields", "gatherFields"):
+                planterData[key][slot] = ""
+            planterData["harvestTimes"][slot] = 0
             settingsManager.saveUserLiteral("manualplanters.txt", planterData)
         elif mode == 2:
-            with open(settingsManager.ensureUserFile("auto_planters.json"), "r") as f:
-                autoData = json.load(f)
-            planters = autoData.get("planters", [])
-            if index < len(planters):
-                slot = planters[index] if isinstance(planters[index], dict) else {}
-                bonusLoot.trackHarvest(command["planter"], command["field"], bonusLoot.fullyGrown(
-                    command["planter"], command["field"], slot.get("placed_time", 0), slot.get("natural_grow_duration") or None))
-                planters[index] = emptyAutoPlanterSlot()
+            try:
+                with open(settingsManager.ensureUserFile("auto_planters.json"), "r") as f:
+                    autoData = json.load(f)
+                planters = autoData.get("planters", []) if isinstance(autoData, dict) else []
+            except Exception as error:
+                macro.logger.webhook("", f"Could not clear the collected planter's timer: {error}", "orange")
+                return
+            if not isinstance(planters, list):
+                macro.logger.webhook("", "Could not clear the collected planter's timer: auto planter state is malformed", "orange")
+                return
+            names = [row.get("planter", "") if isinstance(row, dict) else "" for row in planters]
+            fields = [row.get("field", "") if isinstance(row, dict) else "" for row in planters]
+            slot = slotToClear(names, fields, index)
+            if slot is None:
+                reportStaleSlot()
+                return
+            collected = planters[slot]
+            bonusLoot.trackHarvest(planter, field, bonusLoot.fullyGrown(
+                planter, field, collected.get("placed_time", 0), collected.get("natural_grow_duration") or None))
+            planters[slot] = emptyAutoPlanterSlot()
             autoData["planters"] = planters
             settingsManager.saveUserJson("auto_planters.json", autoData)
 
