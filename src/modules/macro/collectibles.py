@@ -86,7 +86,7 @@ class CollectiblesMixin:
                     dialogVisible = True
                     _score, loc = result
                     # The middle of the "Click to continue" line, which sits just inside the bottom of the box.
-                    clickY = searchY + loc[1] + dialogImg.shape[0] // 2
+                    clickY = searchY + (loc[1] + dialogImg.shape[0] // 2) // self.robloxWindow.multi
                 else:
                     try:
                         dialogText = ''.join([x[1][0] for x in ocr.ocrRead(mssScreenshot(searchX, searchY, searchW, searchH))]).lower()
@@ -113,7 +113,7 @@ class CollectiblesMixin:
                 if not result:
                     break
                 _score, loc = result
-                mouse.moveTo(clickX, searchY + loc[1] + dialogImg.shape[0] // 2)
+                mouse.moveTo(clickX, searchY + (loc[1] + dialogImg.shape[0] // 2) // self.robloxWindow.multi)
                 mouse.click()
                 time.sleep(0.2)
 
