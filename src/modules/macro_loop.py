@@ -1495,6 +1495,12 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                             nextCycle = goToNextCycle(0, i)
                             if not nextCycle:
                                 continue
+                            # A field holds one planter, so a slot whose first cycle reuses
+                            # another slot's field must wait for it like later cycles do.
+                            fieldToPlace = macro.setdat[f"cycle{nextCycle}_{i+1}_field"]
+                            otherSlotFields = planterData["fields"][:i] + planterData["fields"][i+1:]
+                            if fieldToPlace in otherSlotFields:
+                                continue
                             nextField = nextPlanterField(i, planterData)
                             planter = runTask(macro.placePlanterInCycle, args = (i, nextCycle, nextField),resetAfter=False, allowAFB=False, capFailures=True)
                             if planter:
