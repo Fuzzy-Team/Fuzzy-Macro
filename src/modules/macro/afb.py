@@ -376,15 +376,14 @@ class AFBMixin:
                         else:
                             self.keyboard.press(str(diceslot))
 
-                        timeout = 0
-                        for _ in range(300):
+                        deadline = time.monotonic() + 15
+                        while True:
                             if is_stopped():
                                 return failedExit()
                             if self.blueTextImageSearch("boosted"):
                                 time.sleep(2)
                                 break
-                            timeout += 1
-                            if timeout == 300:
+                            if time.monotonic() >= deadline:
                                 self.logger.webhook("", "Auto Field Boost: Timeout", "pink")
                                 self.keyboard.press("pagedown")
                                 for _ in range(3):
@@ -394,6 +393,7 @@ class AFBMixin:
                                 self.saveAFB("AFB_dice_cd")
                                 self.AFBglitter = False
                                 return failedExit()
+                            time.sleep(0.05)
 
                         for _ in range(8):
                             bluetexts += ocr.readBlueText() + "\n"
