@@ -167,7 +167,11 @@ def wait_while_paused():
     while is_paused():
         was_paused = True
         time.sleep(0.1)
-    if was_paused and not is_stopped() and _resume_callback is not None:
+    # The resume callback redetects the Roblox window and can toggle fullscreen, so it runs on
+    # the main thread only. Every waiting thread used to run it, so one pause redetected the
+    # window once per waiter.
+    on_main_thread = threading.current_thread() is threading.main_thread()
+    if was_paused and not is_stopped() and _resume_callback is not None and on_main_thread:
         try:
             _resume_callback()
         except Exception:
