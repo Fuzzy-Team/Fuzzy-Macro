@@ -178,7 +178,9 @@ def enterRobloxFullscreen():
             if err == 0 and windows:
                 err, fullscreen = AX.AXUIElementCopyAttributeValue(windows[0], "AXFullScreen", None)
                 if err == 0 and not fullscreen:
-                    AX.AXUIElementSetAttributeValue(windows[0], "AXFullScreen", True)
+                    err = AX.AXUIElementSetAttributeValue(windows[0], "AXFullScreen", True)
+                    if err != 0:
+                        print(f"Roblox fullscreen request failed with AX error {err}; window bounds may include the title bar.")
                     time.sleep(1.5) # the fullscreen animation
             return
 
