@@ -381,13 +381,15 @@ class QuestMixin:
         }
 
         #prevent the macro from false detecting beesmas quests
+        beesmasPhrases = ["beesmas", "feast", "beesmas feast"]
         questTitleBlacklistedPhrases = {
-            "polar bear": ["beesmas", "feast", "beesmas feast"],
+            "polar bear": beesmasPhrases,
             "bucko bee": ["snow machine"],
             "riley bee": ["honeyday", "honeyday candles"],
             "honey bee": ["honey wreath"],
             "brown bear": ["stockings"],
-            "black bear": ["honey wreath"]
+            "black bear": ["honey wreath"],
+            **{giver: beesmasPhrases for giver in FIXED_LINE_GIVERS}
         }
 
         def parseBrownBearTitleObjectives(titleText):
