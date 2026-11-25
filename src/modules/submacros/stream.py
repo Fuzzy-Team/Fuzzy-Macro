@@ -10,6 +10,7 @@ import re
 import os
 import gc
 import sys
+import shutil
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from modules.misc.cooldowns import get_cooldown_rows
@@ -249,13 +250,13 @@ class cloudflaredStream:
 
         #get the cloudflared path
         paths = [
-            "cloudflared",
+            shutil.which("cloudflared"),
             "/opt/homebrew/bin/cloudflared",
             "/usr/local/Homebrew/bin/cloudflared",
             "/usr/local/bin/cloudflared"
         ]
         for path in paths:
-            if os.path.isfile(path) and os.access(path, os.X_OK):
+            if path and os.path.isfile(path) and os.access(path, os.X_OK):
                 self.cloudflaredPath = path
                 break
         else:

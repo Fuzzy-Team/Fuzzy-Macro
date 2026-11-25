@@ -209,8 +209,8 @@ class ViciousMixin:
 
 
     def viciousJump(self):
-        self.keyboard.keyDown("space", False)
         try:
+            self.keyboard.keyDown("space", False)
             sleep(0.05)
         finally:
             self.keyboard.keyUp("space", False)

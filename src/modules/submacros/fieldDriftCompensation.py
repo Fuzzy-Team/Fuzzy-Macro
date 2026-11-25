@@ -309,8 +309,8 @@ class fieldDriftCompensation():
         return (x, y)
         
     def press(self, k,t):
-        keyboard.keyDown(k, False)
         try:
+            keyboard.keyDown(k, False)
             time.sleep(t)
         finally:
             keyboard.keyUp(k, False)
