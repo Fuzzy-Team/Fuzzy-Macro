@@ -203,7 +203,8 @@ function refreshSproutAITokenRows() {
 }
 
 // the element a dragged row should go in front of, or null to go last
-function getDragAfterElement(container, y, rowSelector) {
+// (kept separate from config.js's getDragAfterElement, which the priority list calls with two args)
+function getDragAfterRowElement(container, y, rowSelector) {
     const rows = Array.from(container.querySelectorAll(rowSelector))
     return rows.reduce((closest, row) => {
         const box = row.getBoundingClientRect()
@@ -352,7 +353,7 @@ $("#collect-placeholder")
     event.preventDefault()
     const dragging = document.querySelector(".blender-slot.dragging")
     if (!dragging) return
-    const afterElement = getDragAfterElement(event.currentTarget, event.originalEvent.clientY, ".blender-slot:not(.dragging)")
+    const afterElement = getDragAfterRowElement(event.currentTarget, event.originalEvent.clientY, ".blender-slot:not(.dragging)")
     if (afterElement == null) event.currentTarget.appendChild(dragging)
     else event.currentTarget.insertBefore(dragging, afterElement)
     refreshBlenderSlots()
@@ -381,7 +382,7 @@ $("#collect-placeholder")
     event.preventDefault()
     const dragging = document.querySelector(".sprout-ai-token-row.dragging")
     if (!dragging) return
-    const afterElement = getDragAfterElement(event.currentTarget, event.originalEvent.clientY, ".sprout-ai-token-row:not(.dragging)")
+    const afterElement = getDragAfterRowElement(event.currentTarget, event.originalEvent.clientY, ".sprout-ai-token-row:not(.dragging)")
     if (afterElement == null) event.currentTarget.appendChild(dragging)
     else event.currentTarget.insertBefore(dragging, afterElement)
  })
