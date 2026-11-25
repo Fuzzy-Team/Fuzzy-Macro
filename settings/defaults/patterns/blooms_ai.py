@@ -17,6 +17,7 @@ Requirements:
 """
 
 import math
+import re
 import threading
 import time
 
@@ -31,7 +32,7 @@ INPUT_HEIGHT = agc.INPUT_HEIGHT
 MODEL_DIR = agc.MODEL_DIR
 SPRINKLER_CONFIDENCE_THRESHOLD = 0.6
 PETAL_CONFIDENCE_THRESHOLD = 0.50
-RUNTIME_VERSION = 42
+RUNTIME_VERSION = 43
 MIN_TOKEN_DISTANCE = 0.3
 MAX_SPRINKLER_DISTANCE = 10.0
 TARGET_SPRINKLER_LABEL = None
@@ -43,15 +44,22 @@ CONTINUOUS_MIN_REPLAN_DISTANCE = 0.08
 TARGET_LOCK_LOST_TIMEOUT = 0.9
 TARGET_LOCK_SWITCH_SCORE_MULTIPLIER = 2.25
 TARGET_LOCK_SWITCH_DISTANCE = 1.25
-TARGET_POSITION_SMOOTHING = 0.35
+TARGET_POSITION_SMOOTHING = 1.0
+BLOOM_APPROACH_STEP = 3.0
+ANCHOR_SETTLE_TIME = 0.3
 ANCHOR_REFRESH_INTERVAL = 0.35
 ANCHOR_MAX_PASSIVE_DISTANCE = 8.0
 LEASH_HARD_MARGIN = 2.5
 BLOOM_LABEL = "Bloom"
-PETAL_ORBIT_RADIUS = 3.0
-PETAL_ORBIT_DURATION = 3.0
-PETAL_ORBIT_CORNERS = 4
+PETAL_ORBIT_RADIUS = 3.5
+PETAL_ORBIT_EDGE_MARGIN = 1.5
+PETAL_ORBIT_DURATION = 5.0
+PETAL_ORBIT_MIN_CORNERS = 3
+PETAL_ORBIT_CORNERS = 6
 BLOOM_MAX_DISTANCE = 20.0
+BLOOM_EDGE_MARGIN = 1.0
+FEED_READ_INTERVAL = 0.5
+FEED_RECENT_READS = 6
 BLOOM_SETTLE_DISTANCE = 0.25
 BLOOM_MIN_CONFIDENCE = 0.50
 BLOOM_SPRINKLER_ANCHOR_INTERVAL = 0.35
@@ -61,6 +69,7 @@ BLOOM_CONTACT_MAX_MOVE = 0.3
 BLOOM_CONTACT_MOVE_COOLDOWN = 0.25
 BLOOM_CONTACT_CONFIRMATIONS = 3
 BLOOM_CONTACT_MAX_TOTAL_MOVE = 1.2
+BLOOM_WORK_TIMEOUT = 2.0
 IDLE_SQUARE_SIDE = 1.2
 IDLE_SPRINKLER_NEAR = 0.85
 IDLE_RETURN_STEP = 1.35
@@ -164,8 +173,39 @@ def _anchor_kwargs():
     }
 
 
+def _petal_feed_loop(runtime, stop_event):
+    """Counts caught petals from the honey feed lines ("+120 Honey (from Green Bloom Petal)").
+    A line stays on screen for a few seconds, so only a rise over the recent reads is a new petal."""
+    recent = []
+    while not stop_event.wait(FEED_READ_INTERVAL):
+        lines = len(re.findall(r"bloom\s*petal", self.readBlueText()))
+        new = lines - max(recent, default=0)
+        if new > 0:
+            runtime["petals_caught"] = runtime.get("petals_caught", 0) + new
+        recent = (recent + [lines])[-FEED_RECENT_READS:]
+
+
+def _ensure_petal_counter(runtime):
+    thread = runtime.get("petal_feed_thread")
+    if thread is not None and thread.is_alive():
+        return
+    stop_event = threading.Event()
+    thread = threading.Thread(target=_petal_feed_loop, args=(runtime, stop_event), daemon=True)
+    runtime["petal_feed_stop"] = stop_event
+    runtime["petal_feed_thread"] = thread
+    thread.start()
+
+
 def onGatherEnd():
-    agc.shutdown_runtime(_runtime_state(), _debug_log)
+    runtime = _runtime_state()
+    stop_event = runtime.get("petal_feed_stop")
+    if stop_event is not None:
+        stop_event.set()
+    popped = runtime.pop("blooms_popped", 0)
+    petals = runtime.pop("petals_caught", 0)
+    agc.shutdown_runtime(runtime, _debug_log)
+    if popped or petals:
+        self.logger.webhook("", f"Blooms AI: {popped} blooms popped, {petals} petals caught", "light blue")
 
 
 def _record_debug_frame(runtime, frame, detections, target):
@@ -196,6 +236,8 @@ def _record_debug_frame(runtime, frame, detections, target):
         "petal_orbit_center": tuple(runtime["petal_orbit_center"]) if isinstance(runtime.get("petal_orbit_center"), (tuple, list)) else None,
         "petal_orbit_deadline": runtime.get("petal_orbit_deadline", 0.0),
         "petal_orbit_index": runtime.get("petal_orbit_index"),
+        "blooms_popped": runtime.get("blooms_popped", 0),
+        "petals_caught": runtime.get("petals_caught", 0),
         "updated_at": now,
     })
     runtime["latest_recording_overlay"] = overlay
@@ -232,11 +274,12 @@ def _annotate_recording_frame(runtime, frame):
         status_lines.append(
             f"active_bloom=({active_bloom.get('tx', 0.0):.2f},{active_bloom.get('ty', 0.0):.2f}) contact={overlay.get('bloom_contact_distance', 0.0):.2f}/{BLOOM_CONTACT_MAX_TOTAL_MOVE:.2f}"
         )
+    status_lines.append(f"blooms popped={overlay.get('blooms_popped', 0)} petals caught={overlay.get('petals_caught', 0)}")
     orbit_center = overlay.get("petal_orbit_center")
     if isinstance(orbit_center, (tuple, list)) and len(orbit_center) == 2:
         seconds_left = max(0.0, float(overlay.get("petal_orbit_deadline", 0.0)) - time.time())
         status_lines.append(
-            f"petal_orbit=({orbit_center[0]:.2f},{orbit_center[1]:.2f}) next={int(overlay.get('petal_orbit_index') or 0) + 1}/{PETAL_ORBIT_CORNERS} left={seconds_left:.1f}s"
+            f"petal_orbit=({orbit_center[0]:.2f},{orbit_center[1]:.2f}) corner={int(overlay.get('petal_orbit_index') or 0) + 1} left={seconds_left:.1f}s"
         )
     agc.draw_status_and_timing(annotated, status_lines, overlay)
     petal_detection_ms = overlay.get("petal_detection_ms")
@@ -367,7 +410,8 @@ def _find_best_token(runtime, detections):
             continue
 
         future_dist = math.hypot(future_x, future_y)
-        if future_dist > metrics["hard_leash"]:
+        # Walks run long under haste, so skip blooms the approach could carry off the field.
+        if future_dist > metrics["hard_leash"] - BLOOM_EDGE_MARGIN:
             rejected.append({"name": token_name, "reason": "hard_leash", "confidence": confidence, "distance": distance, "future_dist": future_dist, "tx": tx, "ty": ty})
             continue
         proximity = 1.0 / (0.3 + distance) ** metrics["proximity_exp"]
@@ -412,6 +456,7 @@ def _execute_movement(tx, ty):
     runtime = _runtime_state()
     runtime["movement_revision"] = int(runtime.get("movement_revision", 0)) + 1
     moved = agc.walk_tracked(runtime, self.keyboard, tx, ty, tcfbkey, afcfbkey, tclrkey, afclrkey)
+    runtime["last_move_end"] = time.time()
 
     if moved:
         with agc.scan_lock_for(runtime):
@@ -491,6 +536,7 @@ def _execute_interruptible_patrol_move(runtime, tx, ty):
             runtime["movement_count"] += 1
     finally:
         runtime["movement_active"] = False
+        runtime["last_move_end"] = time.time()
 
     if abs(moved_x) > 1e-9 or abs(moved_y) > 1e-9:
         with agc.scan_lock_for(runtime):
@@ -613,6 +659,7 @@ def _active_bloom_detection(runtime):
 def _start_bloom_work(runtime, target):
     runtime["bloom_mode"] = "work"
     runtime["active_bloom"] = dict(target)
+    runtime["bloom_work_started"] = time.time()
     runtime["bloom_last_visible_time"] = time.time()
     runtime["bloom_contact_vector"] = None
     runtime["bloom_contact_confirmations"] = 0
@@ -622,19 +669,28 @@ def _start_bloom_work(runtime, target):
     agc.clear_locked_target(runtime)
 
 
+def _resync_anchor(runtime):
+    """Re-measure the position from the sprinkler once the character has stopped."""
+    time.sleep(0.1)
+    return agc.refresh_sprinkler_anchor(runtime, force=True, **_anchor_kwargs())
+
+
 def _start_petal_orbit(runtime):
-    now = time.time()
     active_bloom = runtime.get("active_bloom")
     if not isinstance(active_bloom, dict):
         return False
+    # The character is on the bloom, so its freshly measured position is the
+    # most accurate orbit centre (the bloom's stored coordinates may have drifted).
+    _resync_anchor(runtime)
     runtime["bloom_mode"] = "orbit"
     runtime["petal_orbit_center"] = (
-        float(active_bloom.get("future_x", runtime.get("current_x", 0.0))),
-        float(active_bloom.get("future_y", runtime.get("current_y", 0.0))),
+        float(runtime.get("current_x", 0.0)),
+        float(runtime.get("current_y", 0.0)),
     )
-    runtime["petal_orbit_deadline"] = now + PETAL_ORBIT_DURATION
+    runtime["petal_orbit_deadline"] = time.time() + PETAL_ORBIT_DURATION
     runtime["petal_orbit_index"] = None
     runtime["active_bloom"] = None
+    runtime["blooms_popped"] = runtime.get("blooms_popped", 0) + 1
     agc.clear_locked_target(runtime)
     return True
 
@@ -659,38 +715,48 @@ def _execute_petal_orbit(runtime):
         _finish_petal_orbit(runtime)
         return True
 
-    points = [
-        (float(center[0]) + PETAL_ORBIT_RADIUS, float(center[1])),
-        (float(center[0]), float(center[1]) + PETAL_ORBIT_RADIUS),
-        (float(center[0]) - PETAL_ORBIT_RADIUS, float(center[1])),
-        (float(center[0]), float(center[1]) - PETAL_ORBIT_RADIUS),
-    ]
-    orbit_index = runtime.get("petal_orbit_index")
-    if orbit_index is None:
-        current_x = float(runtime.get("current_x", 0.0))
-        current_y = float(runtime.get("current_y", 0.0))
-        orbit_index = min(
-            range(PETAL_ORBIT_CORNERS),
-            key=lambda index: math.hypot(points[index][0] - current_x, points[index][1] - current_y),
+    # Pull corners that would leave the field back inside the leash. Walks run
+    # long under haste, so keep the corners well short of the edge.
+    max_radius = max(_token_metrics()["max_leash"] - PETAL_ORBIT_EDGE_MARGIN, PETAL_ORBIT_EDGE_MARGIN)
+    # Each lap adds a corner, so the loop widens from a triangle toward a hexagon
+    # and sweeps the whole petal ring. A lap starts at the nearest corner.
+    corners = PETAL_ORBIT_MIN_CORNERS
+    while time.time() < float(runtime.get("petal_orbit_deadline", 0.0)):
+        points = []
+        for index in range(corners):
+            angle = 2.0 * math.pi * index / corners
+            point_x = float(center[0]) + PETAL_ORBIT_RADIUS * math.cos(angle)
+            point_y = float(center[1]) + PETAL_ORBIT_RADIUS * math.sin(angle)
+            point_radius = math.hypot(point_x, point_y)
+            if point_radius > max_radius:
+                point_x *= max_radius / point_radius
+                point_y *= max_radius / point_radius
+            points.append((point_x, point_y))
+        start = min(
+            range(corners),
+            key=lambda index: math.hypot(
+                points[index][0] - float(runtime.get("current_x", 0.0)),
+                points[index][1] - float(runtime.get("current_y", 0.0)),
+            ),
         )
-    else:
-        orbit_index = int(orbit_index) % PETAL_ORBIT_CORNERS
-
-    for _ in range(PETAL_ORBIT_CORNERS + 1):
-        if time.time() >= float(runtime.get("petal_orbit_deadline", 0.0)):
-            break
-        target_x, target_y = points[orbit_index]
-        move_x = target_x - float(runtime.get("current_x", 0.0))
-        move_y = target_y - float(runtime.get("current_y", 0.0))
-        runtime["petal_orbit_index"] = (orbit_index + 1) % PETAL_ORBIT_CORNERS
-        _debug_log(
-            f"orbiting popped bloom corner={orbit_index + 1}/{PETAL_ORBIT_CORNERS} move=({move_x:.2f},{move_y:.2f})",
-            min_interval=0.25,
-            key="petal_orbit",
-        )
-        if not _execute_movement(move_x, move_y):
-            break
-        orbit_index = runtime["petal_orbit_index"]
+        for step in range(corners):
+            if time.time() >= float(runtime.get("petal_orbit_deadline", 0.0)):
+                break
+            orbit_index = (start + step) % corners
+            target_x, target_y = points[orbit_index]
+            move_x = target_x - float(runtime.get("current_x", 0.0))
+            move_y = target_y - float(runtime.get("current_y", 0.0))
+            runtime["petal_orbit_index"] = orbit_index
+            _debug_log(
+                f"orbiting popped bloom corner={orbit_index + 1}/{corners} move=({move_x:.2f},{move_y:.2f})",
+                min_interval=0.25,
+                key="petal_orbit",
+            )
+            if not _execute_movement(move_x, move_y):
+                _finish_petal_orbit(runtime)
+                return True
+            _resync_anchor(runtime)
+        corners = min(corners + 1, PETAL_ORBIT_CORNERS)
 
     _finish_petal_orbit(runtime)
     return True
@@ -700,7 +766,11 @@ def _execute_bloom_sequence(runtime):
     mode = runtime.get("bloom_mode", "patrol")
     now = time.time()
     if mode == "work":
+        if runtime.get("movement_requires_fresh_scan"):
+            return True
         bloom = _active_bloom_detection(runtime)
+        if bloom and now - runtime.get("bloom_work_started", now) > BLOOM_WORK_TIMEOUT:
+            bloom = None
         if bloom:
             runtime["bloom_last_visible_time"] = now
             tx = float(bloom.get("tx", 0.0))
@@ -830,6 +900,11 @@ def _execute_planned_movement(runtime):
         min_interval=0.25,
         key="planned_move",
     )
+    # Walk long approaches in steps so each fresh scan corrects the walking error.
+    if remaining_distance > BLOOM_APPROACH_STEP:
+        scale = BLOOM_APPROACH_STEP / remaining_distance
+        remaining_x *= scale
+        remaining_y *= scale
     return _execute_movement_to_target(remaining_x, remaining_y)
 
 
@@ -892,9 +967,10 @@ def _apply_bloom_sprinkler_result(runtime, result):
 
 
 def _bloom_sprinkler_anchor_should_run(runtime):
-    if runtime.get("movement_count", 0) > 0:
-        return False
     now = time.time()
+    # A frame grabbed while walking shows the sprinkler at the wrong offset.
+    if now - runtime.get("last_move_end", 0.0) < ANCHOR_SETTLE_TIME:
+        return False
     force = force_anchor_needed(runtime)
     if not force and now - runtime.get("last_anchor_time", 0.0) < BLOOM_SPRINKLER_ANCHOR_INTERVAL:
         return False
@@ -997,6 +1073,7 @@ def _initialise_runtime():
         "current_x": 0.0,
         "current_y": 0.0,
         "movement_count": 0,
+        "last_move_end": 0.0,
         "initialised_at": time.time(),
         "video_writer": None,
         "video_path": "",
@@ -1069,6 +1146,7 @@ else:
             sprinkler_apply_fn=_apply_bloom_sprinkler_result,
         )
         _refresh_bloom_sprinkler_anchor(runtime)
+        _ensure_petal_counter(runtime)
 
         target = agc.locked_target(runtime) or agc.latest_target(runtime)
         bloom_mode = runtime.get("bloom_mode", "patrol")
@@ -1081,7 +1159,9 @@ else:
                 key="target",
             )
             if not _execute_planned_movement(runtime):
-                if target.get("name") == BLOOM_LABEL:
+                # After a step the old detections are stale. Wait for a fresh scan
+                # instead of treating the pause as arriving at the bloom.
+                if target.get("name") == BLOOM_LABEL and not runtime.get("movement_requires_fresh_scan"):
                     _start_bloom_work(runtime, target)
                     _execute_bloom_sequence(runtime)
         else:
