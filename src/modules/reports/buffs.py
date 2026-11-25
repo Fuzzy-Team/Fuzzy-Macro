@@ -298,15 +298,19 @@ class BuffDetector():
 
     def getBuffQuantityFromImgOcrRobust(self, bgrImg, transform, buff=None):
         maxValue = HOURLY_BUFF_OCR_MAX_VALUES.get(buff)
-        candidates = [
-            self.getBuffQuantityFromImg(bgrImg, transform),
-            self.getBuffQuantityFromImg(bgrImg, transform, crop=False),
-            self.getBuffQuantityFromImgTightDecimal(bgrImg),
-            self.getBuffQuantityFromImgTightDecimal(bgrImg, crop=False),
-        ]
+        # Later passes only run when the earlier ones read "1" or an out-of-range value.
+        passes = (
+            lambda: self.getBuffQuantityFromImg(bgrImg, transform),
+            lambda: self.getBuffQuantityFromImg(bgrImg, transform, crop=False),
+            lambda: self.getBuffQuantityFromImgTightDecimal(bgrImg),
+            lambda: self.getBuffQuantityFromImgTightDecimal(bgrImg, crop=False),
+        )
         best = "1"
         bestValue = 1.0
-        for candidate in candidates:
+        for readCandidate in passes:
+            if bestValue > 1:
+                break
+            candidate = readCandidate()
             try:
                 value = float(candidate)
             except (TypeError, ValueError):
@@ -533,7 +537,7 @@ class BuffDetector():
         if coords:
             coords.sort(key=sort_key)
             out = []
-            preview = screen.copy()
+            preview = screen.copy() if show else None
             for i in range(min(len(coords), instances)):
                 x, y, w, h = coords[i]
                 out.append(coords[i])
