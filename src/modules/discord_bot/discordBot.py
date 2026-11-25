@@ -3682,7 +3682,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 await interaction.followup.send(f"❌ {message}")
                 return
             with io.BytesIO() as imageBinary:
-                image.save(imageBinary, "PNG")
+                # compressing a full inventory screenshot stalls the bot, so encode it off the event loop
+                await asyncio.get_running_loop().run_in_executor(None, image.save, imageBinary, "PNG")
                 imageBinary.seek(0)
                 await interaction.followup.send(message, file=discord.File(fp=imageBinary, filename="finditem.png"))
         except Exception as e:
