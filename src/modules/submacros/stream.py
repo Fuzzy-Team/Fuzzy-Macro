@@ -9,7 +9,6 @@ import time
 import re
 import os
 import gc
-import sys
 import shutil
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -33,7 +32,6 @@ class cloudflaredStream:
         # Every /video_feed viewer waits on this same condition, so the capture thread's
         # wakeup is broadcast instead of being consumed (and cleared) by one viewer.
         self.frame_condition = threading.Condition(self.frame_lock)
-        self.frame_ready = threading.Event()
         self.capture_thread = None
         # open /video_feed connections; capture runs only while this is above 0
         self.viewers = 0
@@ -343,13 +341,6 @@ class cloudflaredStream:
                 print("Capture thread started")
     
     def _capture_screen(self):
-        # Optimize process priority on macOS
-        if sys.platform == 'darwin':
-            try:
-                os.system('renice -n -20 -p ' + str(os.getpid()))
-            except:
-                pass
-        
         with mss.mss(with_cursor=True) as sct:
             monitor = sct.monitors[1]
             
@@ -377,7 +368,6 @@ class cloudflaredStream:
 
                     with self.frame_condition:
                         self.frame_buffer = screen
-                        self.frame_ready.set()
                         self.frame_condition.notify_all()
                         
                 except Exception as e:
@@ -611,5 +601,4 @@ class cloudflaredStream:
         #clear frame buffer
         with self.frame_condition:
             self.frame_buffer = None
-            self.frame_ready.clear()
             self.frame_condition.notify_all()

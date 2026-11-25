@@ -2271,7 +2271,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                     if field not in allGatheredFields:
                         runTask(macro.gather, args=(field,), resetAfter=False)
                         allGatheredFields.append(field)
-            except:
+            except Exception:
                 pass
         # Auto-planters: if global gather flag enabled, gather each cycle for any planted fields
         try:
