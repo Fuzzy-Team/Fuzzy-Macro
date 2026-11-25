@@ -194,6 +194,7 @@ async function updateMacroMode() {
 }
 
 async function loadTasks() {
+  if (!document.getElementById("task-list")) return;
   const setdat = await loadAllSettings();
   let out = "";
   const planterTimerContainer = document.getElementById("planter-timers-container");
@@ -892,6 +893,7 @@ $(document)
       // Stopped -> start
       const result = await eel.start()();
       if (result && result.ok === false) {
+        alert(result.message);
         return;
       }
       // Update button state optimistically (show stop button immediately)
