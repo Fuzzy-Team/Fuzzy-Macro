@@ -1175,7 +1175,7 @@ if (
 ):
     _stop_petal_feed(runtime)
     agc.shutdown_runtime(runtime, _debug_log)
-    runtime.clear()
+    runtime["ready"] = False
 if not runtime.get("ready"):
     _stop_petal_feed(runtime)
     agc.start_runtime(
