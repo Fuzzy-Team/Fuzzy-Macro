@@ -120,7 +120,7 @@ class MobMixin:
                 if deathRetries >= 3:
                     self.logger.webhook("", "Mondo: died 3 times, giving up on this buff", "red")
                     self.clear_task_status()
-                    return False
+                    return
                 self.collectMondoBuff(deathRetries=deathRetries + 1)
                 return
             if result == "time": #mondo despawns after 15 minutes if not defeated in time
