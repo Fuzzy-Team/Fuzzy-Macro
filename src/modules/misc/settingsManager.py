@@ -653,8 +653,7 @@ def saveFuzzyAITokenRanking(field_name, ranking, model="standard"):
 def getMacroVersion():
     """Get the macro version from version.txt file"""
     try:
-        destination = os.getcwd().replace("/src", "")
-        version_file = os.path.join(destination, "src", "webapp", "version.txt")
+        version_file = os.path.join(getProjectRoot(), "src", "webapp", "version.txt")
         if os.path.exists(version_file):
             with open(version_file, "r") as f:
                 version = f.read().strip()
@@ -1322,20 +1321,17 @@ def _importProfileData(import_data, new_profile_name=None):
             for key in ("settings", "generalsettings")
         )
 
-        # Create profile directory
-        os.makedirs(new_profile_path)
-
-        # Write settings file
-        settings_file = os.path.join(new_profile_path, "settings.txt")
-        saveDict(settings_file, settings_data)
-
-        # Write fields file
-        fields_file = os.path.join(new_profile_path, "fields.txt")
-        _writeAtomic(fields_file, str(import_data["fields"]))
-
-        # Write generalsettings file
-        generalsettings_file = os.path.join(new_profile_path, "generalsettings.txt")
-        saveDict(generalsettings_file, generalsettings_data)
+        # Write into a hidden temp folder, then rename it into place so a
+        # failure never leaves a partial profile behind.
+        temp_path = tempfile.mkdtemp(prefix=".import_", dir=getProfilesDir())
+        try:
+            saveDict(os.path.join(temp_path, "settings.txt"), settings_data)
+            _writeAtomic(os.path.join(temp_path, "fields.txt"), str(import_data["fields"]))
+            saveDict(os.path.join(temp_path, "generalsettings.txt"), generalsettings_data)
+            os.rename(temp_path, new_profile_path)
+        except Exception:
+            shutil.rmtree(temp_path, ignore_errors=True)
+            raise
 
         # the export may come from an older version, so migrate it now like an installed profile
         _getMacroProfileStore().initialize(new_profile_name)
