@@ -550,8 +550,14 @@ class MemoryMatch:
             tile_reward = self._classify_reward(tile_image)
             checked_coords.add((x_raw, y_raw))
 
-            # Check for matches (hash-bucket based)
-            match_found = self._lookup_seen(tile_hash, claimed_coords, exclude_index=i)
+            # A tile identical to the one flipped this turn is matched by the game
+            # already. Check it first: a bucket lookup can return an older
+            # identical tile instead, which would leave the real pair unclaimed
+            # and make the next turn click a tile that is already matched.
+            if self._are_images_similar(tile_hash, first_tile_hash):
+                match_found = first_tile_index
+            else:
+                match_found = self._lookup_seen(tile_hash, claimed_coords, exclude_index=i)
             if match_found is not None:
                 if match_found == first_tile_index:
                     if self.debug:
