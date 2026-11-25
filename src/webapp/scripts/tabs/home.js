@@ -256,7 +256,7 @@ async function loadTasks() {
       const fieldName = taskId.replace("gather_", "").replace("_", " ");
       out += taskHTML(
         `Gather ${gatherIndex}`,
-        `${fieldEmojis[fieldName.replaceAll(" ", "_")]} ${fieldName}`
+        `${fieldEmojis[fieldName.replaceAll(" ", "_")]} ${escapeHtml(fieldName)}`
       );
       gatherIndex++;
     }
@@ -369,7 +369,7 @@ async function loadTasks() {
           return {
             enabled: true,
             title: `Gather ${i + 1}`,
-            desc: `${emoji} ${fieldName}`,
+            desc: `${emoji} ${escapeHtml(fieldName)}`,
           };
         }
       }
@@ -562,7 +562,7 @@ async function loadTasks() {
             const field = setdat.fields[i];
             out += taskHTML(
               `Gather ${i + 1}`,
-              `${fieldEmojis[field.replaceAll(" ", "_")]} ${field}`
+              `${fieldEmojis[field.replaceAll(" ", "_")]} ${escapeHtml(field)}`
             );
           }
         }
@@ -635,7 +635,7 @@ async function loadTasks() {
       if (setdat.fields_enabled[i]) {
         const field = setdat.fields[i];
         const emoji = fieldEmojis[field.replaceAll(" ", "_")] || "";
-        out += taskHTML(`Gather ${i + 1}`, `${emoji} ${field}`);
+        out += taskHTML(`Gather ${i + 1}`, `${emoji} ${escapeHtml(field)}`);
       }
     }
   }
