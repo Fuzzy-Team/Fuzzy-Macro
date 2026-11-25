@@ -11,6 +11,8 @@ window.updateButtonReset = function () {
     updateBtn.disabled = false;
     updateBtn.innerText = "Check for Updates";
   }
+  const progress = document.getElementById("update-progress");
+  if (progress) progress.classList.add("d-none");
 };
 if (window.eel) eel.expose(window.updateButtonReset, 'updateButtonReset');
 

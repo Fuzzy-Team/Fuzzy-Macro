@@ -1007,12 +1007,9 @@ async function triggerBetaUpdate() {
   try {
     if (window.updateProgress) window.updateProgress(0, `Starting update to ${hash}`);
     // call backend updater
-    const res = await eel.updateFromHash(hash)();
-    if (res) {
-      alert("Update started. The app may close to apply the update.");
-    } else {
-      alert("Update failed or was aborted. Check logs for details.");
-    }
+    // The app closes on success, so returning at all means the update failed.
+    await eel.updateFromHash(hash)();
+    alert("Update failed or was aborted. Check logs for details.");
   } catch (e) {
     console.error(e);
     alert("Error initiating update: " + e);
