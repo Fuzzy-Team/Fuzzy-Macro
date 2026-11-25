@@ -2944,7 +2944,6 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     ])
     async def close(interaction: discord.Interaction, action: str = "both"):
         """Close macro and/or Roblox depending on chosen action."""
-        import asyncio
         from modules.misc.appManager import closeApp
         await interaction.response.defer()
         loop = asyncio.get_running_loop()
