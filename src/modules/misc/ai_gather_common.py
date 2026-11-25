@@ -1102,6 +1102,11 @@ def maybe_apply_sprinkler_anchor(
     max_passive_distance,
     force=False,
     debug_log_fn=None,
+    # the shared anchor dict also carries these detection settings, which
+    # refresh_sprinkler_anchor uses; a result that is already found does not.
+    confidence_threshold=None,
+    max_distance=None,
+    target_label=None,
 ):
     if not sprinkler_anchor_should_run(
         runtime,
