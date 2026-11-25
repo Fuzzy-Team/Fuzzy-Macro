@@ -190,6 +190,8 @@ class HourlyReport():
         self.lastEmbedFields = None
         self.itemMonitorSnapshot = None
         self._saveLock = threading.RLock()
+        self._dirty = False
+        self._lastSave = 0.0
 
     def _defaultSessionReportStats(self):
         return {
@@ -576,7 +578,10 @@ class HourlyReport():
             else:
                 self.sessionReportStats[stat] += value
         if save:
-            self.saveHourlyReportData()
+            # Stat bumps are batched; saveHourlyReportData() writes immediately.
+            self._dirty = True
+            if time.time() - self._lastSave >= 30:
+                self.saveHourlyReportData()
     
     def setSessionStats(self, start_honey, start_time):
         self.hourlyReportStats["start_honey"] = start_honey
@@ -587,6 +592,8 @@ class HourlyReport():
         path = settingsManager.getUserDataPath("hourly_report_stats.pkl")
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with self._saveLock:
+            self._dirty = False
+            self._lastSave = time.time()
             # dumps snapshots the stats in one pass; no separate deep copy needed
             data = pickle.dumps({
                 "hourlyReportStats": self.hourlyReportStats,
@@ -617,6 +624,9 @@ class HourlyReport():
                     os.unlink(tmpPath)
     
     def loadHourlyReportData(self):
+        # Unsaved stat bumps would be lost when the file replaces memory.
+        if self._dirty:
+            self.saveHourlyReportData()
         path = settingsManager.getUserDataPath("hourly_report_stats.pkl")
         if not os.path.exists(path):
             return
