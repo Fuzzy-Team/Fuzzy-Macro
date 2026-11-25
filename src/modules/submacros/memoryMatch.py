@@ -504,9 +504,9 @@ class MemoryMatch:
         if match_found is not None:
             if wait_while_paused() or is_stopped():
                 return 0
-            # On the last chance there is nothing left to save the pair for, so take it even if not preferred.
+            # On the last chance, or with no tile left to flip instead, there is nothing left to save the pair for, so take it even if not preferred.
             if not self._should_claim_match(tile_rewards[first_tile_index], tile_rewards[match_found], preferred_rewards):
-                is_last_chance = (current_attempt + 1 >= attempts)
+                is_last_chance = (current_attempt + 1 >= attempts) or len(checked_coords) >= len(grid_coords)
                 if not is_last_chance:
                     chances_left = self._read_chances(middle_x, middle_y, offset_x)
                     if wait_while_paused() or is_stopped():
