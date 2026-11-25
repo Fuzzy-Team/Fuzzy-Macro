@@ -1315,8 +1315,14 @@ class QuestMixin:
                 if logDetection:
                     print(textChunk)
 
-                objectiveData = objectives[i].split("_")
-                if objectiveData[0] == "feed":
+                # A missed panel shifts the later rows up, so only read a feed
+                # quantity from the row this panel's text identifies (or from
+                # the position when every panel was detected).
+                matchedRows = [row for row, action in enumerate(objectives) if objective_matches_text(action, completionText)]
+                panelRow = matchedRows[0] if len(matchedRows) == 1 else (
+                    i if not matchedRows and len(objectivePanels) >= len(objectives) else None)
+                objectiveData = objectives[panelRow].split("_") if panelRow is not None else []
+                if objectiveData and objectiveData[0] == "feed":
                     amount = 0
                     if "/" in textChunk:
                         split = textChunk.split("/")[1].replace(",", "").replace(".", "")
@@ -1329,7 +1335,7 @@ class QuestMixin:
                                 break
                     if amount:
                         objectiveData[1] = str(min(int(amount), 50))
-                        objectives[i] = "_".join(objectiveData)
+                        objectives[panelRow] = "_".join(objectiveData)
 
                 if re.search(r"\bcomplete(?:d)?\b", completionText, re.IGNORECASE):
                     panel["status"] = "complete"
@@ -1370,8 +1376,14 @@ class QuestMixin:
                     print(textChunk)
 
                 #detect amount of items to feed
-                objectiveData = objectives[i].split("_")
-                if objectiveData[0] == "feed":
+                # A missing row shifts the later contours up, so only read a feed
+                # quantity from the row this contour's text identifies (or from
+                # the position when every row was detected).
+                matchedRows = [row for row, action in enumerate(objectives) if objective_matches_text(action, completionText)]
+                panelRow = matchedRows[0] if len(matchedRows) == 1 else (
+                    i if not matchedRows and len(objectiveTextChunks) == len(objectives) else None)
+                objectiveData = objectives[panelRow].split("_") if panelRow is not None else []
+                if objectiveData and objectiveData[0] == "feed":
                     amount = 0
                     #start by trying to get the text from the progression, ie 0/x
                     if "/" in textChunk: 
@@ -1386,7 +1398,7 @@ class QuestMixin:
                                 break
                     if amount:
                         objectiveData[1] = str(min(int(amount), 50))
-                        objectives[i] = "_".join(objectiveData)
+                        objectives[panelRow] = "_".join(objectiveData)
 
                 if not objectiveTextShowsIncompleteProgress(textChunk) and re.search(r"\bcomplete(?:d)?\b", completionText, re.IGNORECASE):
                     observeRow(i, completionText, "complete", bottomIsQuestEnd or y + h < screen.shape[0])
