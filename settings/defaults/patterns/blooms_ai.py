@@ -177,12 +177,14 @@ def _anchor_kwargs():
     }
 
 
-def _petal_feed_loop(runtime, stop_event):
+def _petal_feed_loop(counts, stop_event):
     """Adds up honey from caught petals using the honey feed. The feed keeps one line per petal
     colour ("+21,300 Honey (from Blue Bloom Petal)") and raises its amount as more petals land,
-    so a rise is more petals. A colour that left the feed, or comes back lower, is a new bloom."""
+    so a rise is more petals. A colour that left the feed, or comes back lower, is a new bloom.
+    Reads once more after the stop so petals from the last few seconds are counted."""
     tracked = {}
-    while not stop_event.wait(FEED_READ_INTERVAL):
+    while True:
+        stopping = stop_event.wait(FEED_READ_INTERVAL)
         now = time.time()
         lines = {}
         for amount, colour in PETAL_FEED_LINE.findall(self.readBlueText()):
@@ -190,18 +192,23 @@ def _petal_feed_loop(runtime, stop_event):
         for colour, amount in lines.items():
             last_amount, last_seen = tracked.get(colour, (0, 0.0))
             if now - last_seen > FEED_LINE_LIFETIME or amount < last_amount:
-                runtime["petal_blooms"] = runtime.get("petal_blooms", 0) + 1
+                counts["blooms"] += 1
                 last_amount = 0
-            runtime["petal_honey"] = runtime.get("petal_honey", 0) + max(amount - last_amount, 0)
+            counts["honey"] += max(amount - last_amount, 0)
             tracked[colour] = (max(amount, last_amount), now)
+        if stopping:
+            return
 
 
 def _ensure_petal_counter(runtime):
     thread = runtime.get("petal_feed_thread")
     if thread is not None and thread.is_alive():
         return
+    # Each gather gets its own totals, so a read that outlives the gather can't add to the next one.
+    counts = {"blooms": 0, "honey": 0}
     stop_event = threading.Event()
-    thread = threading.Thread(target=_petal_feed_loop, args=(runtime, stop_event), daemon=True)
+    thread = threading.Thread(target=_petal_feed_loop, args=(counts, stop_event), daemon=True)
+    runtime["petal_counts"] = counts
     runtime["petal_feed_stop"] = stop_event
     runtime["petal_feed_thread"] = thread
     thread.start()
@@ -209,18 +216,16 @@ def _ensure_petal_counter(runtime):
 
 def onGatherEnd():
     runtime = _runtime_state()
-    stop_event = runtime.get("petal_feed_stop")
+    stop_event = runtime.pop("petal_feed_stop", None)
     if stop_event is not None:
         stop_event.set()
-    # Let a read in progress finish so its petals are counted now, not in the next gather.
     thread = runtime.pop("petal_feed_thread", None)
     if thread is not None:
         thread.join(timeout=2.0)
-    blooms = runtime.pop("petal_blooms", 0)
-    honey = runtime.pop("petal_honey", 0)
+    counts = runtime.pop("petal_counts", None) or {"blooms": 0, "honey": 0}
     agc.shutdown_runtime(runtime, _debug_log)
-    if blooms:
-        self.logger.webhook("", f"Blooms AI: caught petals from {blooms} blooms for {honey:,} honey", "light blue")
+    if counts["blooms"]:
+        self.logger.webhook("", f"Blooms AI: caught petals from {counts['blooms']} blooms for {counts['honey']:,} honey", "light blue")
 
 
 def _record_debug_frame(runtime, frame, detections, target):
@@ -251,8 +256,7 @@ def _record_debug_frame(runtime, frame, detections, target):
         "petal_orbit_center": tuple(runtime["petal_orbit_center"]) if isinstance(runtime.get("petal_orbit_center"), (tuple, list)) else None,
         "petal_orbit_deadline": runtime.get("petal_orbit_deadline", 0.0),
         "petal_orbit_index": runtime.get("petal_orbit_index"),
-        "petal_blooms": runtime.get("petal_blooms", 0),
-        "petal_honey": runtime.get("petal_honey", 0),
+        "petal_counts": dict(runtime.get("petal_counts") or {}),
         "updated_at": now,
     })
     runtime["latest_recording_overlay"] = overlay
@@ -289,7 +293,8 @@ def _annotate_recording_frame(runtime, frame):
         status_lines.append(
             f"active_bloom=({active_bloom.get('tx', 0.0):.2f},{active_bloom.get('ty', 0.0):.2f}) contact={overlay.get('bloom_contact_distance', 0.0):.2f}/{BLOOM_CONTACT_MAX_TOTAL_MOVE:.2f}"
         )
-    status_lines.append(f"petal blooms={overlay.get('petal_blooms', 0)} petal honey={overlay.get('petal_honey', 0):,}")
+    petal_counts = overlay.get("petal_counts") or {}
+    status_lines.append(f"petal blooms={petal_counts.get('blooms', 0)} petal honey={petal_counts.get('honey', 0):,}")
     orbit_center = overlay.get("petal_orbit_center")
     if isinstance(orbit_center, (tuple, list)) and len(orbit_center) == 2:
         seconds_left = max(0.0, float(overlay.get("petal_orbit_deadline", 0.0)) - time.time())
