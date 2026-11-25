@@ -127,6 +127,8 @@ def _isValidProfileName(name):
 
 def initializeMacroProfile(profile_name=None):
     """Create missing files and run pending migrations for a Macro Profile."""
+    if profile_name is None:
+        loadCurrentProfile()
     return _getMacroProfileStore().initialize(profile_name or profileName)
 
 def loadMacroProfile(profile_name=None):
@@ -141,6 +143,7 @@ def loadMacroProfile(profile_name=None):
 
 def applyMacroProfileChange(scope, setting, value):
     """Apply one validated change and return a structured result for the GUI."""
+    loadCurrentProfile()
     try:
         _getMacroProfileStore().apply_change(profileName, scope, setting, value)
         return {"ok": True}
@@ -906,9 +909,11 @@ def saveSettingFile(setting,value, path):
     saveDict(path, data)
 
 def loadFields():
+    loadCurrentProfile()
     return _getMacroProfileStore().load(profileName)["fields"]
 
 def saveField(field, settings):
+    loadCurrentProfile()
     existingSettings = loadFields().get(field, {})
     normalizedSettings = normalizeFieldSettings(field, settings)
     mergedSettings = _applyFieldPatternPresets(existingSettings, normalizedSettings)
@@ -1169,22 +1174,27 @@ def getAvailablePatterns():
     return []
 
 def saveProfileSetting(setting, value):
+    loadCurrentProfile()
     _getMacroProfileStore().apply_change(profileName, "profile", setting, value)
 
 def saveDictProfileSettings(dict):
+    loadCurrentProfile()
     _getMacroProfileStore().apply_changes(profileName, "profile", dict)
 
 #increment a setting, and return all settings after the change
 def incrementProfileSetting(setting, incrValue):
+    loadCurrentProfile()
     current = loadSettings()
     if setting not in current:
         raise MacroProfileValidationError(setting, "unknown setting")
     return _getMacroProfileStore().apply_change(profileName, "profile", setting, current[setting] + incrValue)
 
 def saveGeneralSetting(setting, value):
+    loadCurrentProfile()
     _getMacroProfileStore().apply_change(profileName, "general", setting, value)
 
 def loadSettings():
+    loadCurrentProfile()
     return _getMacroProfileStore().load_settings(profileName)["profile_settings"]
 
 #return a dict containing all settings except field (general, profile, planters)
