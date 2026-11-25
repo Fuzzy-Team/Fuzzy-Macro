@@ -1420,8 +1420,14 @@ class QuestMixin:
             if is_stopped():
                 return False
 
-            #check if player reached the quest giver
-            if self.isBesideE(["talk"] + questGiver.lower().split(" "), log=True):
+            #check if player reached the quest giver. The prompt can take a moment to show after the last step.
+            reached = self.isBesideE(["talk"] + questGiver.lower().split(" "), log=True)
+            for _ in range(3):
+                if reached or is_stopped():
+                    break
+                time.sleep(0.6)
+                reached = self.isBesideE(["talk"] + questGiver.lower().split(" "), log=True)
+            if reached:
                 self.logger.webhook("",f"Reached {questGiver}","light green", "screen")
                 if is_stopped():
                     return False

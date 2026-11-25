@@ -22,8 +22,15 @@ for _ in range(2):
     self.keyboard.slowPress("space")
     sleep(0.3)
     self.keyboard.keyUp("d")
-for _ in range(12):
-    sleep(0.4)
+for i in range(14):
+    sleep(0.3)
     if self.isBesideE(["talk", "panda"]):
         break
-    self.keyboard.tileWalk("d", 0.5)
+    if i == 0:
+        # No prompt right after the hops: a hop that missed leaves the character at the platform's face, so hop once more.
+        self.keyboard.keyDown("d")
+        self.keyboard.slowPress("space")
+        sleep(0.3)
+        self.keyboard.keyUp("d")
+    # Small steps with a prompt check after each, right first, then back left in case the character stepped past the bear.
+    self.keyboard.tileWalk("d" if i < 5 else "a", 0.5)
