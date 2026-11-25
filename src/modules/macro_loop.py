@@ -4,7 +4,7 @@ import time
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
 import modules.macro.planter_bonus_loot as bonusLoot
-from modules.macro.game_data import quest_data
+from modules.macro.game_data import quest_data, MAIN_GAME_PLACE_ID
 from modules.misc.badgeData import badge_id_from_task, gather_overrides, get_badge, resolve_gather_field, setting_key
 from modules.quest_planning import (quest_giver_order, choose_quest_gather, is_gather_objective, allowed_fields,
                                     quest_uses_ant_challenge, kill_objective_mob, manual_objective_name, objective_allowed,
@@ -394,6 +394,9 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                 macro.logger.webhook("Sticker Sprout", f"Interrupting {interrupted_status} to collect in Hive Hub", "orange")
             elif action == INTERRUPT_FIND_ITEM:
                 macro.logger.webhook("Find Item", f"Inventory search requested during: {interrupted_status}", "orange")
+            if getattr(func, "__name__", "") == "shareJellyBeans" and not is_stopped():
+                # The public Hive Hub has no hive to reset in; go back to the main game first.
+                macro.rejoin(placeId=MAIN_GAME_PLACE_ID, claimHive=True)
             macro.reset(convert=True)
             if action in (INTERRUPT_COLLECT_PLANTER, INTERRUPT_FIND_ITEM):
                 processPlanterCommandQueue()
