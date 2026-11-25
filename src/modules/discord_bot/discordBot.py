@@ -2944,25 +2944,28 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     ])
     async def close(interaction: discord.Interaction, action: str = "both"):
         """Close macro and/or Roblox depending on chosen action."""
+        import asyncio
         from modules.misc.appManager import closeApp
+        await interaction.response.defer()
+        loop = asyncio.get_running_loop()
         try:
             if action == "both":
                 run.value = 0
-                closeApp("Roblox")
-                await interaction.response.send_message("Closing macro and Roblox...")
+                await loop.run_in_executor(None, closeApp, "Roblox")
+                await interaction.followup.send("Closing macro and Roblox...")
                 os.kill(os.getppid(), signal.SIGTERM)
             elif action == "roblox":
-                closeApp("Roblox")
-                await interaction.response.send_message("Closing Roblox...")
+                await loop.run_in_executor(None, closeApp, "Roblox")
+                await interaction.followup.send("Closing Roblox...")
             elif action == "macro":
                 # stop the macro loop but keep the bot running
                 run.value = 0
-                await interaction.response.send_message("Stopping macro (Roblox will remain open).")
+                await interaction.followup.send("Stopping macro (Roblox will remain open).")
                 os.kill(os.getppid(), signal.SIGTERM)
             else:
-                await interaction.response.send_message("❌ Unknown action. Use: both, roblox, or macro")
+                await interaction.followup.send("❌ Unknown action. Use: both, roblox, or macro")
         except Exception as e:
-            await interaction.response.send_message(f"❌ Error performing close action: {str(e)}")
+            await interaction.followup.send(f"❌ Error performing close action: {str(e)}")
 
     def _set_macos_mute(muted: bool) -> None:
         """Set macOS system audio mute state using AppleScript via osascript."""
