@@ -1,3 +1,8 @@
+// Escape text before interpolating it into innerHTML.
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+}
+
 // Expose a function to reset the update button from Python
 window.updateButtonReset = function () {
   const updateBtn = document.getElementById("update-btn");
@@ -87,8 +92,8 @@ function showUpdateModal(updateInfo) {
       
       <p style="color: #b9bbbe; margin-bottom: 1.5rem; font-size: 0.95rem">
         A new version of Fuzzy Macro is available!<br><br>
-        Current version: <strong style="color: #dcddde">${updateInfo.current_version}</strong><br>
-        Latest version: <strong style="color: #7289da">${updateInfo.latest_version}</strong>
+        Current version: <strong style="color: #dcddde">${escapeHtml(updateInfo.current_version)}</strong><br>
+        Latest version: <strong style="color: #7289da">${escapeHtml(updateInfo.latest_version)}</strong>
       </p>
       
       <div style="margin-bottom: 1.5rem">
@@ -973,7 +978,7 @@ function loadDragListOrder(dragListElement, orderArray, settings) {
     itemElement.innerHTML = `
       <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
       <span class="category-badge">${badge}</span>
-      <span class="drag-text">${taskName}</span>
+      <span class="drag-text">${escapeHtml(taskName)}</span>
       <div class="drag-actions">
         <button class="drag-action-btn move-to-top" title="Move to top">↑ Top</button>
         <button class="drag-action-btn move-to-bottom" title="Move to bottom">↓ Bottom</button>
