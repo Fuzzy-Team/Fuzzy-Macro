@@ -289,10 +289,12 @@ class MemoryMatch:
                 if not game_active:
                     break
             
-            target_pair = self._find_known_preferred_pair(tile_rewards, preferred_rewards, claimed_coords)
+            # With every tile flipped, claim any pair skipped earlier for not being preferred.
+            all_flipped = len(checked_coords) >= len(grid_coords)
+            target_pair = self._find_known_pair(tile_rewards, preferred_rewards, claimed_coords, any_reward=all_flipped)
             if target_pair is not None:
                 first_idx, second_idx = target_pair
-                print(f"Preferred reward match found: {tile_rewards[first_idx]}")
+                print(f"Known match found: {tile_rewards[first_idx]}")
                 x1, y1 = grid_coords[first_idx]
                 x2, y2 = grid_coords[second_idx]
                 self._click_tile(x1 - offset_x, y1 - offset_y)
@@ -645,13 +647,14 @@ class MemoryMatch:
         # If both sides are unknown, fall back to normal match behavior.
         return reward_a is None and reward_b is None
 
-    def _find_known_preferred_pair(self, tile_rewards: List[Optional[str]], preferred_rewards: Set[str], claimed_coords: Set[int]) -> Optional[Tuple[int, int]]:
-        if not preferred_rewards:
+    def _find_known_pair(self, tile_rewards: List[Optional[str]], preferred_rewards: Set[str], claimed_coords: Set[int], any_reward: bool = False) -> Optional[Tuple[int, int]]:
+        """Find two unclaimed tiles known to match: a preferred reward, or any reward when `any_reward`."""
+        if not preferred_rewards and not any_reward:
             return None
         for _, indices in self.seen_buckets:
             candidates = [
                 idx for idx in indices
-                if idx not in claimed_coords and self._is_preferred_reward(tile_rewards[idx], preferred_rewards)
+                if idx not in claimed_coords and (any_reward or self._is_preferred_reward(tile_rewards[idx], preferred_rewards))
             ]
             if len(candidates) >= 2:
                 return candidates[0], candidates[1]
