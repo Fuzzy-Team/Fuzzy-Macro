@@ -82,9 +82,9 @@ def enabledFieldPatterns(setdat):
 
 def saveReportCanvas(canvas, path):
     w, h = canvas.size
-    canvas = canvas.resize((int(w*1.2), int(h*1.2)))
     # Flatten to RGB so Discord/webhooks never composite leftover alpha.
-    canvas.convert("RGB").save(path)
+    canvas = canvas.convert("RGB").resize((int(w*1.2), int(h*1.2)))
+    canvas.save(path)
 
 
 class HourlyReport():
