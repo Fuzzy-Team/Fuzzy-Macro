@@ -499,7 +499,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
             
             #auto field boost (can be disabled per-call via allowAFB)
             if not is_stopped() and allowAFB and modeRuns("auto_field_boost") and macro.setdat["Auto_Field_Boost"] and not macro.AFBLIMIT:
-                if macro.hasAFBRespawned("AFB_dice_cd", macro.setdat["AFB_rebuff"]*60) or macro.hasAFBRespawned("AFB_glitter_cd", macro.setdat["AFB_rebuff"]*60-30):
+                if macro.hasAFBRespawned("AFB_dice_cd", macro.setdat["AFB_rebuff"]*60) or (macro.setdat["AFB_glitter"] and macro.hasAFBRespawned("AFB_glitter_cd", macro.setdat["AFB_rebuff"]*60)):
                     macro.AFB(gatherInterrupt=False)
                     taskCompleted = True
         except InterruptRequested as interrupt:
