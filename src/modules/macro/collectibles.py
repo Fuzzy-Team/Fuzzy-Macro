@@ -6,7 +6,7 @@ import threading
 from datetime import timedelta
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
-from modules.misc.settings_defaults import glitter_slot, glitter_slot_label
+from modules.misc.settings_defaults import BLENDER_ITEM_SLOTS, glitter_slot, glitter_slot_label
 import modules.screen.ocr as ocr
 from modules.controls.sleep import is_stopped, pause_aware_time as time, paused_seconds, sleep
 from modules.macro.game_data import (
@@ -18,6 +18,15 @@ from modules.macro.game_data import (
 )
 from modules.screen.imageSearch import captureRegionBGR, locateImageInScreen, locateImageOnScreen, locateTransparentImageOnScreen
 from modules.screen.screenshot import mssScreenshot
+
+
+def blenderSlotCount(setdat):
+    """blender_slots is user data; clamp it to the slots settings_defaults defines item keys for."""
+    try:
+        slots = int(setdat.get("blender_slots", 0))
+    except (TypeError, ValueError):
+        return 0
+    return max(0, min(slots, BLENDER_ITEM_SLOTS))
 
 
 class CollectiblesMixin:
@@ -676,6 +685,7 @@ class CollectiblesMixin:
     def blender(self, blenderData):
         self.set_task_status("blender", activity="blender")
         itemNo = blenderData["item"]
+        slots = blenderSlotCount(self.setdat)
         st = time.time()
         def updateHourlyTime():
             self.hourlyReport.addHourlyStat("misc_time", time.time()-st)
@@ -688,13 +698,12 @@ class CollectiblesMixin:
             #item must be in the active queue, set, and have repeats
             return (
                 isinstance(slot, int) and not isinstance(slot, bool)
-                and 1 <= slot <= self.setdat["blender_slots"]
+                and 1 <= slot <= slots
                 and self.setdat[f"blender_item_{slot}"] != "none"
                 and (self.setdat[f"blender_repeat_{slot}"] > 0 or self.setdat[f"blender_repeat_inf_{slot}"])
             )
 
         def getNextItem():
-            slots = self.setdat["blender_slots"]
             nextItem = itemNo
             for _ in range(slots + 1):
                 nextItem += 1
@@ -741,7 +750,7 @@ class CollectiblesMixin:
         invalidSavedItem = (
             isinstance(savedItem, bool)
             or not isinstance(savedItem, int)
-            or not (0 <= savedItem <= self.setdat["blender_slots"])
+            or not (0 <= savedItem <= slots)
         )
         # Keep an in-range but ineligible saved slot so getNextItem() advances
         # to the following recipe instead of restarting at slot 1.
