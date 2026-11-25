@@ -721,9 +721,10 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                 blenderData = loadBlenderData()
                 if rows and time.time() >= blenderData["collectTime"]:
                     craft = (macro.setdat[QUEST_BLENDER_SETTING], macro.questItemsLeft(rows[0]))
+                    collectTimeBefore = blenderData["collectTime"]
                     runTask(macro.blender, args=(blenderData, craft))
                     # A craft that started moves the collect time; if it did not, leave the row alone for a while.
-                    if loadBlenderData()["collectTime"] == blenderData["collectTime"]:
+                    if loadBlenderData()["collectTime"] == collectTimeBefore:
                         macro.questItemShort[rows[0]["id"]] = time.time()
                     taskCompleted = True
                 continue
