@@ -207,6 +207,13 @@ def _petal_feed_loop(counts, stop_event):
             return
 
 
+def _stop_petal_feed(runtime):
+    """Signals the feed reader before the runtime is cleared, since the clear loses its stop event."""
+    stop_event = runtime.get("petal_feed_stop")
+    if stop_event is not None:
+        stop_event.set()
+
+
 def _ensure_petal_counter(runtime):
     thread = runtime.get("petal_feed_thread")
     if thread is not None and thread.is_alive():
@@ -1166,9 +1173,11 @@ if (
     runtime.get("runtime_version") != RUNTIME_VERSION
     or runtime.get("combined_model_selection") != BLOOM_MODEL_SELECTION
 ):
+    _stop_petal_feed(runtime)
     agc.shutdown_runtime(runtime, _debug_log)
     runtime.clear()
 if not runtime.get("ready"):
+    _stop_petal_feed(runtime)
     agc.start_runtime(
         runtime,
         _initialise_runtime,
