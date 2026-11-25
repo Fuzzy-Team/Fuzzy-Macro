@@ -16,7 +16,7 @@ from modules.macro.game_data import (
     startLocationDimensions,
     windShrineDonationItems,
 )
-from modules.screen.imageSearch import locateImageOnScreen, locateTransparentImageOnScreen
+from modules.screen.imageSearch import captureRegionBGR, locateImageInScreen, locateImageOnScreen, locateTransparentImageOnScreen
 from modules.screen.screenshot import mssScreenshot
 
 
@@ -810,23 +810,28 @@ class CollectiblesMixin:
             return
         self.keyboard.press("e")
         time.sleep(1)
+        # These three checks inspect the same dialog at the same moment, so they share one
+        # screenshot. A click changes the GUI, and the check after it takes a fresh one.
+        screen = captureRegionBGR(x, y, 560, 480)
         #check if blender is done and click on end crafting
         doneImg = self.adjustImage("images/menu", "blenderdone")
-        res = locateImageOnScreen(doneImg, x, y, 560, 480, 0.75)
+        res = locateImageInScreen(doneImg, screen, 0.75)
         if res:
             print("done")
             clickOnBlenderElement(*res[1])
+            screen = captureRegionBGR(x, y, 560, 480)
 
         #check for cancel button
         cancelImg = self.adjustImage("images/menu", "blendercancel")
-        res = locateImageOnScreen(cancelImg, x, y, 560, 480, 0.75)
+        res = locateImageInScreen(cancelImg, screen, 0.75)
         if res:
             print("cancel")
             clickOnBlenderElement(*res[1])
+            screen = captureRegionBGR(x, y, 560, 480)
 
         #check if still crafting and get cd
         notDoneImg = self.adjustImage("images/menu", "blenderend")
-        res = locateImageOnScreen(notDoneImg, x, y, 560, 480, 0.75)
+        res = locateImageInScreen(notDoneImg, screen, 0.75)
 
         def cancelCraft():
             self.logger.webhook("", "Unable to detect remaining crafting time, ending craft", "orange", "screen")
