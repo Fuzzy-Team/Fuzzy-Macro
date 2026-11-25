@@ -262,7 +262,9 @@ def objective_matches_text(action, text):
         return {"ant", "challenge"}.issubset(words)
     if kind == "manual":
         # Rows only the user can do are matched by their wording, so they get a status on scrolled screens too.
-        return {singular(word) for word in re.findall(r"[a-z]+", target)}.issubset(words)
+        numbers = set(re.findall(r"\d+", text.replace(",", "")))
+        return {singular(word) for word in re.findall(r"[a-z]+", target)}.issubset(words) \
+            and set(re.findall(r"\d+", target)).issubset(numbers)
     return False
 
 

@@ -960,7 +960,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
         if (mode == "quest" and macro.setdat.get(QUEST_BLENDER_SETTING, "none") != "none"
                 and macro.pendingQuestObjectives("craft")):
             blender = loadBlenderData()
-            if blender["collectTime"] > -1 and time.time() > blender["collectTime"]:
+            if time.time() >= blender["collectTime"]:
                 return True
         tasks = macro.questTaskWatchers if mode == "quest" else get_task_list_order(macro.setdat)
         for task in tasks:
