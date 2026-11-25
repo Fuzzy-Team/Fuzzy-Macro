@@ -246,6 +246,10 @@ class CollectiblesMixin:
         if not self.travelViaCannon("Ant Challenge"):
             return False
         self.runPath("boss/ant_challenge")
+        # The dispatcher runs this with resetAfter=False, so record where the player
+        # ends up: the next travel then resets first instead of walking to the cannon
+        # from the Ant Challenge area.
+        self.location = "ant challenge"
         time.sleep(0.5)
 
         # If the red box (where E would be) says 'need', fetch a free ant pass
@@ -263,6 +267,7 @@ class CollectiblesMixin:
                 if not self.travelViaCannon("Ant Challenge"):
                     return False
                 self.runPath("boss/ant_challenge")
+                self.location = "ant challenge"
             time.sleep(1)
 
         if self.isBesideE(["spen","play"], ["need"]):
@@ -277,7 +282,6 @@ class CollectiblesMixin:
             self.keyboard.walk("s",1.5)
             self.keyboard.walk("w",0.15)
             self.keyboard.walk("d",0.3)
-            mouse.mouseDown()
             challengeStart = time.time()
 
             def clickKeepOld(keepOld=None):
@@ -294,6 +298,9 @@ class CollectiblesMixin:
                 mouse.click()
 
             try:
+                # In the try so a fail-safe or interrupt during the press still reaches
+                # the finally below and releases the button.
+                mouse.mouseDown()
                 while True:
                     # checkPauseAndWait keeps the mouse released while paused and raises on interrupt
                     pausedBefore = paused_seconds()
