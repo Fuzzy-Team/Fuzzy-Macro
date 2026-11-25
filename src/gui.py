@@ -1406,8 +1406,6 @@ def log(time = "", msg = "", color = ""):
 
 eel.expose(settingsManager.loadFields)
 eel.expose(settingsManager.saveField) 
-eel.expose(settingsManager.getDefaultFuzzyAIGatherPatternPreset)
-eel.expose(settingsManager.getDefaultBloomsAIPatternPreset)
 eel.expose(settingsManager.loadSettings)
 eel.expose(settingsManager.loadAllSettings)
 eel.expose(settingsManager.applyMacroProfileChange)
@@ -1421,10 +1419,8 @@ eel.expose(settingsManager.getCurrentProfile)
 eel.expose(settingsManager.switchProfile)
 eel.expose(settingsManager.createProfile)
 eel.expose(settingsManager.deleteProfile)
-eel.expose(settingsManager.renameProfile)
 eel.expose(settingsManager.duplicateProfile)
 eel.expose(settingsManager.exportProfile)
-eel.expose(settingsManager.importProfile)
 eel.expose(settingsManager.importProfileContent)
 
 def updateGUI():
@@ -1434,16 +1430,6 @@ def updateGUI():
     # Ensure any missing default settings are present in the profile.
     try:
         defaults = settingsManager.getDefaultProfileSettings()
-
-        # Add any top-level default keys missing from the loaded settings
-        for k, v in defaults.items():
-            if k not in settings:
-                try:
-                    settingsManager.saveProfileSetting(k, v)
-                    settings[k] = v
-                except Exception:
-                    # ignore individual save failures
-                    pass
 
         # Ensure task_priority_order contains all default priority entries
         try:

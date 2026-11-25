@@ -6,63 +6,32 @@ import tempfile
 from datetime import datetime
 import re
 
-try:
-    from .macro_profile import MacroProfileError, MacroProfileStore, MacroProfileValidationError
-except ImportError:
-    from macro_profile import MacroProfileError, MacroProfileStore, MacroProfileValidationError
+from .macro_profile import MacroProfileError, MacroProfileStore, MacroProfileValidationError
 
-try:
-    from .settings_defaults import (
-        DEFAULT_AFB,
-        DEFAULT_AI_PATTERN_PRESETS,
-        DEFAULT_AUTO_PLANTERS,
-        DEFAULT_BLENDER,
-        DEFAULT_CURRENT_PROFILE,
-        DEFAULT_FIELDS,
-        DEFAULT_FUZZY_AI_GATHER_PATTERN_PRESET,
-        DEFAULT_BLOOMS_AI_PATTERN_PRESET,
-        DEFAULT_FUZZY_AI_TOKEN_RANKING,
-        DEFAULT_FUZZY_AI_TOKEN_RANKINGS,
-        DEFAULT_GENERAL_SETTINGS,
-        DEFAULT_HOTBAR_TIMINGS,
-        DEFAULT_HOURLY_REPORT_BG,
-        DEFAULT_HOURLY_REPORT_HISTORY,
-        DEFAULT_HOURLY_REPORT_MAIN,
-        DEFAULT_MANUAL_PLANTERS,
-        DEFAULT_PROFILE_SETTINGS,
-        DEFAULT_STICKER_STACK,
-        DEFAULT_TIMINGS,
-        FIELD_PATTERN_PRESETS_KEY,
-        FUZZY_AI_RUNTIME_DEFAULTS,
-        deepcopy_default,
-    )
-except ImportError:
-    # discordBot (and similar) historically import this module as a top-level
-    # `settingsManager` via sys.path, so relative imports have no parent package.
-    from settings_defaults import (
-        DEFAULT_AFB,
-        DEFAULT_AI_PATTERN_PRESETS,
-        DEFAULT_AUTO_PLANTERS,
-        DEFAULT_BLENDER,
-        DEFAULT_CURRENT_PROFILE,
-        DEFAULT_FIELDS,
-        DEFAULT_FUZZY_AI_GATHER_PATTERN_PRESET,
-        DEFAULT_BLOOMS_AI_PATTERN_PRESET,
-        DEFAULT_FUZZY_AI_TOKEN_RANKING,
-        DEFAULT_FUZZY_AI_TOKEN_RANKINGS,
-        DEFAULT_GENERAL_SETTINGS,
-        DEFAULT_HOTBAR_TIMINGS,
-        DEFAULT_HOURLY_REPORT_BG,
-        DEFAULT_HOURLY_REPORT_HISTORY,
-        DEFAULT_HOURLY_REPORT_MAIN,
-        DEFAULT_MANUAL_PLANTERS,
-        DEFAULT_PROFILE_SETTINGS,
-        DEFAULT_STICKER_STACK,
-        DEFAULT_TIMINGS,
-        FIELD_PATTERN_PRESETS_KEY,
-        FUZZY_AI_RUNTIME_DEFAULTS,
-        deepcopy_default,
-    )
+from .settings_defaults import (
+    DEFAULT_AFB,
+    DEFAULT_AI_PATTERN_PRESETS,
+    DEFAULT_AUTO_PLANTERS,
+    DEFAULT_BLENDER,
+    DEFAULT_CURRENT_PROFILE,
+    DEFAULT_FIELDS,
+    DEFAULT_FUZZY_AI_GATHER_PATTERN_PRESET,
+    DEFAULT_BLOOMS_AI_PATTERN_PRESET,
+    DEFAULT_FUZZY_AI_TOKEN_RANKING,
+    DEFAULT_FUZZY_AI_TOKEN_RANKINGS,
+    DEFAULT_GENERAL_SETTINGS,
+    DEFAULT_HOTBAR_TIMINGS,
+    DEFAULT_HOURLY_REPORT_BG,
+    DEFAULT_HOURLY_REPORT_HISTORY,
+    DEFAULT_HOURLY_REPORT_MAIN,
+    DEFAULT_MANUAL_PLANTERS,
+    DEFAULT_PROFILE_SETTINGS,
+    DEFAULT_STICKER_STACK,
+    DEFAULT_TIMINGS,
+    FIELD_PATTERN_PRESETS_KEY,
+    FUZZY_AI_RUNTIME_DEFAULTS,
+    deepcopy_default,
+)
 
 #returns a dictionary containing the settings
 profileName = DEFAULT_CURRENT_PROFILE
