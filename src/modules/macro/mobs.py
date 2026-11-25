@@ -67,7 +67,7 @@ class MobMixin:
         self.mondoHopped = False
         return True
 
-    def collectMondoBuff(self, gatherInterrupt = False):
+    def collectMondoBuff(self, gatherInterrupt = False, deathRetries = 0):
         self.set_task_status("mondo_buff", activity="mondo")
         self.logger.webhook("","Travelling: Mondo Buff","light blue")
         #go to mondo buff
@@ -116,9 +116,12 @@ class MobMixin:
                 if is_stopped():
                     self.clear_task_status()
                     return
-                #sev recursion here is pretty weird
-                #TODO: not make it recursive
-                self.collectMondoBuff()
+                # Go back for the buff after a death, up to 3 times (deathRetries counts them).
+                if deathRetries >= 3:
+                    self.logger.webhook("", "Mondo: died 3 times, giving up on this buff", "red")
+                    self.clear_task_status()
+                    return
+                self.collectMondoBuff(deathRetries=deathRetries + 1)
                 return
             if result == "time": #mondo despawns after 15 minutes if not defeated in time
                 self.keyboard.walk("s",1, False)
