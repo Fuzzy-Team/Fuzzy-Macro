@@ -14,7 +14,7 @@ from modules import bitmap_matcher
 from modules.controls.sleep import InterruptRequested, is_stopped, pause_aware_time as time, sleep
 from modules.macro.game_data import quest_data, MAIN_GAME_PLACE_ID
 from modules.quest_planning import (make_quest_objectives, objective_matches_text, objective_allowed, quest_giver_order,
-                                    quest_item, QUEST_ITEMS)
+                                    quest_item, FIXED_LINE_GIVERS, QUEST_ITEMS)
 from modules.screen.imageSearch import locateImageOnScreen
 from modules.screen.screenshot import mssScreenshot, mssScreenshotNP, mssScreenshotPillowRGBA
 
@@ -721,6 +721,14 @@ class QuestMixin:
             for bbox, (text, _conf) in ocr.ocrRead(screen):
                 line = self.convertCyrillic(text.lower().strip())
                 if not line:
+                    continue
+                if questGiver in FIXED_LINE_GIVERS and questGiver not in line:
+                    # These givers' quest titles mostly have no giver name, so a line is a title when it reads as one of theirs.
+                    score = max(SequenceMatcher(None, line, title).ratio() for title in quest_data[questGiver])
+                    if score >= 0.9:
+                        yPos = int(min(point[1] for point in bbox))
+                        if bestMatch is None or score > bestMatch[0]:
+                            bestMatch = (score, line, yPos)
                     continue
                 if any(phrase in line for phrase in questTitleBlacklistedPhrases.get(questGiver, [])):
                     continue
