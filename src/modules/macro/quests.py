@@ -389,7 +389,11 @@ class QuestMixin:
             "honey bee": ["honey wreath"],
             "brown bear": ["stockings"],
             "black bear": ["honey wreath"],
-            **{giver: beesmasPhrases for giver in FIXED_LINE_GIVERS}
+            "panda bear": ["snowbear", "ornament"],
+            "science bear": ["beesmas lights", "ornament"],
+            "mother bear": ["gingerbread house", "ornament"],
+            "onett": ["yard art", "lid art", "ornament"],
+            "spirit bear": ["galentine", "ornament"]
         }
 
         def parseBrownBearTitleObjectives(titleText):
