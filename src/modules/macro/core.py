@@ -128,6 +128,7 @@ class macro(
         self._applySettingsState()
         self.canDetectNight = True
         self.night = False
+        self.nightEndsAt = 0 #time the detected night is assumed to end, 0 when not in one
         self.beesmas = False   # set by checkBeesmas() when the macro starts
         self.moonSproutsStart = 0 #sproutBeansUsed when the current night was detected
         self.location = "spawn"
