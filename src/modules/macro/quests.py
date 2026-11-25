@@ -729,7 +729,7 @@ class QuestMixin:
                         yPos = int(min(point[1] for point in bbox))
                         if bestMatch is None or score > bestMatch[0]:
                             bestMatch = (score, line, yPos)
-                    continue
+                        continue
                 if any(phrase in line for phrase in questTitleBlacklistedPhrases.get(questGiver, [])):
                     continue
                 hasColon = ":" in line
