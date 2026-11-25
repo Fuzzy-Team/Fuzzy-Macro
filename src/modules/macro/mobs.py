@@ -277,6 +277,7 @@ class MobMixin:
             elif time.time() - st - (paused_seconds() - pausedAtStart) > timeout:
                 self.mobRunStatus = "timeout"
                 break
+            time.sleep(0.15)
         if is_stopped():
             self.mobRunStatus = "done"
 
@@ -297,6 +298,7 @@ class MobMixin:
                     break
                 self.logger.webhook("","Collected Token Link", "pink", "blue")
                 break
+            time.sleep(0.15)
         self.mobRunStatus = "done"
 
     def killMob(self, mob, field, walkPath = None):
