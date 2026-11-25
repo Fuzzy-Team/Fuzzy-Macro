@@ -53,7 +53,8 @@ class PlanterMixin:
         finalKey = None
         path = f"../paths/planters/{field}.py"
         if os.path.isfile(path): #not all fields have a planter path
-            exec(open(path).read())
+            with open(path) as pathFile:
+                exec(pathFile.read())
         if is_stopped():
             return False
         #go to the planter
@@ -257,7 +258,8 @@ class PlanterMixin:
                 if self.blueTextImageSearch("maxplanters", screen=blueText):
                     placementError = "maxplanters"
                     break
-                if hasPlanterCountMessage(self.readBlueText(), planter, "-\u2013\u2014\u2212"):
+                # Once the bar has been seen the next pass confirms it, so skip the slower text read.
+                if growthBarSightings == 0 and hasPlanterCountMessage(self.readBlueText(), planter, "-\u2013\u2014\u2212"):
                     placedPlanter = True
                     break
                 if self.planterGrowthBarVisible():
