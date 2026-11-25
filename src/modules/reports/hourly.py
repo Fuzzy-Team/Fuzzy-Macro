@@ -43,7 +43,10 @@ def loadReportPlanterData(setdat):
             plantersMode = 0
         if plantersMode == 1:
             planterData = settingsManager.loadUserText("manualplanters.txt")
-            return ast.literal_eval(planterData) if planterData else ""
+            parsed = ast.literal_eval(planterData) if planterData else ""
+            # Every consumer reads this as a mapping (planters/harvestTimes/fields),
+            # so a list or scalar left in the file would abort the whole report.
+            return parsed if isinstance(parsed, dict) else ""
         if plantersMode == 2:
             planters = settingsManager.loadUserJson("auto_planters.json")["planters"]
             if all(not p["planter"] for p in planters):
