@@ -98,9 +98,9 @@ class QuestMixin:
         outOfBeans = False
         # A long row (hundreds of beans) must not keep the macro in the hub for hours.
         deadline = time.time() + 15 * 60
-        for objective in rows:
+        for row in rows:
             # Beans shared for one quest count for the others too, so look again before starting a row.
-            objective = self.readQuestObjective(objective)
+            objective = self.readQuestObjective(row)
             idle = 0
             while (objective and objective["status"] == "incomplete" and objective["remaining"] is not None and idle < 5
                    and time.time() < deadline and not is_stopped()):
@@ -116,7 +116,7 @@ class QuestMixin:
                 break
             # Nobody picked them up, the count could not be read or the time ran out: leave the row for later.
             if not objective or objective["status"] == "incomplete":
-                self.questItemShort[objective["id"]] = time.time()
+                self.questItemShort[row["id"]] = time.time()
         if outOfBeans:
             for objective in rows:
                 self.questItemShort[objective["id"]] = time.time()

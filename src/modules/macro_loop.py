@@ -4,6 +4,7 @@ import time
 import modules.controls.mouse as mouse
 import modules.misc.settingsManager as settingsManager
 import modules.macro.planter_bonus_loot as bonusLoot
+from modules.macro.game_data import quest_data
 from modules.misc.badgeData import badge_id_from_task, gather_overrides, get_badge, resolve_gather_field, setting_key
 from modules.quest_planning import (quest_giver_order, choose_quest_gather, is_gather_objective, allowed_fields,
                                     quest_uses_ant_challenge, kill_objective_mob, manual_objective_name, objective_allowed,
@@ -586,7 +587,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                 macro.hourlyReport.addHourlyStat("quests_completed", 1)
             # A fixed list of quests ended: the giver was reached and has nothing more to hand out.
             if (objectives is None and questGiver in FIXED_LINE_GIVERS and not is_stopped()
-                    and macro.findQuest(questGiver) is None and not is_stopped()):
+                    and title == list(quest_data[questGiver])[-1] and macro.findQuest(questGiver) is None and not is_stopped()):
                 switchOffQuestGiver(questGiver)
             questCache.pop(questGiver, None)
             macro.completedQuestWatchTasks.clear()

@@ -203,6 +203,8 @@ class CollectiblesMixin:
         addY = selectorCenterY + shrineScaleY(40)
         mouse.moveTo(addX, addY)
         for _ in range(max(0, quantity - 1)):
+            if is_stopped():
+                return None
             mouse.click()
             time.sleep(0.04)
 

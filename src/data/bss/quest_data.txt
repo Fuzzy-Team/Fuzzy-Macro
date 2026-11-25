@@ -1389,7 +1389,17 @@ manual_use 1 special sprout summoner
 collect_honeystorm
 donate_10_blue extract
 
--the ways of the winds / the wind and its ways
+-the ways of the winds
+manual_earn 14 master badges
+pollen_white
+gather_cactus
+gather_blue flower
+pollengoo_red
+fieldtoken_blueberry
+use_3_cloudvial
+donate_1_gold egg
+
+-the wind and its ways
 manual_earn 14 master badges
 pollen_white
 gather_cactus
