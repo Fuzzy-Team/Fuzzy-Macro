@@ -87,7 +87,8 @@ class LiveGatherReport:
             try:
                 self._send_or_edit(field, gather_time_limit, get_elapsed_seconds(), activity)
             except Exception as e:
-                print(f"Live Gather Report Error: {e}")
+                # Connection errors embed the webhook URL (and its token) in their text.
+                print(f"Live Gather Report Error: {e if isinstance(e, requests.HTTPError) or not isinstance(e, requests.RequestException) else type(e).__name__}")
 
             if self.stop_event.wait(self.interval):
                 break

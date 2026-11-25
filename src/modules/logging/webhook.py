@@ -1,3 +1,4 @@
+import requests
 from discord_webhook import DiscordEmbed, DiscordWebhook
 from modules.misc.formatting import timestampedEmbedText
 from modules.misc.settingsManager import getMacroVersion
@@ -18,7 +19,7 @@ def webhook(url, title, desc, time, color, imagePath = None, ping_user_id = None
         print(f"Warning: Webhook URL is empty. Skipping webhook message: {title} {desc}")
         return None
 
-    webhook = DiscordWebhook(url = url,rate_limit_retry=True)
+    webhook = DiscordWebhook(url = url,rate_limit_retry=True,timeout=10)
 
     # Add ping if user ID is provided
     if ping_user_id:
@@ -49,5 +50,6 @@ def webhook(url, title, desc, time, color, imagePath = None, ping_user_id = None
             last_channel_id = response_data.get('channel_id')
         return response
     except Exception as e:
-        print(f"Webhook Error: {e}")
+        # Connection errors embed the webhook URL (and its token) in their text.
+        print(f"Webhook Error: {type(e).__name__ if isinstance(e, requests.RequestException) else e}")
         return None
