@@ -42,7 +42,9 @@ class AutoGiftedBasicBeeRunner:
         self._pause_settings = self._default_pause_settings()
         self._status = self._fresh_status()
         self._roblox_window = None
+        # Scroll steps from the top at which each item was last found, and the current step.
         self._cached_inventory_positions = {}
+        self._scroll_steps = None
         self._templates = {}
         self._inventory_open = False
         self._event_callback = event_callback
@@ -142,6 +144,7 @@ class AutoGiftedBasicBeeRunner:
             self._stop_event.clear()
             self._final_event_sent = False
             self._cached_inventory_positions = {}
+            self._scroll_steps = None
             self._roblox_window = None
             self._inventory_open = False
             self._status = self._fresh_status()
@@ -233,6 +236,7 @@ class AutoGiftedBasicBeeRunner:
             click_inventory_button()
             time.sleep(0.1)
             self._inventory_open = True
+            self._scroll_steps = None
         else:
             click_inventory_button()
             self._inventory_open = False
@@ -265,6 +269,13 @@ class AutoGiftedBasicBeeRunner:
             else:
                 unchanged = 0
             previous_hash = current_hash
+        self._scroll_steps = 0
+
+    def _scroll_inventory_down(self):
+        self._focus_inventory_scroll_area()
+        mouse.scroll(-2, True)
+        self._scroll_steps += 1
+        time.sleep(0.06)
 
     def _normalize_text(self, text):
         lowered = (text or "").lower()
@@ -339,28 +350,44 @@ class AutoGiftedBasicBeeRunner:
         mouse.moveTo(self._roblox_window.mx + 312, self._roblox_window.my + 200)
         mouse.click()
 
+        def found(position):
+            if self._scroll_steps is not None:
+                self._cached_inventory_positions[item_name] = self._scroll_steps
+            return position
+
         visible_position = self._find_item_in_visible_inventory(item_name)
         if visible_position:
-            return visible_position
+            return found(visible_position)
 
         self._scroll_inventory_to_top()
         time.sleep(0.12)
 
         visible_position = self._find_item_in_visible_inventory(item_name)
         if visible_position:
-            return visible_position
+            return found(visible_position)
+
+        # Jump straight to where the item was last found; one check replaces the step-by-step scan.
+        cached_steps = self._cached_inventory_positions.get(item_name)
+        if cached_steps:
+            for _ in range(cached_steps):
+                self._raise_if_stopped()
+                self._scroll_inventory_down()
+            visible_position = self._find_item_in_visible_inventory(item_name)
+            if visible_position:
+                return found(visible_position)
+            self._cached_inventory_positions.pop(item_name, None)
+            self._scroll_inventory_to_top()
+            time.sleep(0.12)
 
         previous_hash = None
 
         for _ in range(180):
             self._raise_if_stopped()
-            self._focus_inventory_scroll_area()
-            mouse.scroll(-2, True)
-            time.sleep(0.06)
+            self._scroll_inventory_down()
 
             visible_position = self._find_item_in_visible_inventory(item_name)
             if visible_position:
-                return visible_position
+                return found(visible_position)
 
             scan = cv2.cvtColor(
                 mssScreenshotNP(self._roblox_window.mx, self._roblox_window.my + 100, 100, 200),
