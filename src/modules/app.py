@@ -806,6 +806,7 @@ def runApp(macroTarget):
                     report = HourlyReport()
                     report.loadHourlyReportData()
                     report.addHourlyStat("disconnects", 1)
+                    report.saveHourlyReportData()
                 except Exception as exc:
                     print(f"Could not record disconnect in report stats: {exc}")
                 disconnectDetected = False
