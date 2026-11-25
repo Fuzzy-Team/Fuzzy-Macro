@@ -1447,7 +1447,7 @@ def sprinkler_scanner_loop(
                 runtime,
                 after_id=after_id,
                 timeout=max(interval, 0.02),
-                copy=True,
+                copy=False,
             )
             if frame is None:
                 time.sleep(0.01)

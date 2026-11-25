@@ -448,7 +448,7 @@ class log:
         try:
             if self.discordMessageQueue.qsize() >= self.MAX_BOT_QUEUE_BACKLOG:
                 return None
-        except (NotImplementedError, OSError):
+        except (EOFError, OSError):
             pass
         # the bot reads the file after the macro has moved on, so give it its own copy
         imageCopy = self._snapshot_image(imagePath, fallback=not temporaryImage)
