@@ -678,15 +678,9 @@ def _merge_patterns(src_patterns, dst_patterns, overwrite_exceptions=None):
 
 
 # Create a zip backup of `destination`, excluding protected folders/files.
+# The new zip is written beside the old one and swapped in only once complete,
+# so a failed attempt keeps the previous backup and raises.
 def _create_backup(destination, backup_path, protected_folders, protected_files):
-    if os.path.exists(backup_path):
-        try:
-            os.remove(backup_path)
-        except Exception:
-            try:
-                os.unlink(backup_path)
-            except Exception:
-                pass
     # Recordings are generated artifacts and can be many gigabytes. Including
     # them makes the updater appear stuck at 30% while it compresses videos.
     excluded_folders = set(protected_folders)
@@ -695,8 +689,22 @@ def _create_backup(destination, backup_path, protected_folders, protected_files)
         os.path.join("src", "data", "user", "fuzzy_ai_recordings"),
     })
     backup_abs = os.path.abspath(backup_path)
+    tmp_path = backup_path + ".tmp"
+    tmp_abs = os.path.abspath(tmp_path)
 
-    with zipfile.ZipFile(backup_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+    try:
+        _write_backup_zip(destination, tmp_path, excluded_folders, protected_files, {backup_abs, tmp_abs})
+        os.replace(tmp_path, backup_path)
+    except BaseException:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def _write_backup_zip(destination, zip_path, excluded_folders, protected_files, skip_abs):
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for root, dirs, files in os.walk(destination):
             # skip the backup file itself and src extraction folders
             rel_root = os.path.relpath(root, destination)
@@ -718,12 +726,12 @@ def _create_backup(destination, backup_path, protected_folders, protected_files)
                     continue
                 absf = os.path.join(root, f)
                 arcname = os.path.join(rl, f) if rl else f
-                if os.path.abspath(absf) == backup_abs:
+                if os.path.abspath(absf) in skip_abs:
                     continue
-                try:
-                    zf.write(absf, arcname)
-                except Exception:
-                    pass
+                # Sockets, pipes and broken symlinks have no content to back up.
+                if not os.path.isfile(absf):
+                    continue
+                zf.write(absf, arcname)
 
 
 # Mark that a backup exists and should be deleted after one full macro launch.
