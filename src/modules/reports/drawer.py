@@ -285,10 +285,9 @@ class HourlyReportDrawer:
             img = _loadIcon(f"{self.assetPath}/{asset}.png", (iconSize, iconSize))
             if img is not None:
                 self.canvas.paste(img, (int(iconX), iconY), img)
-            value = self._currentBuffValue(uptimeBuffsValues, key)
-            if not value and key in hourlyBuffList:
-                idx = hourlyBuffList.index(key)
-                value = buffQuantity[idx] if idx < len(buffQuantity) else 0
+            value = buffQuantity[i] if i < len(buffQuantity) else 0
+            if not value:
+                value = self._currentBuffValue(uptimeBuffsValues, key)
             txt = f"x{value}" if value else "x0"
             font = self.getFont("bold", 72)
             bbox = self.draw.textbbox((0, 0), txt, font=font, stroke_width=5)
