@@ -974,22 +974,35 @@ class QuestMixin:
         if questGiver == "brown bear":
             titleObjectives = parseBrownBearTitleObjectives(questTitle)
             titleScreen, objectiveScreen, parseScreen, objectiveChunks, questEnded = extractQuestObjectiveChunks(screen, questTitleYPos)
-            # Rows below the bottom of the quest log are off screen, so scroll until they are in view.
-            for _ in range(10):
+
+            def rowsCutOff():
                 fullRows = [panel for panel in detectObjectivePanels(parseScreen)
                             if panel["y"] + panel["bbox"][3] < parseScreen.shape[0]]
-                if questEnded or len(fullRows) >= len(titleObjectives) or not manageQuestUi or is_stopped():
+                return not questEnded and len(fullRows) < len(titleObjectives)
+
+            # Rows below the bottom of the quest log are off screen, so scroll (or move on to the next captured screen) until they are in view.
+            followingScreens = iter(screensAfterTitle)
+            for _ in range(10):
+                if not rowsCutOff() or is_stopped():
                     break
-                mouse.scroll(-1, True)
-                time.sleep(0.06)
-                scrolledScreen = screenshotQuest(self.robloxWindow.mh, mode="RGBA")
+                if manageQuestUi:
+                    mouse.scroll(-1, True)
+                    time.sleep(0.06)
+                    scrolledScreen = screenshotQuest(self.robloxWindow.mh, mode="RGBA")
+                else:
+                    scrolledScreen = next(followingScreens, None)
+                    if scrolledScreen is None:
+                        break
                 scrolledMatch = ocrQuestTitleFromScreen(scrolledScreen)
                 if not scrolledMatch or scrolledMatch[2] >= questTitleYPos:
                     break  # the list is at its end or the title scrolled out of view
-                self.questMenuStep += 1
-                self.questGiverSteps[questGiver] = self.questMenuStep
+                if manageQuestUi:
+                    self.questMenuStep += 1
+                    self.questGiverSteps[questGiver] = self.questMenuStep
                 screen, questTitleYPos = scrolledScreen, scrolledMatch[2]
                 titleScreen, objectiveScreen, parseScreen, objectiveChunks, questEnded = extractQuestObjectiveChunks(screen, questTitleYPos)
+            if not manageQuestUi and rowsCutOff():
+                return None  # the captured screens never showed all the rows; the caller reads this giver on its own
             incompleteObjectives = []
             completedObjectives = []
             observedStatuses = {}
@@ -1321,7 +1334,8 @@ class QuestMixin:
                 below = cv2.cvtColor(np.array(nextScreen), cv2.COLOR_RGBA2BGR)
                 # Above the rows are the quests before this one, and below them the next quest.
                 end = findQuestSectionEnd(below, rowsTop + int(60*self.robloxWindow.multi) if rowsTop > 0 else 0)
-                below = below[:findLogEnd(below), :]
+                logTop = max(rowsTop, 0)
+                below = below[:logTop + findLogEnd(below[logTop:]), :]
                 for panel in detectObjectivePanels(below):
                     x, y, w, h = panel["bbox"]
                     # Rows cut off by the screen's edge are read whole on a neighbouring screen.
@@ -1464,6 +1478,8 @@ class QuestMixin:
         # Rows below the bottom of the quest log are off screen, so scroll on and read them.
         if not bottomIsQuestEnd and "unknown" in observedStatuses:
             readRowsBelow()
+            if questScreens is not None and "unknown" in observedStatuses:
+                return None  # the captured screens never showed all the rows; the caller reads this giver on its own
 
         completedObjectives = [action for action, status in zip(objectives, observedStatuses) if status == "complete"]
         incompleteObjectives = [action for action, status in zip(objectives, observedStatuses) if status != "complete"]
