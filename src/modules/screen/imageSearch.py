@@ -61,7 +61,7 @@ def _cached_resized_from_path(path_base, scale_key, need_alpha, display_type):
     """
     try:
         scale = scale_key / 1000.0
-        img = load_template_for_display(path_base)  # ensures display-specific asset selection
+        img = load_template_for_display(path_base, display_type)  # ensures display-specific asset selection
     except Exception:
         return None
 
@@ -166,6 +166,8 @@ def locateImageInScreen(target, screen, threshold=0, scales=None, return_scale=F
     if screen is None:
         return None
 
+    display_type = getScreenData().get("display_type", "")
+
     # If target is a string path, use the loader which prefers display-specific assets and caches results.
     is_path = isinstance(target, str)
     base = None
@@ -175,7 +177,7 @@ def locateImageInScreen(target, screen, threshold=0, scales=None, return_scale=F
         if base.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.webp')):
             base = base.rsplit('.', 1)[0]
         try:
-            img_target = load_template_for_display(base)
+            img_target = load_template_for_display(base, display_type)
         except Exception:
             return None
         if img_target is None:
@@ -193,7 +195,6 @@ def locateImageInScreen(target, screen, threshold=0, scales=None, return_scale=F
         return None
 
     # Build default scales if not provided
-    display_type = getScreenData().get("display_type", "")
     if scales is None:
         multi = 2 if display_type == "retina" else 1
         # include 1.0, multi, and reciprocal scales (handles retina asset on non-retina screen)

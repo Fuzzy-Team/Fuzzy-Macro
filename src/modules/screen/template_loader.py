@@ -7,8 +7,10 @@ def _read_image(path):
     # read image preserving alpha if present
     return cv2.imread(path, cv2.IMREAD_UNCHANGED)
 
-def load_template_for_display(path_without_ext):
-    display_type = getScreenData().get("display_type", "")
+def load_template_for_display(path_without_ext, display_type=None):
+    # Callers that load several templates for one search pass the display type they read.
+    if display_type is None:
+        display_type = getScreenData().get("display_type", "")
     return _load_template_for_display(path_without_ext, display_type)
 
 
