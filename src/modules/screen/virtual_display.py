@@ -16,12 +16,42 @@ WIDTH, HEIGHT = 1920, 1080
 ASSETS = Path(__file__).resolve().parents[2] / "assets" / "fuzzy-display"
 
 
+COVERS = " covers Roblox on Fuzzy Display."
+COVER_GRACE = 4
+
 class DisplayError(RuntimeError):
     pass
 
 
 def active():
     return bool(os.environ.get(ENV))
+
+
+def _still_covered(error):
+    """The helper reports any window over Roblox. Only a normal window (layer 0) that stays for
+    COVER_GRACE seconds is an error. Notification banners, clipboard progress and the menu bar sit
+    on higher layers, and ordinary windows get moved or closed."""
+    import Quartz
+    owner = error.split(COVERS)[0]
+    deadline = time.monotonic() + COVER_GRACE
+    while True:
+        with open(os.path.join(os.environ[ENV], "status.json")) as handle:
+            current = json.load(handle)
+        if COVERS not in (current.get("error") or ""):
+            return False
+        left, top, width, height = current["content"]
+        for win in Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListOptionOnScreenOnly, Quartz.kCGNullWindowID):
+            name = win.get(Quartz.kCGWindowOwnerName) or ""
+            bounds = win.get(Quartz.kCGWindowBounds) or {}
+            if (win.get(Quartz.kCGWindowLayer) == 0 and name and owner.startswith(name)
+                    and bounds["X"] < left + width and bounds["X"] + bounds["Width"] > left
+                    and bounds["Y"] < top + height and bounds["Y"] + bounds["Height"] > top):
+                break
+        else:
+            return False
+        if time.monotonic() >= deadline:
+            return True
+        time.sleep(0.25)
 
 
 def state(require_window=False, allow_error=False):
@@ -33,6 +63,8 @@ def state(require_window=False, allow_error=False):
         if result.get("protocol") != 1 or abs(time.time() - result["updated"]) > 3:
             raise DisplayError("Fuzzy Display stopped responding. Restart the macro.")
         if result.get("error") and not allow_error:
+            if COVERS in result["error"] and not _still_covered(result["error"]):
+                return result
             raise DisplayError(result["error"])
         if require_window and not result.get("window_ready"):
             raise DisplayError("Roblox has no verified game area on Fuzzy Display.")

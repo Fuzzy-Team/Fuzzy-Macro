@@ -76,7 +76,11 @@ class keyboard:
             if is_paused():
                 time.sleep(0.1)
                 continue
-            self._speed = self.hasteCompensation.getHaste()
+            try:
+                self._speed = self.hasteCompensation.getHaste()
+            except virtual_display.DisplayError:
+                # Keep the last speed. The walking thread reports a lasting display problem itself.
+                time.sleep(0.25)
             time.sleep(WALK_TICK)
 
     def _walkDistance(self, distance, until=None):
