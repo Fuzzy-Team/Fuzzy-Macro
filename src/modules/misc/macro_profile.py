@@ -34,6 +34,18 @@ def replaceFile(source, destination):
             time.sleep(0.05)
 
 
+def readFile(path, mode="rb"):
+    """Read a whole file. A replaceFile in another process briefly makes Windows refuse to open it, so wait that out."""
+    for attempt in range(20):
+        try:
+            with open(path, mode) as handle:
+                return handle.read()
+        except PermissionError:
+            if os.name != "nt" or attempt == 19:
+                raise
+            time.sleep(0.01)
+
+
 class MacroProfileError(Exception):
     """Base error returned by the Macro Profile interface."""
 
@@ -297,8 +309,7 @@ class MacroProfileStore:
 
     @staticmethod
     def _read_fields_file(path):
-        with open(path, encoding="utf-8") as handle:
-            raw = handle.read().strip()
+        raw = readFile(path).decode("utf-8").strip()
         value = ast.literal_eval(raw) if raw else {}
         if not isinstance(value, dict):
             raise ValueError("expected an object")
@@ -315,8 +326,7 @@ class MacroProfileStore:
     def _read_settings_file(path, defaults, warnings):
         """Parse key=value lines. A line that isn't a setting is skipped (and reported)
         rather than failing the file, so one bad line can't reset every other setting."""
-        with open(path, "rb") as handle:
-            content = handle.read()
+        content = readFile(path)
         try:
             raw = content.decode("utf-8")
         except UnicodeDecodeError:

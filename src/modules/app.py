@@ -262,6 +262,11 @@ def runApp(macroTarget):
     # run_macro.command stops the app with SIGTERM.
     # Exit through SystemExit so onExit still stops the macro and releases keys.
     signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(0))
+    quitRequested = []
+    if sys.platform == "win32":
+        # gevent's Windows loop can swallow a KeyboardInterrupt raised inside its callbacks,
+        # so Ctrl+C only marks the quit and the main loop exits through SystemExit.
+        signal.signal(signal.SIGINT, lambda signum, frame: quitRequested.append(signum))
 
     #setup and launch gui
     gui.run = run
@@ -469,6 +474,8 @@ def runApp(macroTarget):
         # Keep Eel responsive so GUI controls and hotkey recording checks can
         # complete. Standby still skips settings refresh and macro supervision.
         eel.sleep(1 if standbyState.active else 0.5)
+        if quitRequested:
+            sys.exit(0)
 
         current_time = time.time()
         processStandbyCommands()

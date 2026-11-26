@@ -6,7 +6,7 @@ import tempfile
 from datetime import datetime
 import re
 
-from .macro_profile import MacroProfileError, MacroProfileStore, MacroProfileValidationError, replaceFile
+from .macro_profile import MacroProfileError, MacroProfileStore, MacroProfileValidationError, readFile, replaceFile
 
 from .settings_defaults import (
     DEFAULT_AFB,
@@ -354,24 +354,21 @@ def saveUserSettingsFile(filename, data):
 
 def loadUserJson(filename):
     path = ensureUserFile(filename)
-    with open(path, "r") as f:
-        return json.load(f)
+    return json.loads(readFile(path, "r"))
 
 def saveUserJson(filename, data):
     _writeJsonFile(getUserDataPath(filename), data)
 
 def loadUserText(filename):
     path = ensureUserFile(filename)
-    with open(path, "r") as f:
-        return f.read()
+    return readFile(path, "r")
 
 def saveUserText(filename, text):
     _writeTextFile(getUserDataPath(filename), str(text))
 
 def loadUserLiteral(filename):
     path = ensureUserFile(filename)
-    with open(path, "r") as f:
-        raw = f.read().strip()
+    raw = readFile(path, "r").strip()
     if not raw:
         if filename == "manualplanters.txt":
             return []
@@ -802,8 +799,7 @@ def _readSettingsFileUncached(path, defaults=None):
             return data
         raise FileNotFoundError(f"[Errno 2] No such file or directory: {path!r}")
 
-    with open(path) as f:
-        raw = f.read()
+    raw = readFile(path, "r")
 
     # If `max_convert_time=` was accidentally concatenated onto the previous line,
     # insert a newline before it so it becomes its own setting line.

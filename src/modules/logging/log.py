@@ -1,4 +1,5 @@
 import os
+import signal
 import sys
 import time as timeModule
 import threading
@@ -303,6 +304,9 @@ def installCrashLog():
 def runLogged(target, *args):
     """Process target wrapper. multiprocessing prints a child's crash without calling sys.excepthook."""
     installCrashLog()
+    if sys.platform == "win32":
+        # Ctrl+C reaches every process on the console. The app stops the macro itself, so it isn't reported as a crash.
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
     try:
         target(*args)
     except Exception:

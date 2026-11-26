@@ -117,6 +117,8 @@ def screenshotRobloxWindow(filename = None, regionMultipliers = None):
 
 def benchmarkMSS():
     global usePillow
+    if sys.platform != "darwin":  # the slow capture and the screencapture fallback are macOS-only
+        return True
     try:
         with mss.mss() as sct:
             x, y = virtual_display.to_global(0, 0)
@@ -126,13 +128,13 @@ def benchmarkMSS():
             duration = time.time() - start
             if duration > 1:
                 print(f"MSS took {duration:.2f}s — switching to Pillow.")
-                usePillow = sys.platform == "darwin"  # pillowGrab runs screencapture, which only exists on macOS
+                usePillow = True
             else:
                 print(f"MSS is fast enough: {duration:.2f}s")
                 return True
     except Exception as e:
         print(f"[ERROR] MSS failed: {e} — switching to Pillow.")
-        usePillow = sys.platform == "darwin"
+        usePillow = True
     
     return False
 
