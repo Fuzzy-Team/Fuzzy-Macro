@@ -264,7 +264,7 @@ def objective_matches_text(action, text):
         # Rows only the user can do are matched by their wording, so they get a status on scrolled screens too.
         numbers = set(re.findall(r"\d+", text.replace(",", "")))
         return {singular(word) for word in re.findall(r"[a-z]+", target)}.issubset(words) \
-            and set(re.findall(r"\d+", target)).issubset(numbers)
+            and set(re.findall(r"\d+", target.replace(",", ""))).issubset(numbers)
     return False
 
 
