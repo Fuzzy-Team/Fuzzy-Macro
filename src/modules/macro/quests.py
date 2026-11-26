@@ -24,6 +24,55 @@ DIGIT_LOOKALIKES = {"l": "1", "i": "1", "|": "1", "!": "1", "j": "1", "7": "1", 
                     "s": "5", "b": "6", "g": "6"}
 
 
+def findLogEnd(scanScreen):
+    """Return the y offset where the quest log ends and the game world starts, or None when no log is on screen."""
+    height = scanScreen.shape[0]
+    pixels = scanScreen[:, :, :3].astype(np.int16)
+    logColors = ([222, 195, 150], [247, 240, 229])  # BGR: the log's background and its title bars
+    isLog = np.zeros(pixels.shape[:2], dtype=bool)
+    for color in logColors:
+        isLog |= np.all(np.abs(pixels - np.array(color, dtype=np.int16)) <= 10, axis=2)
+    hasLog = np.mean(isLog, axis=1) > 0.005
+    if not hasLog.any():
+        return None
+    gap = 0
+    for row in range(int(np.argmax(hasLog)), height):
+        gap = 0 if hasLog[row] else gap + 1
+        if gap > 3:
+            return row - gap + 1
+    return height
+
+
+class ListEnd:
+    """Tells when scrolling has stopped moving the quest list.
+    A list only counts as ended after two scrolls in a row left the screen unchanged, since a
+    run of near-identical rows can look unchanged for one scroll while the list carries on."""
+
+    def __init__(self):
+        self.last = None
+        self.still = 0
+
+    def moved(self, frame):
+        """Feed the whole screen after each scroll. Returns whether the list moved since the last one."""
+        frame = np.array(frame)
+        # Only the quest log counts: the game world below it changes all the time.
+        if frame.ndim == 3:
+            frame = cv2.cvtColor(frame, cv2.COLOR_RGBA2BGR)
+            frame = frame[:findLogEnd(frame) or 100]
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        else:
+            frame = frame[:100]
+        moved = self.last is None or frame.shape != self.last.shape or np.mean(
+            np.abs(frame.astype(np.int16) - self.last) > 16) > 0.002
+        self.last = frame.astype(np.int16)
+        self.still = 0 if moved else self.still + 1
+        return moved
+
+    @property
+    def ended(self):
+        return self.still >= 2
+
+
 def matchQuestTitle(giver, text):
     """The giver's quest title closest to the OCR text; a lone misread character at the end is read as its digit first."""
     titles = quest_data[giver]
@@ -349,30 +398,29 @@ class QuestMixin:
             return []
         self.toggleQuest()
 
-        prevHash = None
+        listEnd = ListEnd()
         for _ in range(200):
             if is_stopped():
                 break
             mouse.scroll(100)
             sleep(0.08)
-            currentHash = average_hash(Image.fromarray(screenshotQuest(100)))
-            if prevHash is not None and prevHash == currentHash:
+            listEnd.moved(screenshotQuest(self.robloxWindow.mh, mode="RGBA"))
+            if listEnd.ended:
                 break
-            prevHash = currentHash
 
         sleep(0.4)
         screens = []
-        prevHash = None
+        listEnd = ListEnd()
         for _ in range(maxScreens):
             if is_stopped():
                 break
-            screens.append(screenshotQuest(self.robloxWindow.mh, mode="RGBA"))
+            screen = screenshotQuest(self.robloxWindow.mh, mode="RGBA")
+            if listEnd.moved(screen):
+                screens.append(screen)
+            elif listEnd.ended:
+                break
             mouse.scroll(-1, True)
             time.sleep(0.06)
-            currentHash = average_hash(Image.fromarray(screenshotQuest(100)))
-            if prevHash is not None and prevHash == currentHash:
-                break
-            prevHash = currentHash
 
         if is_stopped():
             return screens
@@ -559,21 +607,6 @@ class QuestMixin:
 
             candidates = [x for x in (grayBoundary, directTitleBoundary) if x is not None]
             return minOffset + min(candidates) if candidates else None
-
-        def findLogEnd(scanScreen):
-            """Return the y offset where the quest log's own blue background ends and the game world starts."""
-            height = scanScreen.shape[0]
-            logColor = np.array([222, 195, 150], dtype=np.int16)  # BGR, shows at the edges of every row of the log
-            hasLog = np.mean(np.all(np.abs(scanScreen[:, :, :3].astype(np.int16) - logColor) <= 10, axis=2), axis=1) > 0.005
-            if not hasLog.any():
-                return height
-            start = int(np.argmax(hasLog))
-            gap = 0
-            for row in range(start, height):
-                gap = 0 if hasLog[row] else gap + 1
-                if gap > 3:
-                    return row - gap + 1
-            return height
 
         def regionHasIncompleteRed(region):
             if region is None or region.size == 0:
@@ -817,16 +850,15 @@ class QuestMixin:
 
         def scrollToTop():
             #stop scrolling when the quest page remains unchanged
-            prevHash = None
+            listEnd = ListEnd()
             for _ in range(200):
                 if is_stopped():
                     return
                 mouse.scroll(100)
                 sleep(0.08)
-                hash = average_hash(Image.fromarray(screenshotQuest(100)))
-                if not prevHash is None and prevHash == hash:
+                listEnd.moved(screenshotQuest(self.robloxWindow.mh, mode="RGBA"))
+                if listEnd.ended:
                     break
-                prevHash = hash
             self.questMenuStep = 0
 
         # Return to the step where this giver's quest was last seen. The title match below
@@ -874,7 +906,7 @@ class QuestMixin:
             questGiverTemplates.extend(buildScaledTemplates(fallbackImg, fallbackScales, fallbackDisplayType))
         except Exception:
             pass
-        prevHash = None
+        listEnd = ListEnd()
         screenSource = questScreens if questScreens is not None else range(150)
         for i, screenEntry in enumerate(screenSource):
             if is_stopped():
@@ -931,17 +963,16 @@ class QuestMixin:
                 positioned = False
                 scrollToTop()
                 sleep(0.4)
-                prevHash = None
+                listEnd = ListEnd()
             elif manageQuestUi:
                 if is_stopped():
                     break
                 mouse.scroll(-1, True)
                 self.questMenuStep += 1
                 time.sleep(0.06)
-                hash = average_hash(Image.fromarray(screenshotQuest(100)))
-                if not prevHash is None and prevHash == hash:
+                listEnd.moved(screenshotQuest(self.robloxWindow.mh, mode="RGBA"))
+                if listEnd.ended:
                     break
-                prevHash = hash
 
         if questTitle is None:
             # A stop ends the scan early, so the quest was not looked for and is not missing.
@@ -1305,16 +1336,17 @@ class QuestMixin:
             if questScreens is not None:
                 yield from screensAfterTitle
                 return
-            lastHash = average_hash(Image.fromarray(screenshotQuest(100)))
+            listEnd = ListEnd()
+            listEnd.moved(screenshotQuest(self.robloxWindow.mh, mode="RGBA"))
             for _ in range(60):
                 if is_stopped():
                     return
                 mouse.scroll(-1, True)
                 time.sleep(0.06)
-                currentHash = average_hash(Image.fromarray(screenshotQuest(100)))
-                if currentHash == lastHash:
-                    return
-                lastHash = currentHash
+                if not listEnd.moved(screenshotQuest(self.robloxWindow.mh, mode="RGBA")):
+                    if listEnd.ended:
+                        return
+                    continue
                 self.questMenuStep += 1
                 yield screenshotQuest(self.robloxWindow.mh, mode="RGBA")
 
@@ -1348,7 +1380,8 @@ class QuestMixin:
                 # Above the rows are the quests before this one, and below them the next quest.
                 end = findQuestSectionEnd(below, rowsTop + int(60*self.robloxWindow.multi) if rowsTop > 0 else 0)
                 logTop = max(rowsTop, 0)
-                below = below[:logTop + findLogEnd(below[logTop:]), :]
+                logEnd = findLogEnd(below[logTop:])
+                below = below[:logTop + logEnd, :] if logEnd else below
                 for panel in detectObjectivePanels(below):
                     x, y, w, h = panel["bbox"]
                     # Rows cut off by the screen's edge are read whole on a neighbouring screen.
