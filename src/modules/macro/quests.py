@@ -1283,20 +1283,22 @@ class QuestMixin:
         observedRemaining = [None] * len(objectives)
 
         def observeRow(index, text, status, fullRow=True):
+            """Record a row's status and return the objective it belongs to, or None when it could not be told."""
             if not fullRow:
-                return
+                return None
             matches = [row for row, action in enumerate(objectives) if objective_matches_text(action, text)]
             if len(matches) == 1:
                 row = matches[0]
             elif index is not None and len(objectivePanels) >= len(objectives):
                 row = index
             else:
-                return
+                return None
             observedStatuses[row] = status
             progress = re.search(r"(\d[\d,.]*)\s*/\s*(\d[\d,.]*)", text)
             if progress:
                 done, total = (int(re.sub(r"\D", "", part)) for part in progress.groups())
                 observedRemaining[row] = max(0, total - done)
+            return row
 
         def screensBelowTitle():
             """Scroll on from the title's screen, one notch at a time, until the list stops moving."""
@@ -1331,7 +1333,7 @@ class QuestMixin:
                 return np.abs(a[offset:offset + top] - b[:top]).mean() if top >= 20 else 255
             return min(range(1, a.shape[0] // 2), key=mismatch)
 
-        rowsRead = []  # rows read from other screens, shown under the title screen in the debug image
+        rowsRead = {}  # objective row -> (pixels, status), rows read from other screens, shown under the title screen in the debug image
 
         def readRowsBelow():
             """A long quest runs past the bottom of the screen: scroll on and read the rows below by their text."""
@@ -1365,8 +1367,9 @@ class QuestMixin:
                         status = "complete"
                     if objectiveTextShowsIncompleteProgress(''.join(lines)):
                         status = "incomplete"
-                    observeRow(None, text, status)
-                    rowsRead.append((text, panelPixels, status))
+                    row = observeRow(None, text, status)
+                    if row is not None:
+                        rowsRead[row] = (panelPixels, status)
                 if end is not None or "unknown" not in observedStatuses:
                     return
 
@@ -1498,7 +1501,10 @@ class QuestMixin:
 
         questImgPath = "latest-quest.png"
         if logDetection:
-            for text, pixels, status in rowsRead:
+            if rowsRead:
+                # Only the quest log of the title's screen, then each row read below it once, in order.
+                screenOriginal = screenOriginal[:findLogEnd(screenOriginal) or screenOriginal.shape[0]]
+            for _, (pixels, status) in sorted(rowsRead.items()):
                 color = (0, 255, 0) if status == "complete" else (0, 0, 255)
                 row = np.full((pixels.shape[0], screenOriginal.shape[1], 3), 255, np.uint8)
                 row[:, :pixels.shape[1]] = pixels[:, :screenOriginal.shape[1]]
