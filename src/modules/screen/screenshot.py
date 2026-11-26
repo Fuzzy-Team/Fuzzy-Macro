@@ -126,13 +126,13 @@ def benchmarkMSS():
             duration = time.time() - start
             if duration > 1:
                 print(f"MSS took {duration:.2f}s — switching to Pillow.")
-                usePillow = True
+                usePillow = sys.platform == "darwin"  # pillowGrab runs screencapture, which only exists on macOS
             else:
                 print(f"MSS is fast enough: {duration:.2f}s")
                 return True
     except Exception as e:
         print(f"[ERROR] MSS failed: {e} — switching to Pillow.")
-        usePillow = True
+        usePillow = sys.platform == "darwin"
     
     return False
 

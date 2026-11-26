@@ -13,12 +13,25 @@ import os
 import re
 import tempfile
 import threading
+import time
 from contextlib import contextmanager
 
 try:
     import fcntl
-except ImportError:  # pragma: no cover - Windows fallback
+except ImportError:  # Windows
     fcntl = None
+    import msvcrt
+
+
+def replaceFile(source, destination):
+    """os.replace that waits out a reader holding the destination open, which Windows refuses to replace."""
+    for attempt in range(20):
+        try:
+            return os.replace(source, destination)
+        except PermissionError:
+            if os.name != "nt" or attempt == 19:
+                raise
+            time.sleep(0.05)
 
 
 class MacroProfileError(Exception):
@@ -523,11 +536,22 @@ class MacroProfileStore:
         with open(lock_path, "a+") as lock_file:
             if fcntl is not None:
                 fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            else:
+                lock_file.seek(0)
+                while True:  # LK_LOCK gives up after ~10 s, which no write should take
+                    try:
+                        msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+                        break
+                    except OSError:
+                        pass
             try:
                 yield
             finally:
                 if fcntl is not None:
                     fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                else:
+                    lock_file.seek(0)
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
 
     def _write_file(self, path, data, fields=False, changed=None):
         if fields:
@@ -583,7 +607,7 @@ class MacroProfileStore:
                 handle.flush()
                 os.fsync(handle.fileno())
                 written = os.fstat(handle.fileno())
-            os.replace(temporary, path)
+            replaceFile(temporary, path)
             return (written.st_mtime_ns, written.st_size, written.st_ino)
         except Exception:
             try:

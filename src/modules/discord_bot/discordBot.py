@@ -14,7 +14,6 @@ import sys
 import os
 import re
 import asyncio
-import signal
 import json
 import ast
 import math
@@ -2909,8 +2908,8 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 import ctypes
                 from ctypes import wintypes
                 class SystemPowerStatus(ctypes.Structure):
-                    _fields_ = [("ACLineStatus", wintypes.BYTE), ("BatteryFlag", wintypes.BYTE),
-                                ("BatteryLifePercent", wintypes.BYTE), ("SystemStatusFlag", wintypes.BYTE),
+                    _fields_ = [("ACLineStatus", ctypes.c_ubyte), ("BatteryFlag", ctypes.c_ubyte),
+                                ("BatteryLifePercent", ctypes.c_ubyte), ("SystemStatusFlag", ctypes.c_ubyte),
                                 ("BatteryLifeTime", wintypes.DWORD), ("BatteryFullLifeTime", wintypes.DWORD)]
                 status = SystemPowerStatus()
                 ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(status))
@@ -2965,7 +2964,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 run.value = 0
                 await loop.run_in_executor(None, closeApp, "Roblox")
                 await interaction.followup.send("Closing macro and Roblox...")
-                os.kill(os.getppid(), signal.SIGTERM)
+                standby_command_queue.put({"action": "quit"})
             elif action == "roblox":
                 await loop.run_in_executor(None, closeApp, "Roblox")
                 await interaction.followup.send("Closing Roblox...")
@@ -2973,7 +2972,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 # stop the macro loop but keep the bot running
                 run.value = 0
                 await interaction.followup.send("Stopping macro (Roblox will remain open).")
-                os.kill(os.getppid(), signal.SIGTERM)
+                standby_command_queue.put({"action": "quit"})
             else:
                 await interaction.followup.send("❌ Unknown action. Use: both, roblox, or macro")
         except Exception as e:

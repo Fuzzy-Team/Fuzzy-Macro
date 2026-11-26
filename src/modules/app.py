@@ -259,7 +259,7 @@ def runApp(macroTarget):
             pass  # eel may not be ready yet
 
     atexit.register(onExit)
-    # run_macro.command and the Discord /close command stop the app with SIGTERM.
+    # run_macro.command stops the app with SIGTERM.
     # Exit through SystemExit so onExit still stops the macro and releases keys.
     signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(0))
 
@@ -400,6 +400,9 @@ def runApp(macroTarget):
                 break
 
             action = str(command.get("action", "")).lower()
+            if action == "quit":
+                # Sent by Discord /close. SystemExit runs onExit; a Windows process kill would skip it.
+                sys.exit(0)
             if action == "disable":
                 stopStandbyKeepAwake()
                 standbyState.active = False

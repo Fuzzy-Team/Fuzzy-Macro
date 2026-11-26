@@ -14,6 +14,7 @@ const questObjectiveGroups = [
     {label: "Tokens", value: "token", kinds: ["token", "fieldtoken"]},
     {label: "Goo", value: "goo", kinds: ["pollengoo", "gathergoo"]},
     {label: "Bloom Petals", value: "petal", kinds: ["gatherpetal"]},
+    {label: "Use Items", value: "use", kinds: ["use"]},
 ];
 
 function questObjectiveGroup(key) {

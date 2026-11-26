@@ -6,7 +6,7 @@ import tempfile
 from datetime import datetime
 import re
 
-from .macro_profile import MacroProfileError, MacroProfileStore, MacroProfileValidationError
+from .macro_profile import MacroProfileError, MacroProfileStore, MacroProfileValidationError, replaceFile
 
 from .settings_defaults import (
     DEFAULT_AFB,
@@ -184,7 +184,7 @@ def _writeAtomic(path, content):
     try:
         with os.fdopen(fd, "w") as f:
             f.write(content)
-        os.replace(tmp_path, abs_path)
+        replaceFile(tmp_path, abs_path)
         _READ_CACHE.pop(abs_path, None)
     except Exception:
         try:

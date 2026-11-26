@@ -282,7 +282,8 @@ def logHang(trace):
 def installCrashLog():
     """Log uncaught exceptions in this process's main thread and in its threads."""
     def onException(excType, exc, tb):
-        logException(excType, exc, tb)
+        if excType is not KeyboardInterrupt:  # Ctrl+C is a normal way to quit
+            logException(excType, exc, tb)
         sys.__excepthook__(excType, exc, tb)
 
     sys.excepthook = onException
