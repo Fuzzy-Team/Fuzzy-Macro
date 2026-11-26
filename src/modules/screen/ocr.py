@@ -67,7 +67,10 @@ def _loadOcrEngine():
             except ImportError:
                 pass
             print("Imported easyocr")
-            easyocrReader = easyocr.Reader(['en'])
+            # torch's quantized LSTM crashes with an illegal instruction on CPUs without AVX (emulated or old x86)
+            import torch
+            capability = getattr(getattr(torch.backends, "cpu", None), "get_cpu_capability", lambda: "")()
+            easyocrReader = easyocr.Reader(['en'], quantize=capability != "NO AVX")
             lib = "easyocr"
 
         ocrLib = lib

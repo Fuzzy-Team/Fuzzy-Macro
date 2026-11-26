@@ -12,8 +12,8 @@ if not exist "%PYTHON_EXE%" (
     if errorlevel 1 exit /b 1
 )
 
-:: Stop only a Fuzzy Macro already running from this virtual environment.
-powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -ieq $env:PYTHON_EXE -and $_.CommandLine -match 'main\.py' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>&1
+:: Stop only a Fuzzy Macro already running from this virtual environment, with its macro, bot and manager processes (/T).
+powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -ieq $env:PYTHON_EXE -and $_.CommandLine -match 'main\.py' } | ForEach-Object { taskkill /PID $_.ProcessId /T /F }" >nul 2>&1
 
 :: Force Python to use certifi for SSL (fixes Discord/aiohttp)
 if exist "%VENV_PATH%\Lib\site-packages\certifi\cacert.pem" set "SSL_CERT_FILE=%VENV_PATH%\Lib\site-packages\certifi\cacert.pem"
