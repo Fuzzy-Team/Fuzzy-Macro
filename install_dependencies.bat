@@ -33,9 +33,9 @@ if errorlevel 1 (
 
 "%PYTHON_EXE%" -m pip install --upgrade pip "setuptools<82" wheel
 if errorlevel 1 goto :failed
-:: Every OpenCV package shares the cv2 module, so keep only the one in requirements-windows.txt.
+:: Every OpenCV package shares the cv2 module, so keep only the one installed below.
 "%PYTHON_EXE%" -m pip uninstall -y opencv-python opencv-contrib-python opencv-python-headless opencv-contrib-python-headless
-"%PYTHON_EXE%" -m pip install --prefer-binary --default-timeout=100 -r "%PROJECT_ROOT%requirements-windows.txt"
+"%PYTHON_EXE%" -m pip install --prefer-binary --default-timeout=100 "numpy<2" "opencv-python-headless<4.11" torch torchvision easyocr pyautogui pydirectinput mss pillow discord-webhook discord.py aiohttp==3.10.5 pypresence fuzzywuzzy python-Levenshtein "pyscreeze<0.1.29" gevent eel requests pynput psutil certifi
 if errorlevel 1 goto :failed
 
 echo Installation complete.
