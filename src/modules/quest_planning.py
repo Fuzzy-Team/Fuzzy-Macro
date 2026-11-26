@@ -245,7 +245,9 @@ def objective_matches_text(action, text):
             return {"field", "booster"}.issubset(words) and not words.intersection(("red", "blue", "mountain"))
         return set(re.findall(r"[a-z]+", target)).issubset(words)
     if kind == "fieldtoken":
-        return target in words and bool(words.intersection(("collect", "token")))
+        # A berry row names no gather resource; the strawberry pollen row names the field too.
+        return (target in words and bool(words.intersection(("collect", "token")))
+                and not words.intersection(("pollen", "goo", "petal")))
     if kind in ("use", "donate"):
         item = QUEST_ITEMS[target.rpartition("_")[2]][0] if kind == "use" else target.partition("_")[2]
         verbs = ("use", "share") if kind == "use" else ("donate",)
