@@ -17,6 +17,7 @@ _held = []
 WALK_TICK = 0.01
 #the movespeed thread stops once no walk has asked for the speed for this long
 SPEED_IDLE_SECONDS = 1
+SPEED_POLL_SECONDS = 0.1
 
 
 def _pausePoint():
@@ -63,7 +64,10 @@ class keyboard:
 
     def currentSpeed(self):
         """The movespeed from the buff bar. A background thread reads it while walks keep asking,
-        so a walk never waits on a screen capture. The first call after a quiet spell reads it here."""
+        so a walk never waits on a screen capture. The first call after a quiet spell reads it here.
+        With haste compensation off it is the configured movespeed and nothing is captured."""
+        if not self.enableHasteCompensation:
+            return self.ws
         self._speedWanted = time.monotonic() + SPEED_IDLE_SECONDS
         if self._speedThread is None or not self._speedThread.is_alive():
             self._speed = self.hasteCompensation.getHaste()
@@ -80,8 +84,8 @@ class keyboard:
                 self._speed = self.hasteCompensation.getHaste()
             except virtual_display.DisplayError:
                 # Keep the last speed. The walking thread reports a lasting display problem itself.
-                time.sleep(0.25)
-            time.sleep(WALK_TICK)
+                pass
+            time.sleep(SPEED_POLL_SECONDS)
 
     def _walkDistance(self, distance, until=None):
         """Keep the held keys down until distance (studs) is covered. Every 10 ms it takes the
