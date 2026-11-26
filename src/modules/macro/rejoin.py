@@ -190,7 +190,23 @@ class RejoinMixin:
         text = " ".join(result[1][0] for result in ocr.ocrRead(dialog))
         return self._joinErrorFromText(text)
 
+    def _finish_rejoin(self, result):
+        # Every exit path restores the rejoin-owned state, so a stopped or
+        # failed rejoin cannot leave night detection disabled.
+        if self.skipServer is not None:
+            self.skipServer.value = 0
+        self.canDetectNight = True
+        self.clear_task_status()
+        return result
+
     def rejoin(self, rejoinMsg = "Rejoining", placeId = MAIN_GAME_PLACE_ID, claimHive = True, usePrivateServer = True, nightOnly = False, keepOpen = False, allowPublicFallback = True):
+        try:
+            return self._rejoin(rejoinMsg, placeId, claimHive, usePrivateServer, nightOnly, keepOpen, allowPublicFallback)
+        except BaseException:
+            self._finish_rejoin(False)
+            raise
+
+    def _rejoin(self, rejoinMsg, placeId, claimHive, usePrivateServer, nightOnly, keepOpen, allowPublicFallback):
         if self.skipServer is not None:
             self.skipServer.value = 0
         self.canDetectNight = False
@@ -209,15 +225,6 @@ class RejoinMixin:
         mouse.mouseUp()
         keyboard.releaseMovement()
 
-        def _finish_rejoin(result):
-            # Every exit path restores the rejoin-owned state, so a stopped or
-            # failed rejoin cannot leave night detection disabled.
-            if self.skipServer is not None:
-                self.skipServer.value = 0
-            self.canDetectNight = True
-            self.clear_task_status()
-            return result
-
         # Hops teleport the running client with a deeplink instead of restarting it.
         keepOpen = keepOpen or nightOnly
         if not keepOpen and appManager.isAppOpen("roblox"):
@@ -225,7 +232,7 @@ class RejoinMixin:
             appManager.closeApp("Roblox")
             time.sleep(3)
             if is_stopped():
-                return _finish_rejoin(False)
+                return self._finish_rejoin(False)
 
         # Retry each configured private server in failover order, then use a
         # public server. Skipping one link invalidates only that link, allowing
@@ -242,7 +249,7 @@ class RejoinMixin:
         launchedAttempts = 0
         for i, (serverKey, psLink) in enumerate(attempts):
             if is_stopped():
-                return _finish_rejoin(False)
+                return self._finish_rejoin(False)
             joinPS = bool(psLink)
             if joinPS and psLink in invalidServerLinks:
                 continue
@@ -272,7 +279,7 @@ class RejoinMixin:
             elif not usePrivateServer:
                 deeplink = self._publicServerDeeplink(placeId)
             if is_stopped():
-                return _finish_rejoin(False)
+                return self._finish_rejoin(False)
             clientAlreadyOpen = appManager.isAppOpen("roblox")
             appManager.openDeeplink(deeplink)
             sprinklerImg = self.adjustImage("./images/menu", "sprinkler")
@@ -362,11 +369,11 @@ class RejoinMixin:
                         if action == "abort":
                             if self.run is not None:
                                 self.run.value = 0
-                            return _finish_rejoin(False)
+                            return self._finish_rejoin(False)
                         if action == "cooldown":
                             time.sleep(30)
                             if is_stopped():
-                                return _finish_rejoin(False)
+                                return self._finish_rejoin(False)
                         rejoinSuccess = False
                         break
                 if robloxOpenTime:
@@ -461,7 +468,7 @@ class RejoinMixin:
                 self.skipServer.value = 0
 
             if is_stopped():
-                return _finish_rejoin(False)
+                return self._finish_rejoin(False)
 
             if not gameLoaded and rejoinSuccess:
                 self.logger.webhook(
@@ -483,22 +490,22 @@ class RejoinMixin:
             if nightOnly:
                 self.recordVicStat("servers")
                 if self.checkPauseAndWait():
-                    return _finish_rejoin(False)
+                    return self._finish_rejoin(False)
                 if not self.viciousSkyIsNight():
                     self.logger.webhook("Vic Hop", "Daytime, moving to the next server", "light blue", "screen")
-                    return _finish_rejoin(False)
+                    return self._finish_rejoin(False)
                 self.recordVicStat("nights")
                 self.logger.webhook("Vic Hop", "Night detected, claiming a hive", "dark brown", "screen")
             if not claimHive:
                 mouse.click()
-                return _finish_rejoin(True)
+                return self._finish_rejoin(True)
             # Every successful join lands at spawn. Always walk the hive route
             # from there — do not treat the player as already on a hive pad.
             self.location = "spawn"
             mouse.click()
             time.sleep(0.35)
             if is_stopped():
-                return _finish_rejoin(False)
+                return self._finish_rejoin(False)
             self.setRobloxWindowInfo()
             preferredHiveSlot = self.setdat.get("preferred_hive_slot", 1)
             try:
@@ -523,23 +530,18 @@ class RejoinMixin:
                 # exclusions.
                 excludedHiveSlots.discard(preferredHiveSlot)
 
-            try:
-                newHiveNumber, reason = acquire_hive(
-                    str(self.setdat.get("hive_claim_method", "detect")).strip().lower(),
-                    preferredHiveSlot,
-                    excludedHiveSlots,
-                    detect=self.claimHiveByDetectMethod,
-                    check=self.claimHiveByCheckMethod,
-                    stopped=lambda: self._hiveAcquisitionControlStatus() == "stopped",
-                    fatal_exceptions=(InterruptRequested, virtual_display.DisplayError),
-                )
-            except BaseException:
-                _finish_rejoin(False)
-                raise
-
+            newHiveNumber, reason = acquire_hive(
+                str(self.setdat.get("hive_claim_method", "detect")).strip().lower(),
+                preferredHiveSlot,
+                excludedHiveSlots,
+                detect=self.claimHiveByDetectMethod,
+                check=self.claimHiveByCheckMethod,
+                stopped=lambda: self._hiveAcquisitionControlStatus() == "stopped",
+                fatal_exceptions=(InterruptRequested, virtual_display.DisplayError),
+            )
             if not newHiveNumber:
                 if reason == "stopped":
-                    return _finish_rejoin(False)
+                    return self._finish_rejoin(False)
                 self.logger.webhook("", f"Failed to claim hive ({reason}); retrying rejoin", "orange", "screen")
                 continue
 
@@ -547,24 +549,20 @@ class RejoinMixin:
             self.setdat["hive_number"] = newHiveNumber
             settingsManager.saveGeneralSetting("hive_number", newHiveNumber)
             if is_stopped():
-                return _finish_rejoin(False)
+                return self._finish_rejoin(False)
             for _ in range(8):
                 self.keyboard.press("o")
             self.moveMouseToDefault()
             time.sleep(1)
             if is_stopped():
-                return _finish_rejoin(False)
-            try:
-                if nightOnly:
-                    # Start the reference field route at the hive, without running
-                    # conversion's normal-mode night tasks before the hop callback.
-                    if not self.reset(convert=False):
-                        return _finish_rejoin(False)
-                else:
-                    self.convert(bypass=True)
-            except BaseException:
-                _finish_rejoin(False)
-                raise
+                return self._finish_rejoin(False)
+            if nightOnly:
+                # Start the reference field route at the hive, without running
+                # conversion's normal-mode night tasks before the hop callback.
+                if not self.reset(convert=False):
+                    return self._finish_rejoin(False)
+            else:
+                self.convert(bypass=True)
             self.cannonFromHive = True
-            return _finish_rejoin(True)
-        return _finish_rejoin(False)
+            return self._finish_rejoin(True)
+        return self._finish_rejoin(False)

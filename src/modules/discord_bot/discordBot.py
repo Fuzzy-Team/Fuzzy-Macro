@@ -1231,13 +1231,14 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         return bool(settings.get(task_id, False))
 
-    def _set_task_toggle_enabled(task_id: str, enabled: bool, settings: Dict) -> Tuple[bool, str]:
+    def _task_toggle_change(task_id: str, enabled: bool, settings: Dict) -> Optional[Tuple[str, object]]:
+        """The (setting, value) that turns a task on or off, or None when the task is unknown."""
         if task_id.startswith("quest_"):
             quest_key = f"{task_id.replace('quest_', '')}_quest"
-            return update_setting(quest_key, enabled)
+            return quest_key, enabled
 
         if task_id.startswith("badge_"):
-            return update_setting(f"{task_id.replace('badge_', '')}_badge", enabled)
+            return f"{task_id.replace('badge_', '')}_badge", enabled
 
         if task_id.startswith("collect_"):
             collect_key = task_id.replace("collect_", "")
@@ -1246,11 +1247,11 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 collect_key = "sprouts_enable"
             elif collect_key == "sticker_sprout":
                 collect_key = "sticker_sprout_watch"
-            return update_setting(collect_key, enabled)
+            return collect_key, enabled
 
         if task_id.startswith("kill_"):
             mob_key = task_id.replace("kill_", "")
-            return update_setting(mob_key, enabled)
+            return mob_key, enabled
 
         if task_id.startswith("gather_"):
             field_name = task_id.replace("gather_", "").replace("_", " ")
@@ -1261,26 +1262,37 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                     while i >= len(fields_enabled):
                         fields_enabled.append(False)
                     fields_enabled[i] = enabled
-                    return update_setting("fields_enabled", fields_enabled)
-            return False, f"Field not found for task {task_id}"
+                    return "fields_enabled", fields_enabled
+            return None
 
         if task_id == "blender":
-            return update_setting("blender_enable", enabled)
+            return "blender_enable", enabled
         if task_id == "planters":
             if enabled:
                 current_mode = settings.get("planters_mode", 0)
-                return update_setting("planters_mode", current_mode if current_mode else 1)
-            return update_setting("planters_mode", 0)
+                return "planters_mode", current_mode if current_mode else 1
+            return "planters_mode", 0
         if task_id == "ant_challenge":
-            return update_setting("ant_challenge", enabled)
+            return "ant_challenge", enabled
         if task_id == "stinger_hunt":
-            return update_setting("stinger_hunt", enabled)
+            return "stinger_hunt", enabled
         if task_id == "mondo_buff":
-            return update_setting("mondo_buff", enabled)
+            return "mondo_buff", enabled
         if task_id == "auto_field_boost":
-            return update_setting("Auto_Field_Boost", enabled)
+            return "Auto_Field_Boost", enabled
 
-        return update_setting(task_id, enabled)
+        return task_id, enabled
+
+    async def _save_toggles(changes: Dict) -> bool:
+        """Save all changed settings in one write, off the event loop."""
+        if not changes:
+            return True
+        try:
+            await asyncio.get_running_loop().run_in_executor(None, settingsManager.saveDictProfileSettings, changes)
+            clear_settings_cache()
+            return True
+        except Exception:
+            return False
 
     def _build_status_embed(category_key: str, settings: Dict, status_message: Optional[str] = None) -> discord.Embed:
         title = f"Settings: {SETTINGS_CATEGORIES.get(category_key, 'Settings')}"
@@ -1446,27 +1458,6 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             return settingsManager.loadFields()
         except Exception:
             return {}
-
-    def _get_available_patterns(current_shape: Optional[str] = None) -> List[str]:
-        try:
-            patterns_dir = settingsManager.getPatternsDir()
-            pattern_names = []
-            for entry in os.listdir(patterns_dir):
-                if entry.endswith(".py"):
-                    pattern_names.append(entry[:-3])
-            pattern_names = sorted(set(pattern_names))
-            if current_shape and current_shape not in pattern_names:
-                pattern_names.insert(0, current_shape)
-            if not pattern_names:
-                return ["e_lol"]
-            if len(pattern_names) > 25:
-                kept = pattern_names[:25]
-                if current_shape and current_shape not in kept:
-                    kept[-1] = current_shape
-                return kept
-            return pattern_names
-        except Exception:
-            return [current_shape] if current_shape else ["e_lol"]
 
     def _normalize_return_value(value: str) -> str:
         if not value:
@@ -2142,6 +2133,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         def __init__(self, current_key: str):
             options = [
                 discord.SelectOption(label="Shape", value="shape", default=(current_key == "shape")),
+                discord.SelectOption(label="Shape (more)", value="shape_more", default=(current_key == "shape_more")),
                 discord.SelectOption(label="Size", value="size", default=(current_key == "size")),
                 discord.SelectOption(label="Width", value="width", default=(current_key == "width")),
                 discord.SelectOption(label="Turn", value="turn", default=(current_key == "turn")),
@@ -2161,8 +2153,11 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     class PatternDropdownValueSelect(discord.ui.Select):
         def __init__(self, setting_key: str, field_data: Dict):
             current_value = str(field_data.get(setting_key, ""))
-            if setting_key == "shape":
-                values = _get_available_patterns(current_shape=current_value)
+            if setting_key in {"shape", "shape_more"}:
+                # Discord selects hold 25 options, so shapes beyond 25 live under "Shape (more)".
+                current_value = str(field_data.get("shape", ""))
+                patterns = settingsManager.getAvailablePatterns()
+                values = (patterns[25:50] if setting_key == "shape_more" else patterns[:25]) or ["e_lol"]
                 options = [discord.SelectOption(label=v, value=v, default=(v == current_value)) for v in values]
             elif setting_key == "size":
                 options = [
@@ -2193,14 +2188,15 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
         async def callback(self, interaction: discord.Interaction):
             raw_value = self.values[0]
             save_value = raw_value
-            if self.setting_key in {"width", "turn_times"}:
+            save_key = "shape" if self.setting_key == "shape_more" else self.setting_key
+            if save_key in {"width", "turn_times"}:
                 save_value = int(raw_value)
-            success, message = _save_slot_field_setting(self.view.slot_index, self.setting_key, save_value)
+            success, message = _save_slot_field_setting(self.view.slot_index, save_key, save_value)
             await _update_fields_message(
                 interaction,
                 slot_index=self.view.slot_index,
                 section_key=self.view.section_key,
-                status_message=(message if success else f"Failed to update {self.setting_key}."),
+                status_message=(message if success else f"Failed to update {save_key}."),
                 dropdown_key=self.setting_key,
             )
 
@@ -2368,12 +2364,10 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         async def callback(self, interaction: discord.Interaction):
             selected = set(self.values)
-            failures = []
-            for key, _ in self.setting_items:
-                success, _ = update_setting(key, key in selected)
-                if not success:
-                    failures.append(key)
-            status_message = "Updated settings." if not failures else "Some settings failed to update."
+            settings = get_cached_settings()
+            changes = {key: key in selected for key, _ in self.setting_items if bool(settings.get(key, False)) != (key in selected)}
+            ok = await _save_toggles(changes)
+            status_message = "Updated settings." if ok else "Failed to update settings."
             category_key = self.view.category_key if hasattr(self.view, "category_key") else "settings"
             await _update_category_message(interaction, category_key, status_message=status_message)
 
@@ -2392,13 +2386,16 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
 
         async def callback(self, interaction: discord.Interaction):
             selected = set(self.values)
-            settings = get_cached_settings()
-            failures = []
+            settings = dict(get_cached_settings())
+            changes = {}
             for task_id, _ in UTILITY_TASK_SETTINGS:
-                success, _ = _set_task_toggle_enabled(task_id, task_id in selected, settings)
-                if not success:
-                    failures.append(task_id)
-            status_message = "Updated utility settings." if not failures else "Some utility settings failed to update."
+                enabled = task_id in selected
+                change = _task_toggle_change(task_id, enabled, settings)
+                if change and _is_task_toggle_enabled(task_id, settings) != enabled:
+                    changes[change[0]] = change[1]
+                    settings[change[0]] = change[1]
+            ok = await _save_toggles(changes)
+            status_message = "Updated utility settings." if ok else "Failed to update utility settings."
             await _update_category_message(interaction, "utility", status_message=status_message)
 
     class HiveSlotSelect(discord.ui.Select):

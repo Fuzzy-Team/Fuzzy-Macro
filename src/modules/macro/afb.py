@@ -93,14 +93,27 @@ class AFBMixin:
                 return False
             self.toggleInventory("close")
         elif glitterslot == 0:
-            glitterThread = threading.Thread(target=self.useItemInInventory, args=("glitter",))
-            fieldThread = threading.Thread(target=self.goToField, args=(targetField,))
+            results = {}
+            def runInThread(name, func, *args):
+                try:
+                    results[name] = func(*args)
+                except BaseException as e:
+                    results[name] = e
+            glitterThread = threading.Thread(target=runInThread, args=("glitter", self.useItemInInventory, "glitter"))
+            fieldThread = threading.Thread(target=runInThread, args=("field", self.goToField, targetField))
             glitterThread.start()
             fieldThread.start()
             # Plain joins: goToField and useItemInInventory take longer than a timeout and
             # handle stop internally, so a short timeout would cut a normal run short.
             fieldThread.join()
             glitterThread.join()
+            for result in results.values():
+                if isinstance(result, InterruptRequested):
+                    raise result
+            if any(isinstance(result, BaseException) for result in results.values()) or results.get("field") is False:
+                if not is_stopped():
+                    self.toggleInventory("close")
+                return False
             if is_stopped():
                 return False
             self.clickYes()

@@ -208,9 +208,9 @@ def locateImageInScreen(target, screen, threshold=0, scales=None, return_scale=F
     best_scale = None
     direct_matched = False
 
-    # If the chosen template file already matches display_type and no scaling needed,
-    # try a quick direct match first (saves time).
-    if is_path:
+    # Templates are already display-scaled, so the unscaled match usually
+    # clears the threshold and the other scales are only tried on a miss.
+    if 1.0 in scales:
         try:
             # prepare types
             tt, ss = _ensure_channel_compat(_to_uint8(img_target), screen)
@@ -220,7 +220,7 @@ def locateImageInScreen(target, screen, threshold=0, scales=None, return_scale=F
             direct_matched = True
             if val > best_val:
                 best_val, best_loc, best_scale = val, loc, 1.0
-                if best_val >= early_exit_thresh and best_val >= threshold:
+                if best_val >= threshold and (threshold > 0 or best_val >= early_exit_thresh):
                     return (best_val, best_loc) if not return_scale else (best_val, best_loc, best_scale)
         except TemplateTooLargeError:
             # if template is larger than screen, we'll try scaled-down variants below
