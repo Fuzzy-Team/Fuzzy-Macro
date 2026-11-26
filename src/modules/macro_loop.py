@@ -541,12 +541,15 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
         except Exception:
             return False
 
-    def switchOffQuestGiver(questGiver):
+    def switchOffQuestGiver(questGiver, persist=True):
+        """persist=False skips the giver for this run only, leaving the profile setting on."""
         key = questGiver.replace(" ", "_") + "_quest"
         macro.setdat[key] = False
-        settingsManager.saveProfileSetting(key, False)
-        macro.logger.webhook(f"{questGiver.title()}: no more quests", "Switched this quest giver off.", "light blue",
-                             ping_category="ping_quests", route_category="quests")
+        if persist:
+            settingsManager.saveProfileSetting(key, False)
+        macro.logger.webhook(f"{questGiver.title()}: no more quests",
+                             "Switched this quest giver off." if persist else "Skipping this quest giver for this run.",
+                             "light blue", ping_category="ping_quests", route_category="quests")
 
     def noticeManualObjectives(questGiver):
         """Tell the user once when everything left in a quest is theirs to do."""
@@ -590,13 +593,15 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
             if submitting:
                 macro.hourlyReport.addHourlyStat("quests_completed", 1)
             # A fixed list of quests ended: the giver was reached and has nothing more to hand out.
-            # Off after the last quest of its list, or after three hand-ins in a row that brought nothing
-            # (a quest read can miss, and a quest can be locked, so one empty answer is not enough).
+            # Off in the profile after the last quest of its list. Three hand-ins in a row that brought nothing
+            # only skip the giver for this run (a quest read can miss, and a quest can be locked).
             if (objectives is None and questGiver in FIXED_LINE_GIVERS and not is_stopped()
                     and macro.findQuest(questGiver) is None and not is_stopped()):
                 emptyHandIns[questGiver] = emptyHandIns.get(questGiver, 0) + 1
-                if (submitting and title == list(quest_data[questGiver])[-1]) or emptyHandIns[questGiver] >= 3:
+                if submitting and title == list(quest_data[questGiver])[-1]:
                     switchOffQuestGiver(questGiver)
+                elif emptyHandIns[questGiver] >= 3:
+                    switchOffQuestGiver(questGiver, persist=False)
             else:
                 emptyHandIns.pop(questGiver, None)
             questCache.pop(questGiver, None)
