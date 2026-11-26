@@ -266,7 +266,9 @@ class BuffDetector():
         return hasteVal if hasteVal else '1'
 
     def getBuffQuantityFromImgTightDecimal(self, bgrImg, crop=True, show=False):
-        img = bgrImg
+        # A buff tile is 38px wide at 1x. The tile crop runs a few pixels into the next tile, whose
+        # bright edge reads as a stray digit (x523 read as x5231).
+        img = bgrImg[:, :38 * self.robloxWindow.multi]
         if crop:
             h, *_ = img.shape
             img = img[int(h * 0.50):, :]
@@ -278,7 +280,13 @@ class BuffDetector():
         # value like x2.93 (bloat) would read as "293" and depend on a fragile repair guess.
         gray = Image.fromarray(img.min(axis=2)).resize((img.shape[1] * 5, img.shape[0] * 5), Image.LANCZOS)
         # Black text on a white background OCRs more reliably.
-        img = Image.fromarray(np.where(np.array(gray) >= 160, 0, 255).astype(np.uint8))
+        mask = np.where(np.array(gray) >= 160, 0, 255).astype(np.uint8)
+        # The text sits at the right of a mostly blank strip, and a one-digit stack (x5) is then often not
+        # read at all, so cut the strip down to the text and pad it evenly.
+        ys, xs = np.where(mask == 0)
+        if len(xs):
+            mask = np.pad(mask[ys.min():ys.max() + 1, xs.min():xs.max() + 1], 10, constant_values=255)
+        img = Image.fromarray(mask)
         if show:
             img.show()
         ocrText = ''.join([x[1][0] for x in ocrRead(img)]).replace(":", ".").replace(",", ".")
