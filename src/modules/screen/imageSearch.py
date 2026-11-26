@@ -51,12 +51,13 @@ def _ensure_channel_compat(template, image):
 # helper cache for resized templates loaded from disk
 
 @lru_cache(maxsize=128)
-def _cached_resized_from_path(path_base, scale_key, need_alpha):
+def _cached_resized_from_path(path_base, scale_key, need_alpha, display_type):
     """
     Return a resized template loaded from `path_base`.
     - path_base: string without extension (matching load_template_for_display convention)
     - scale_key: int, e.g. int(scale * 1000)
     - need_alpha: bool, whether to preserve alpha channel (True) or convert BGRA->BGR (False)
+    - display_type: part of the cache key so a display switch doesn't reuse old-scale templates
     """
     try:
         scale = scale_key / 1000.0
@@ -192,9 +193,9 @@ def locateImageInScreen(target, screen, threshold=0, scales=None, return_scale=F
         return None
 
     # Build default scales if not provided
+    display_type = getScreenData().get("display_type", "")
     if scales is None:
-        sd = getScreenData()
-        multi = 2 if sd.get("display_type") == "retina" else 1
+        multi = 2 if display_type == "retina" else 1
         # include 1.0, multi, and reciprocal scales (handles retina asset on non-retina screen)
         candidates = {1.0, multi, 1.0/multi}
         neighbors = [0.95, 1.05]
@@ -243,7 +244,7 @@ def locateImageInScreen(target, screen, threshold=0, scales=None, return_scale=F
 
         if is_path:
             scale_key = int(round(scale * 1000))
-            resized = _cached_resized_from_path(base, scale_key, need_alpha=False)
+            resized = _cached_resized_from_path(base, scale_key, False, display_type)
             if resized is None:
                 continue
         else:
