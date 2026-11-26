@@ -387,10 +387,6 @@ class BuffDetector():
         """Detect Tide Blessing by color, then OCR the visible stack text."""
         return self.getBuffQuantityFromColorOcr(screen, 0x91c2fd, (8, 1), variation=8, buff="tide_blessing")
 
-    def getMondoOcr(self, screen):
-        """Detect Mondo Chick Blessing by color, then OCR the visible stack text."""
-        return self.getBuffQuantityFromColorOcr(screen, 0xbea2a3, (5, 1), variation=10, buff="mondo")
-
     def getBuffsWithImage(self, buffs, save=False, screen = None, threshold=0.7):
         buffQuantity = []
         buffs = buffs.items()
@@ -408,8 +404,6 @@ class BuffDetector():
             except FileNotFoundError:
                 if buff == "tide_blessing":
                     buffQuantity.append(self.getTideBlessingOcr(screen))
-                elif buff == "mondo":
-                    buffQuantity.append(self.getMondoOcr(screen))
                 else:
                     buffQuantity.append("0")
                 continue
