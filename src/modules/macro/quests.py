@@ -177,7 +177,8 @@ class QuestMixin:
                         for _ in range(max(1, min(15, objective["remaining"]))):
                             if not self.useItemInInventory(x=spot[0], y=spot[1], closeInventoryAfter=False):
                                 break
-                        self.toggleInventory("close")
+                    # The search opens the inventory and leaves it open when no beans were found.
+                    self.toggleInventory("close")
                 if not spot:
                     outOfBeans = True
                     break

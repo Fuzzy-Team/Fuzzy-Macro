@@ -85,6 +85,11 @@ HOURLY_BUFF_OCR_MAX_VALUES = {
 }
 
 
+# Grayscale matching ignores contrast, so at 1x a faded copy of the Tabby icon and dark blobs on a bright
+# background score as high as the real tile. These two have 1x icons that are matched in colour instead.
+COLOUR_MATCHED_BUFFS = ("tabby_love", "blessing")
+
+
 # Ordered main/important buffs first, situational ones last (shown top-to-bottom in the grid)
 MAX_UPTIME_BUFF_OPTIONS = 16
 
@@ -266,35 +271,51 @@ class BuffDetector():
         return hasteVal if hasteVal else '1'
 
     def getBuffQuantityFromImgTightDecimal(self, bgrImg, crop=True, show=False):
-        img = bgrImg
+        # A buff tile is 38px wide at 1x. The tile crop runs a few pixels into the next tile, whose
+        # bright edge reads as a stray digit (x523 read as x5231).
+        img = bgrImg[:, :38 * self.robloxWindow.multi]
         if crop:
             h, *_ = img.shape
             img = img[int(h * 0.50):, :]
-        # Mask the white stack text. Keep the threshold loose enough to include the
-        # anti-aliased edges of the tiny decimal point, and do NOT dilate: a kernel
-        # large enough to thicken the digits also swallows the "." so a value like
-        # x2.93 (bloat) would read as "293" and depend on a fragile repair guess.
-        mask = cv2.inRange(img, np.array([200, 200, 200]), np.array([255, 255, 255]))
-        # Black text on a white background OCRs more reliably; upscale generously so
-        # the decimal point survives.
-        img = Image.fromarray(255 - mask).resize((mask.shape[1] * 5, mask.shape[0] * 5), Image.LANCZOS)
-        if show:
-            img.show()
-        ocrText = ''.join([x[1][0] for x in ocrRead(img)]).replace(":", ".").replace(",", ".")
-        buffCount = ''.join([x for x in ocrText if x.isdigit() or x == "."]).strip(".")
-        if not buffCount:
-            return "1"
-        parts = [part for part in buffCount.split(".") if part]
-        if len(parts) > 1:
-            buffCount = f"{parts[0]}.{parts[1]}"
-        elif parts:
-            buffCount = parts[0]
-        else:
-            return "1"
-        try:
-            return buffCount if float(buffCount) > 0 else "1"
-        except ValueError:
-            return "1"
+        # The stack text is white, so its darkest channel stays high while the tile colour does not.
+        # Upscale that grayscale first and threshold afterwards: at 1x the digits are only a couple of
+        # pixels wide, and thresholding before the upscale breaks the thin strokes (x1000 read as x100).
+        # Keep the threshold loose enough to include the anti-aliased edges of the tiny decimal point,
+        # and do NOT dilate: a kernel large enough to thicken the digits also swallows the "." so a
+        # value like x2.93 (bloat) would read as "293" and depend on a fragile repair guess.
+        gray = Image.fromarray(img.min(axis=2)).resize((img.shape[1] * 4, img.shape[0] * 4), Image.LANCZOS)
+        # Black text on a white background OCRs more reliably.
+        mask = np.where(np.array(gray) >= 160, 0, 255).astype(np.uint8)
+        # Bright specks outside the text (the icon's highlight, the next tile's edge at the strip's side)
+        # stretch the crop, and the reader then returns nothing (x1.11 read as x1). Keep only the ink that
+        # sits on the text's baseline and does not touch the strip's top or sides.
+        ink = (mask == 0).astype(np.uint8)
+        count, labels, stats, _ = cv2.connectedComponentsWithStats(ink, connectivity=8)
+        left, top, width, height = (stats[:, i] for i in (cv2.CC_STAT_LEFT, cv2.CC_STAT_TOP, cv2.CC_STAT_WIDTH, cv2.CC_STAT_HEIGHT))
+        inside = [i for i in range(1, count) if left[i] > 0 and top[i] > 0 and left[i] + width[i] < mask.shape[1]]
+        if inside:
+            tallest = max(inside, key=lambda i: height[i])
+            baseline = top[tallest] + height[tallest]
+            keep = [i for i in inside if abs(top[i] + height[i] - baseline) <= 0.2 * height[tallest]]
+            mask = np.where(np.isin(labels, keep), 0, 255).astype(np.uint8)
+        # The text sits at the right of a mostly blank strip, and a one-digit stack (x5) is then often not
+        # read at all, so cut the strip down to the text and pad it evenly. The reader is erratic about how
+        # much padding it wants (x5 needs a little, x1.11 sometimes a lot), so retry with more when it finds nothing.
+        ys, xs = np.where(mask == 0)
+        if len(xs):
+            mask = mask[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+        for padding in (10, 30):
+            img = Image.fromarray(np.pad(mask, padding, constant_values=255))
+            if show:
+                img.show()
+            ocrText = ''.join([x[1][0] for x in ocrRead(img)]).replace(":", ".").replace(",", ".")
+            parts = [part for part in ''.join([x for x in ocrText if x.isdigit() or x == "."]).split(".") if part]
+            if not parts:
+                continue
+            buffCount = f"{parts[0]}.{parts[1]}" if len(parts) > 1 else parts[0]
+            if float(buffCount) > 0:
+                return buffCount
+        return "1"
 
     def getBuffQuantityFromImgOcrRobust(self, bgrImg, transform, buff=None):
         maxValue = HOURLY_BUFF_OCR_MAX_VALUES.get(buff)
@@ -373,10 +394,6 @@ class BuffDetector():
         """Detect Tide Blessing by color, then OCR the visible stack text."""
         return self.getBuffQuantityFromColorOcr(screen, 0x91c2fd, (8, 1), variation=8, buff="tide_blessing")
 
-    def getMondoOcr(self, screen):
-        """Detect Mondo Chick Blessing by color, then OCR the visible stack text."""
-        return self.getBuffQuantityFromColorOcr(screen, 0xbea2a3, (5, 1), variation=10, buff="mondo")
-
     def getBuffsWithImage(self, buffs, save=False, screen = None, threshold=0.7):
         buffQuantity = []
         buffs = buffs.items()
@@ -394,17 +411,16 @@ class BuffDetector():
             except FileNotFoundError:
                 if buff == "tide_blessing":
                     buffQuantity.append(self.getTideBlessingOcr(screen))
-                elif buff == "mondo":
-                    buffQuantity.append(self.getMondoOcr(screen))
                 else:
                     buffQuantity.append("0")
                 continue
             finalBuffValues = []
+            colourMatch = buff in COLOUR_MATCHED_BUFFS and self.robloxWindow.display_type == "built-in"
 
             for attempt in range(3):
                 if ownScreen and attempt > 0:
                     screen = self.screenshotBuffArea()
-                res = locateTransparentImage(buffTemplate, screen, threshold)
+                res = locateTransparentImage(buffTemplate, screen, threshold, colour=colourMatch)
 
                 if not res: 
                     finalBuffValues.append(0)
@@ -425,15 +441,19 @@ class BuffDetector():
                 imgHeight, imgWidth, *_ = screen.shape
                 cropX = np.clip(cropX, 0, imgWidth - self.buffSize - 5)
                 cropY = np.clip(cropY, 0, imgHeight - self.buffSize - 2)
+                if colourMatch:
+                    # Tiles sit on the bottom row of the strip, and the swaying Blessing balloon can pull the match above it
+                    cropY = imgHeight - self.buffSize - 2
                 
                 #buff is not stackable, no need to extract text
                 if not stackable:
                     finalBuffValues.append(1)
                     if save:
-                        fullBuffImgBGR = cv2.cvtColor(screen, cv2.COLOR_RGBA2BGR)[cropY:cropY+self.buffSize+2, cropX:cropX+self.buffSize+5]
-                        cv2.imwrite(f"{buff}-{time.time()}.png", fullBuffImgBGR)
+                        cv2.imwrite(f"{buff}-{time.time()}.png", self._ensureBgrBuffScreen(screen)[cropY:cropY+self.buffSize+2, cropX:cropX+self.buffSize+5])
                     break
-                    
+
+                # The screen is BGRA, so this OCR input has red and blue swapped. Its colour masks were
+                # tuned on it, so it is left as is and only the saved image is converted correctly.
                 fullBuffImgBGR = cv2.cvtColor(screen, cv2.COLOR_RGBA2BGR)[cropY:cropY+self.buffSize+2, cropX:cropX+self.buffSize+5]
 
                 if fullBuffImgBGR.size == 0:
@@ -445,7 +465,7 @@ class BuffDetector():
                     continue
                 
                 if save:
-                    cv2.imwrite(f"{buff}-{time.time()}.png", fullBuffImgBGR)
+                    cv2.imwrite(f"{buff}-{time.time()}.png", self._ensureBgrBuffScreen(screen)[cropY:cropY+self.buffSize+2, cropX:cropX+self.buffSize+5])
 
                 # Match the hourly report detector from the provided reference file:
                 # crop the full buff tile and OCR the stack text from that tile.
