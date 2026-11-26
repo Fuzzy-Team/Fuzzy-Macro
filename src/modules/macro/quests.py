@@ -1318,9 +1318,20 @@ class QuestMixin:
 
         def notchHeight(before, after):
             """How far one scroll notch moved the list: the offset that lines the two screens up."""
+            # The title moves up by exactly the notch, when it is still on screen.
+            titleNow = ocrQuestTitleFromScreen(after)
+            if titleNow and 0 < questTitleYPos - titleNow[2] < before.shape[0] // 2:
+                return questTitleYPos - titleNow[2]
             a = cv2.cvtColor(np.array(before), cv2.COLOR_RGBA2GRAY).astype(np.int16)
             b = cv2.cvtColor(np.array(after), cv2.COLOR_RGBA2GRAY).astype(np.int16)
-            return min(range(1, a.shape[0] // 2), key=lambda offset: np.abs(a[offset:] - b[:-offset]).mean())
+            # Only the rows of the log count: the game world under it moves on its own.
+            logEnd = findLogEnd(cv2.cvtColor(np.array(before), cv2.COLOR_RGBA2BGR)) or a.shape[0]
+            def mismatch(offset):
+                top = logEnd - offset
+                return np.abs(a[offset:offset + top] - b[:top]).mean() if top >= 20 else 255
+            return min(range(1, a.shape[0] // 2), key=mismatch)
+
+        rowsRead = []  # rows read from other screens, shown under the title screen in the debug image
 
         def readRowsBelow():
             """A long quest runs past the bottom of the screen: scroll on and read the rows below by their text."""
@@ -1355,6 +1366,7 @@ class QuestMixin:
                     if objectiveTextShowsIncompleteProgress(''.join(lines)):
                         status = "incomplete"
                     observeRow(None, text, status)
+                    rowsRead.append((text, panelPixels, status))
                 if end is not None or "unknown" not in observedStatuses:
                     return
 
@@ -1486,6 +1498,12 @@ class QuestMixin:
 
         questImgPath = "latest-quest.png"
         if logDetection:
+            for text, pixels, status in rowsRead:
+                color = (0, 255, 0) if status == "complete" else (0, 0, 255)
+                row = np.full((pixels.shape[0], screenOriginal.shape[1], 3), 255, np.uint8)
+                row[:, :pixels.shape[1]] = pixels[:, :screenOriginal.shape[1]]
+                cv2.rectangle(row, (0, 0), (row.shape[1] - 1, row.shape[0] - 1), color, 2)
+                screenOriginal = np.vstack([screenOriginal, row])
             cv2.imwrite(questImgPath, screenOriginal)
             print(completedObjectives)
             print(incompleteObjectives)
