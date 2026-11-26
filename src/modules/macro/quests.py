@@ -1321,11 +1321,11 @@ class QuestMixin:
         def notchHeight(before, after):
             """How far one scroll notch moved the list: the offset that lines the two screens up."""
             # The title moves up by exactly the notch, when it is still on screen.
-            titleNow = ocrQuestTitleFromScreen(after)
-            if titleNow and 0 < questTitleYPos - titleNow[2] < before.shape[0] // 2:
-                return questTitleYPos - titleNow[2]
             a = cv2.cvtColor(np.array(before), cv2.COLOR_RGBA2GRAY).astype(np.int16)
             b = cv2.cvtColor(np.array(after), cv2.COLOR_RGBA2GRAY).astype(np.int16)
+            titleNow = ocrQuestTitleFromScreen(after)
+            if titleNow and 0 < questTitleYPos - titleNow[2] < a.shape[0] // 2:
+                return questTitleYPos - titleNow[2]
             # Only the rows of the log count: the game world under it moves on its own.
             logEnd = findLogEnd(cv2.cvtColor(np.array(before), cv2.COLOR_RGBA2BGR)) or a.shape[0]
             def mismatch(offset):
