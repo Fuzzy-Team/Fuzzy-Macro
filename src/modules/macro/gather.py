@@ -481,8 +481,8 @@ class GatherMixin:
         pattern_pine_dupe_detection = str(fieldSetting.get("pine_dupe_detection", "Pixel"))
         aiPatternVariables = self.aiGatherPatternVariables(field, fieldSetting, isSproutGather)
         # Before the gather timer starts, so inventory time isn't counted as gathering, and before
-        # the quest watch opens the menu, since using an item closes it. The Hive Hub and sprout
-        # gathers have no field to use them in.
+        # the quest watch opens the menu, since using an item closes it. The Hive Hub has no field
+        # to use them in, and a sprout gather has already planted its bean.
         if not (isHiveHubField or isSproutGather):
             self.useQuestItems("gather")
         # monotonic, like the paused time it subtracts, so a clock change can't shorten a gather
