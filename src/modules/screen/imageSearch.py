@@ -297,9 +297,16 @@ def _to_gray(img):
         return img
     return None
 
-def locateTransparentImage(target, screen, threshold):
-    screen_gray = _to_gray(screen)
-    target_gray = _to_gray(target)
+def _to_bgr(img):
+    if img is not None and img.ndim == 3 and img.shape[2] == 4:
+        return cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
+    return img
+
+#colour=True matches in colour: grayscale matching ignores contrast, so a faded or darker copy of an icon scores as high as the real one
+def locateTransparentImage(target, screen, threshold, colour=False):
+    convert = _to_bgr if colour else _to_gray
+    screen_gray = convert(screen)
+    target_gray = convert(target)
     if screen_gray is None or target_gray is None:
         return None
     try:
