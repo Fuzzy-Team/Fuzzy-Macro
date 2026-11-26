@@ -30,7 +30,7 @@ eel.init('webapp', allowed_extensions=['.js'])
 # eel writes each message to the page from whichever greenlet or thread sent it. When the page is
 # busy and Chrome stops reading (the large settings replies at startup), two writes interleave on
 # the socket, Chrome drops the connection as an invalid frame, and eel then exits the app.
-# Send one message at a time, always from the gevent thread.
+# Send one eel message at a time, always from the gevent thread.
 _eelSendLock = gevent.lock.Semaphore()
 _eelSend = eel._repeated_send
 _eelLoop = gevent.get_hub().loop
