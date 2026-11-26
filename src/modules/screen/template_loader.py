@@ -7,8 +7,15 @@ def _read_image(path):
     # read image preserving alpha if present
     return cv2.imread(path, cv2.IMREAD_UNCHANGED)
 
+def load_template_for_display(path_without_ext, display_type=None):
+    # Callers that load several templates for one search pass the display type they read.
+    if display_type is None:
+        display_type = getScreenData().get("display_type", "")
+    return _load_template_for_display(path_without_ext, display_type)
+
+
 @lru_cache(maxsize=256)
-def load_template_for_display(path_without_ext):
+def _load_template_for_display(path_without_ext, display_type):
     """
     path_without_ext: full path without the extension suffix, e.g. "./images/menu/honeybar"
     Behavior:
@@ -17,8 +24,6 @@ def load_template_for_display(path_without_ext):
       - scales the chosen image by the display multi if required
     Returns: numpy array (BGR or BGRA) ready for OpenCV use
     """
-    sd = getScreenData()
-    display_type = sd.get("display_type", "")
     multi = 2 if display_type == "retina" else 1
 
     # likely filenames
