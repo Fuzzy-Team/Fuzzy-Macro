@@ -2963,15 +2963,19 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             if action == "both":
                 run.value = 0
                 await loop.run_in_executor(None, closeApp, "Roblox")
-                await interaction.followup.send("Closing macro and Roblox...")
-                standby_command_queue.put({"action": "quit"})
+                try:
+                    await interaction.followup.send("Closing macro and Roblox...")
+                finally:
+                    standby_command_queue.put({"action": "quit"})  # quit even if the reply fails
             elif action == "roblox":
                 await loop.run_in_executor(None, closeApp, "Roblox")
                 await interaction.followup.send("Closing Roblox...")
             elif action == "macro":
                 # onExit stops the macro; setting run.value = 0 first would start a normal Stop and delay the exit.
-                await interaction.followup.send("Stopping macro (Roblox will remain open).")
-                standby_command_queue.put({"action": "quit"})
+                try:
+                    await interaction.followup.send("Stopping macro (Roblox will remain open).")
+                finally:
+                    standby_command_queue.put({"action": "quit"})
             else:
                 await interaction.followup.send("❌ Unknown action. Use: both, roblox, or macro")
         except Exception as e:
