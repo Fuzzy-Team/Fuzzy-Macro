@@ -629,18 +629,24 @@ class HiveMixin:
         """Leave the current pad and stop when the next hive prompt appears."""
         excluded_slots = excluded_slots or set()
         claimed = 0
+        # Each prompt check reads the screen, so poll counts alone can run for minutes; a pad is
+        # ~2.5s of walking, so a pad that has not shown a prompt by now will not.
+        deadline = time.monotonic() + 10
         try:
             self.keyboard.keyDown(direction, False)
             # Wait until the current pad's prompt disappears.
             for _ in range(40):
                 if self._hiveAcquisitionControlStatus() == "stopped":
                     return 0
-                if not self.anyHivePromptVisible():
+                if time.monotonic() >= deadline or not self.anyHivePromptVisible():
                     break
                 time.sleep(0.01)
             # Walk until the next pad's claim/occupied prompt appears.
-            for _ in range(200):
+            while True:
                 if self._hiveAcquisitionControlStatus() == "stopped":
+                    break
+                if time.monotonic() >= deadline:
+                    self.logger.webhook("", f"Hive {slot} prompt not seen", "orange")
                     break
                 if self.claimHivePromptVisible():
                     self.keyboard.keyUp("a", False)
