@@ -560,6 +560,21 @@ class QuestMixin:
             candidates = [x for x in (grayBoundary, directTitleBoundary) if x is not None]
             return minOffset + min(candidates) if candidates else None
 
+        def findLogEnd(scanScreen):
+            """Return the y offset where the quest log's own blue background ends and the game world starts."""
+            height = scanScreen.shape[0]
+            logColor = np.array([222, 195, 150], dtype=np.int16)  # BGR, shows at the edges of every row of the log
+            hasLog = np.mean(np.all(np.abs(scanScreen[:, :, :3].astype(np.int16) - logColor) <= 10, axis=2), axis=1) > 0.005
+            if not hasLog.any():
+                return height
+            start = int(np.argmax(hasLog))
+            gap = 0
+            for row in range(start, height):
+                gap = 0 if hasLog[row] else gap + 1
+                if gap > 3:
+                    return row - gap + 1
+            return height
+
         def regionHasIncompleteRed(region):
             if region is None or region.size == 0:
                 return False
@@ -704,6 +719,7 @@ class QuestMixin:
             sectionEnd = findQuestSectionEnd(screenCropped, 20*self.robloxWindow.multi)
             if sectionEnd:
                 parseScreen = screenCropped[:sectionEnd, :]
+            parseScreen = parseScreen[:findLogEnd(parseScreen), :]
 
             screenGray = cv2.cvtColor(parseScreen, cv2.COLOR_BGR2GRAY)
             img = cv2.inRange(screenGray, 0, 50)
@@ -735,7 +751,7 @@ class QuestMixin:
                     chunks.append({"y": y, "text": textChunk, "bbox": (x, y, w, h)})
 
             chunks.sort(key=lambda item: item["y"])
-            return titleScreen, displayScreen, parseScreen, chunks
+            return titleScreen, displayScreen, parseScreen, chunks, bool(sectionEnd)
 
         #sanity check
         if not questGiver in questGiverShort:
@@ -956,7 +972,24 @@ class QuestMixin:
             return False
         
         if questGiver == "brown bear":
-            titleScreen, objectiveScreen, parseScreen, objectiveChunks = extractQuestObjectiveChunks(screen, questTitleYPos)
+            titleObjectives = parseBrownBearTitleObjectives(questTitle)
+            titleScreen, objectiveScreen, parseScreen, objectiveChunks, questEnded = extractQuestObjectiveChunks(screen, questTitleYPos)
+            # Rows below the bottom of the quest log are off screen, so scroll until they are in view.
+            for _ in range(10):
+                fullRows = [panel for panel in detectObjectivePanels(parseScreen)
+                            if panel["y"] + panel["bbox"][3] < parseScreen.shape[0]]
+                if questEnded or len(fullRows) >= len(titleObjectives) or not manageQuestUi or is_stopped():
+                    break
+                mouse.scroll(-1, True)
+                time.sleep(0.06)
+                scrolledScreen = screenshotQuest(self.robloxWindow.mh, mode="RGBA")
+                scrolledMatch = ocrQuestTitleFromScreen(scrolledScreen)
+                if not scrolledMatch or scrolledMatch[2] >= questTitleYPos:
+                    break  # the list is at its end or the title scrolled out of view
+                self.questMenuStep += 1
+                self.questGiverSteps[questGiver] = self.questMenuStep
+                screen, questTitleYPos = scrolledScreen, scrolledMatch[2]
+                titleScreen, objectiveScreen, parseScreen, objectiveChunks, questEnded = extractQuestObjectiveChunks(screen, questTitleYPos)
             incompleteObjectives = []
             completedObjectives = []
             observedStatuses = {}
@@ -1013,8 +1046,6 @@ class QuestMixin:
 
             brownPanels = detectObjectivePanels(parseScreen)
             brownItems = []
-
-            titleObjectives = parseBrownBearTitleObjectives(questTitle)
 
             if brownPanels:
                 for panel in brownPanels[:4]:
@@ -1191,6 +1222,7 @@ class QuestMixin:
         sectionEnd = findQuestSectionEnd(screen, 60*self.robloxWindow.multi)
         if sectionEnd:
             screen = screen[:sectionEnd, :]
+        screen = screen[:findLogEnd(screen), :]
         screen = screen[:min(screen.shape[0], maxObjectiveScanHeight), :]
         # Rows touching the bottom edge may be cut off, unless that edge is where the quest ends.
         bottomIsQuestEnd = bool(sectionEnd) or screen.shape[0] >= maxObjectiveScanHeight
@@ -1289,6 +1321,7 @@ class QuestMixin:
                 below = cv2.cvtColor(np.array(nextScreen), cv2.COLOR_RGBA2BGR)
                 # Above the rows are the quests before this one, and below them the next quest.
                 end = findQuestSectionEnd(below, rowsTop + int(60*self.robloxWindow.multi) if rowsTop > 0 else 0)
+                below = below[:findLogEnd(below), :]
                 for panel in detectObjectivePanels(below):
                     x, y, w, h = panel["bbox"]
                     # Rows cut off by the screen's edge are read whole on a neighbouring screen.
@@ -1361,10 +1394,6 @@ class QuestMixin:
                 drawY = y+endIndex
                 cv2.rectangle(screenOriginal, (x, drawY), (x+w, drawY+h), color, 2)
                 cv2.putText(screenOriginal, objectives[i], (x, max(0, drawY-10)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
-
-            # Only the new givers and Black Bear have quests long enough to run off the screen; the other givers' scans stay as they were.
-            if (questGiver in FIXED_LINE_GIVERS or questGiver == "black bear") and not bottomIsQuestEnd and "unknown" in observedStatuses:
-                readRowsBelow()
         else:
             i = 0
             for _, contour in indexedContours:
@@ -1431,6 +1460,10 @@ class QuestMixin:
 
                 if i == len(objectives):
                     break
+
+        # Rows below the bottom of the quest log are off screen, so scroll on and read them.
+        if not bottomIsQuestEnd and "unknown" in observedStatuses:
+            readRowsBelow()
 
         completedObjectives = [action for action, status in zip(objectives, observedStatuses) if status == "complete"]
         incompleteObjectives = [action for action, status in zip(objectives, observedStatuses) if status != "complete"]
