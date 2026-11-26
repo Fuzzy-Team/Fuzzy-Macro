@@ -30,6 +30,14 @@ def getCrashRestartDelay(consecutiveCrashes):
     return CRASH_RESTART_DELAYS[index]
 
 
+def killProcess(proc):
+    """Force-kill a child. Windows refuses a second TerminateProcess on a child that is already exiting,
+    so a child that outlives terminate() is left to finish exiting instead of crashing the app."""
+    try:
+        proc.kill()
+    except PermissionError:
+        print(f"Process {proc.pid} did not exit after terminate")
+
 def runApp(macroTarget):
     print("Loading gui...")
     import gui
@@ -203,7 +211,7 @@ def runApp(macroTarget):
                 discordBotProc.terminate()
                 discordBotProc.join(timeout=2)
                 if discordBotProc.is_alive():
-                    discordBotProc.kill()
+                    killProcess(discordBotProc)
                     discordBotProc.join(timeout=2)
         except NameError:
             pass
@@ -230,11 +238,11 @@ def runApp(macroTarget):
             macroProc.terminate()
             macroProc.join(timeout=2)
             if macroProc.is_alive():
-                macroProc.kill()
+                killProcess(macroProc)
                 macroProc.join(timeout=2)
         macroProc = None
         stream.stop()
-        #if discordBotProc.is_alive(): discordBotProc.kill()
+        #if discordBotProc.is_alive(): killProcess(discordBotProc)
         releaseInputsSafely()
         releaseInputsSafely()
     
@@ -540,7 +548,7 @@ def runApp(macroTarget):
                 discordBotProc.terminate()
                 discordBotProc.join(timeout=2)
                 if discordBotProc.is_alive():
-                    discordBotProc.kill()
+                    killProcess(discordBotProc)
                     discordBotProc.join(timeout=1)
             discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI, discordMessageQueue, planterCommandQueue, streamControlQueue, skipServer, standbyCommandQueue, standbyState, ssaCommand), daemon=True)
             prevDiscordBotToken = currentDiscordBotToken
@@ -551,7 +559,7 @@ def runApp(macroTarget):
             discordBotProc.terminate()
             discordBotProc.join(timeout=2)
             if discordBotProc.is_alive():
-                discordBotProc.kill()
+                killProcess(discordBotProc)
                 discordBotProc.join(timeout=1)
             discordBotProc = None
             prevDiscordBotToken = None
@@ -808,7 +816,7 @@ def runApp(macroTarget):
                 traceback.print_exc()
         elif run.value == 4: #disconnected
             if macroProc and macroProc.is_alive():
-                macroProc.kill()
+                killProcess(macroProc)
                 macroProc.join()
             if disconnectDetected:
                 # The supervisor owns mid-session disconnect detection; persist the
