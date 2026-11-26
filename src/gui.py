@@ -1,6 +1,8 @@
 import eel
 from modules.gather_session import PATTERN_FIELDS
 import eel.chrome
+import gevent
+import gevent.lock
 import webbrowser
 import modules.misc.settingsManager as settingsManager
 import modules.macro.planter_bonus_loot as planterBonusLoot
@@ -24,6 +26,26 @@ import modules.logging.log as logModule
 
 # Only JS files expose functions back to Python; skip parsing HTML/text assets at every launch.
 eel.init('webapp', allowed_extensions=['.js'])
+
+# eel writes each message to the page from whichever greenlet or thread sent it. When the page is
+# busy and Chrome stops reading (the large settings replies at startup), two writes interleave on
+# the socket, Chrome drops the connection as an invalid frame, and eel then exits the app.
+# Send one eel message at a time, always from the gevent thread.
+_eelSendLock = gevent.lock.Semaphore()
+_eelSend = eel._repeated_send
+_eelLoop = gevent.get_hub().loop
+_eelThread = threading.get_ident()
+
+def _sendOneAtATime(ws, msg):
+    if threading.get_ident() != _eelThread:
+        # hotkeys call the GUI from pynput's thread
+        _eelLoop.run_callback_threadsafe(gevent.spawn, _sendOneAtATime, ws, msg)
+        return
+    with _eelSendLock:
+        _eelSend(ws, msg)
+
+eel._repeated_send = _sendOneAtATime
+
 HOURLY_REPORT_ASSET_ROOT = os.path.join(settingsManager.getProjectRoot(), "src", "hourly_report", "assets")
 MEMORY_MATCH_ICON_ROOT = os.path.join(settingsManager.getProjectRoot(), "src", "images", "memorymatch")
 
