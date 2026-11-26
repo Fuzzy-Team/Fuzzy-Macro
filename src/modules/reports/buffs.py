@@ -283,32 +283,39 @@ class BuffDetector():
         # Keep the threshold loose enough to include the anti-aliased edges of the tiny decimal point,
         # and do NOT dilate: a kernel large enough to thicken the digits also swallows the "." so a
         # value like x2.93 (bloat) would read as "293" and depend on a fragile repair guess.
-        gray = Image.fromarray(img.min(axis=2)).resize((img.shape[1] * 5, img.shape[0] * 5), Image.LANCZOS)
+        gray = Image.fromarray(img.min(axis=2)).resize((img.shape[1] * 4, img.shape[0] * 4), Image.LANCZOS)
         # Black text on a white background OCRs more reliably.
         mask = np.where(np.array(gray) >= 160, 0, 255).astype(np.uint8)
+        # Bright specks outside the text (the icon's highlight, the next tile's edge at the strip's side)
+        # stretch the crop, and the reader then returns nothing (x1.11 read as x1). Keep only the ink that
+        # sits on the text's baseline and does not touch the strip's top or sides.
+        ink = (mask == 0).astype(np.uint8)
+        count, labels, stats, _ = cv2.connectedComponentsWithStats(ink, connectivity=8)
+        left, top, width, height = (stats[:, i] for i in (cv2.CC_STAT_LEFT, cv2.CC_STAT_TOP, cv2.CC_STAT_WIDTH, cv2.CC_STAT_HEIGHT))
+        inside = [i for i in range(1, count) if left[i] > 0 and top[i] > 0 and left[i] + width[i] < mask.shape[1]]
+        if inside:
+            tallest = max(inside, key=lambda i: height[i])
+            baseline = top[tallest] + height[tallest]
+            keep = [i for i in inside if abs(top[i] + height[i] - baseline) <= 0.2 * height[tallest]]
+            mask = np.where(np.isin(labels, keep), 0, 255).astype(np.uint8)
         # The text sits at the right of a mostly blank strip, and a one-digit stack (x5) is then often not
-        # read at all, so cut the strip down to the text and pad it evenly.
+        # read at all, so cut the strip down to the text and pad it evenly. The reader is erratic about how
+        # much padding it wants (x5 needs a little, x1.11 sometimes a lot), so retry with more when it finds nothing.
         ys, xs = np.where(mask == 0)
         if len(xs):
-            mask = np.pad(mask[ys.min():ys.max() + 1, xs.min():xs.max() + 1], 10, constant_values=255)
-        img = Image.fromarray(mask)
-        if show:
-            img.show()
-        ocrText = ''.join([x[1][0] for x in ocrRead(img)]).replace(":", ".").replace(",", ".")
-        buffCount = ''.join([x for x in ocrText if x.isdigit() or x == "."]).strip(".")
-        if not buffCount:
-            return "1"
-        parts = [part for part in buffCount.split(".") if part]
-        if len(parts) > 1:
-            buffCount = f"{parts[0]}.{parts[1]}"
-        elif parts:
-            buffCount = parts[0]
-        else:
-            return "1"
-        try:
-            return buffCount if float(buffCount) > 0 else "1"
-        except ValueError:
-            return "1"
+            mask = mask[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+        for padding in (10, 30):
+            img = Image.fromarray(np.pad(mask, padding, constant_values=255))
+            if show:
+                img.show()
+            ocrText = ''.join([x[1][0] for x in ocrRead(img)]).replace(":", ".").replace(",", ".")
+            parts = [part for part in ''.join([x for x in ocrText if x.isdigit() or x == "."]).split(".") if part]
+            if not parts:
+                continue
+            buffCount = f"{parts[0]}.{parts[1]}" if len(parts) > 1 else parts[0]
+            if float(buffCount) > 0:
+                return buffCount
+        return "1"
 
     def getBuffQuantityFromImgOcrRobust(self, bgrImg, transform, buff=None):
         maxValue = HOURLY_BUFF_OCR_MAX_VALUES.get(buff)
