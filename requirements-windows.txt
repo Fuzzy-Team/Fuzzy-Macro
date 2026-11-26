@@ -17,8 +17,7 @@ python-Levenshtein
 pyscreeze<0.1.29
 gevent
 eel
-flask
-pygetwindow
 requests
 pynput
+psutil
 certifi

@@ -2799,7 +2799,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 try:
                     draw = ImageDraw.Draw(img)
                     try:
-                        font = ImageFont.truetype("/Library/Fonts/Arial.ttf", 20)
+                        font = ImageFont.truetype("Arial.ttf", 20)
                     except Exception:
                         font = ImageFont.load_default()
                     lines = [f"{n.title()}: {v}%" for n, v in values.items()]

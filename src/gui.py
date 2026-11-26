@@ -525,7 +525,10 @@ def configureToolRuntime(logger=None, status=None, presence=None, ssa_command=No
     _ssa_roller_runner.command = ssa_command
 @eel.expose
 def openLogFolder():
-    subprocess.call(["open", logModule.getLogDir()])
+    if sys.platform == "win32":
+        os.startfile(logModule.getLogDir())
+    else:
+        subprocess.call(["open", logModule.getLogDir()])
 
 @eel.expose
 def start():

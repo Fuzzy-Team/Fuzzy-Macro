@@ -1,5 +1,4 @@
 """Lifecycle and coordinates for the bundled, single-client Fuzzy Display helper."""
-import fcntl
 import hashlib
 import json
 import os
@@ -43,6 +42,7 @@ def state(require_window=False, allow_error=False):
 
 def command(action, timeout=8):
     # GUI lifecycle and macro placement may request commands from different processes.
+    import fcntl  # Fuzzy Display is macOS only
     with open(os.path.join(os.environ[ENV], "command.lock"), "a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         return _command(action, timeout)
