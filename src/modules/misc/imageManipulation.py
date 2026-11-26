@@ -42,17 +42,19 @@ def adjustImage(folder, imageName, display_type):
 @lru_cache(maxsize=None)
 def _loadImage(folder, imageName, display_type):
     #get a list of all images and find the name of the one that matches
-    images = os.listdir(folder)
-    for x in images:
-        #images are named in the format itemname-width
-        #width is the width of the monitor used to take the image
+    #images are named in the format itemname-width
+    #width is the width of the monitor used to take the image
+    #an item can have one file per width: use the one taken at the display's own width, else any
+    found = {}
+    for x in os.listdir(folder):
         if not "-" in x: continue
         name, res = x.split(".")[0].split("-",1)
         if name == imageName:
-            img = Image.open(f"{folder}/{x}")
-            break
-    else:
+            found[res] = x
+    if not found:
         return None
+    res, x = (display_type, found[display_type]) if display_type in found else next(iter(found.items()))
+    img = Image.open(f"{folder}/{x}")
     #get original size of image
     width, height = img.size
     #calculate the scaling value 

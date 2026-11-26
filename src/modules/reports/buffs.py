@@ -85,6 +85,11 @@ HOURLY_BUFF_OCR_MAX_VALUES = {
 }
 
 
+# Grayscale matching ignores contrast, so at 1x a faded copy of the Tabby icon and dark blobs on a bright
+# background score as high as the real tile. These two have 1x icons that are matched in colour instead.
+COLOUR_MATCHED_BUFFS = ("tabby_love", "blessing")
+
+
 # Ordered main/important buffs first, situational ones last (shown top-to-bottom in the grid)
 MAX_UPTIME_BUFF_OPTIONS = 16
 
@@ -409,11 +414,12 @@ class BuffDetector():
                     buffQuantity.append("0")
                 continue
             finalBuffValues = []
+            colourMatch = buff in COLOUR_MATCHED_BUFFS and self.robloxWindow.display_type == "built-in"
 
             for attempt in range(3):
                 if ownScreen and attempt > 0:
                     screen = self.screenshotBuffArea()
-                res = locateTransparentImage(buffTemplate, screen, threshold)
+                res = locateTransparentImage(buffTemplate, screen, threshold, colour=colourMatch)
 
                 if not res: 
                     finalBuffValues.append(0)
@@ -434,6 +440,9 @@ class BuffDetector():
                 imgHeight, imgWidth, *_ = screen.shape
                 cropX = np.clip(cropX, 0, imgWidth - self.buffSize - 5)
                 cropY = np.clip(cropY, 0, imgHeight - self.buffSize - 2)
+                if colourMatch:
+                    # Tiles sit on the bottom row of the strip, and the swaying Blessing balloon can pull the match above it
+                    cropY = imgHeight - self.buffSize - 2
                 
                 #buff is not stackable, no need to extract text
                 if not stackable:
