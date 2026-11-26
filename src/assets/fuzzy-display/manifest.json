@@ -1,11 +1,11 @@
 {
-  "version": "1.0.3",
+  "version": "1.0.4",
   "protocol": 1,
   "repository": "https://github.com/Fuzzy-Team/Fuzzy-Display",
-  "source_commit": "2376708a87f62edecd29b7ea76f81ad9425f1a5e",
-  "upstream_commit": "2376708a87f62edecd29b7ea76f81ad9425f1a5e",
-  "sha256": "b33fe28a744099c1b32b6d33ab35e7d3e73dcce5a1792b2be66d168bce03637b",
-  "executable_sha256": "b1368cb34ead36821538215047f363ab52eda8d669b7f6766d683a222a54dff2",
+  "source_commit": "52e9e8320da205ce0c2e8c982ac130167984d887",
+  "upstream_commit": "52e9e8320da205ce0c2e8c982ac130167984d887",
+  "sha256": "4c709852e4e621f1b58f3c6150347767ca5fcae232df1a63c42b4e12c59aa836",
+  "executable_sha256": "53ea8e7cb13fb1e619314352eec340ce5c2a46b8ceec36f3887911454f4908cb",
   "minimum_macos": "13.0",
   "architectures": [
     "arm64",
