@@ -2,6 +2,7 @@ import hashlib
 import os
 import platform
 import shutil
+import subprocess
 import sys
 from contextlib import contextmanager
 import tempfile
@@ -77,6 +78,14 @@ def import_coreml():
         return _coreml
 
 
+def _intel_mac():
+    # Python under Rosetta also reports x86_64, so ask the hardware.
+    if platform.machine() != "x86_64":
+        return False
+    result = subprocess.run(["sysctl", "-n", "hw.optional.arm64"], capture_output=True, text=True)
+    return result.stdout.strip() != "1"
+
+
 class CoreMLModel:
     """Runs a compiled .mlmodelc through the system Core ML framework.
 
@@ -90,7 +99,9 @@ class CoreMLModel:
         if coreml is None:
             raise RuntimeError("Core ML needs macOS 12.3 or later")
         config = coreml.MLModelConfiguration.alloc().init()
-        config.setComputeUnits_(coreml.MLComputeUnitsAll)
+        # Core ML's GPU path can abort the whole process on Intel Macs (an MPSGraph assert),
+        # which Python can't catch, so they run models on the CPU.
+        config.setComputeUnits_(coreml.MLComputeUnitsCPUOnly if _intel_mac() else coreml.MLComputeUnitsAll)
         url = Foundation.NSURL.fileURLWithPath_(str(path))
         model, error = coreml.MLModel.modelWithContentsOfURL_configuration_error_(url, config, None)
         if model is None:
