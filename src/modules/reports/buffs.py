@@ -270,14 +270,15 @@ class BuffDetector():
         if crop:
             h, *_ = img.shape
             img = img[int(h * 0.50):, :]
-        # Mask the white stack text. Keep the threshold loose enough to include the
-        # anti-aliased edges of the tiny decimal point, and do NOT dilate: a kernel
-        # large enough to thicken the digits also swallows the "." so a value like
-        # x2.93 (bloat) would read as "293" and depend on a fragile repair guess.
-        mask = cv2.inRange(img, np.array([200, 200, 200]), np.array([255, 255, 255]))
-        # Black text on a white background OCRs more reliably; upscale generously so
-        # the decimal point survives.
-        img = Image.fromarray(255 - mask).resize((mask.shape[1] * 5, mask.shape[0] * 5), Image.LANCZOS)
+        # The stack text is white, so its darkest channel stays high while the tile colour does not.
+        # Upscale that grayscale first and threshold afterwards: at 1x the digits are only a couple of
+        # pixels wide, and thresholding before the upscale breaks the thin strokes (x1000 read as x100).
+        # Keep the threshold loose enough to include the anti-aliased edges of the tiny decimal point,
+        # and do NOT dilate: a kernel large enough to thicken the digits also swallows the "." so a
+        # value like x2.93 (bloat) would read as "293" and depend on a fragile repair guess.
+        gray = Image.fromarray(img.min(axis=2)).resize((img.shape[1] * 5, img.shape[0] * 5), Image.LANCZOS)
+        # Black text on a white background OCRs more reliably.
+        img = Image.fromarray(np.where(np.array(gray) >= 160, 0, 255).astype(np.uint8))
         if show:
             img.show()
         ocrText = ''.join([x[1][0] for x in ocrRead(img)]).replace(":", ".").replace(",", ".")
@@ -430,10 +431,11 @@ class BuffDetector():
                 if not stackable:
                     finalBuffValues.append(1)
                     if save:
-                        fullBuffImgBGR = cv2.cvtColor(screen, cv2.COLOR_RGBA2BGR)[cropY:cropY+self.buffSize+2, cropX:cropX+self.buffSize+5]
-                        cv2.imwrite(f"{buff}-{time.time()}.png", fullBuffImgBGR)
+                        cv2.imwrite(f"{buff}-{time.time()}.png", self._ensureBgrBuffScreen(screen)[cropY:cropY+self.buffSize+2, cropX:cropX+self.buffSize+5])
                     break
-                    
+
+                # The screen is BGRA, so this OCR input has red and blue swapped. Its colour masks were
+                # tuned on it, so it is left as is and only the saved image is converted correctly.
                 fullBuffImgBGR = cv2.cvtColor(screen, cv2.COLOR_RGBA2BGR)[cropY:cropY+self.buffSize+2, cropX:cropX+self.buffSize+5]
 
                 if fullBuffImgBGR.size == 0:
@@ -445,7 +447,7 @@ class BuffDetector():
                     continue
                 
                 if save:
-                    cv2.imwrite(f"{buff}-{time.time()}.png", fullBuffImgBGR)
+                    cv2.imwrite(f"{buff}-{time.time()}.png", self._ensureBgrBuffScreen(screen)[cropY:cropY+self.buffSize+2, cropX:cropX+self.buffSize+5])
 
                 # Match the hourly report detector from the provided reference file:
                 # crop the full buff tile and OCR the stack text from that tile.
