@@ -2969,8 +2969,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 await loop.run_in_executor(None, closeApp, "Roblox")
                 await interaction.followup.send("Closing Roblox...")
             elif action == "macro":
-                # stop the macro loop but keep the bot running
-                run.value = 0
+                # onExit stops the macro; setting run.value = 0 first would start a normal Stop and delay the exit.
                 await interaction.followup.send("Stopping macro (Roblox will remain open).")
                 standby_command_queue.put({"action": "quit"})
             else:

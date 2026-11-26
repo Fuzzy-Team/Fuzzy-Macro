@@ -538,12 +538,15 @@ class MacroProfileStore:
                 fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
             else:
                 lock_file.seek(0)
-                while True:  # LK_LOCK gives up after ~10 s, which no write should take
+                deadline = time.monotonic() + 30
+                while True:  # LK_LOCK only retries once a second, so poll instead
                     try:
-                        msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+                        msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
                         break
                     except OSError:
-                        pass
+                        if time.monotonic() > deadline:
+                            raise
+                        time.sleep(0.01)
             try:
                 yield
             finally:
