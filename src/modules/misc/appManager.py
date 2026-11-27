@@ -275,7 +275,11 @@ def robloxWindowGone():
     global _inputWindow
     if _inputWindow and user32.IsWindowVisible(_inputWindow):
         return False
+    hadWindow = _inputWindow is not None
     _inputWindow = next(iter(_robloxWindows()), None)
+    if hadWindow and _inputWindow is None:
+        #gathering holds the left button, which would stay down over whatever window is in front now
+        user32.mouse_event(0x0004, 0, 0, 0, 0) #MOUSEEVENTF_LEFTUP
     return _inputWindow is None
 
 def isAppFocusedWin(app="Roblox"):
