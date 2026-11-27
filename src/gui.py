@@ -3,6 +3,8 @@ from modules.gather_session import PATTERN_FIELDS
 import eel.chrome
 import gevent
 import gevent.lock
+from gevent.exceptions import ConcurrentObjectUseError
+from geventwebsocket.websocket import WebSocket
 import webbrowser
 import modules.misc.settingsManager as settingsManager
 import modules.macro.planter_bonus_loot as planterBonusLoot
@@ -30,8 +32,9 @@ eel.init('webapp', allowed_extensions=['.js'])
 # eel writes each message to the page from whichever greenlet or thread sent it. When the page is
 # busy and Chrome stops reading (the large settings replies at startup), two writes interleave on
 # the socket, Chrome drops the connection as an invalid frame, and eel then exits the app.
-# Send one eel message at a time, always from the gevent thread.
-_eelSendLock = gevent.lock.Semaphore()
+# Send one eel message at a time per page, always from the gevent thread. The lock is per page so
+# a page that stopped reading can't hold up the others or the main loop.
+_eelSendLocks = {}
 _eelSend = eel._repeated_send
 _eelLoop = gevent.get_hub().loop
 _eelThread = threading.get_ident()
@@ -41,10 +44,24 @@ def _sendOneAtATime(ws, msg):
         # hotkeys call the GUI from pynput's thread
         _eelLoop.run_callback_threadsafe(gevent.spawn, _sendOneAtATime, ws, msg)
         return
-    with _eelSendLock:
-        _eelSend(ws, msg)
+    if ws.closed:
+        return  # eel would retry a closed page 100 times, about 1.3s each on Windows
+    with _eelSendLocks.setdefault(id(ws), gevent.lock.Semaphore()):
+        if not ws.closed:
+            _eelSend(ws, msg)
 
 eel._repeated_send = _sendOneAtATime
+
+def _closeEvenIfBusy(ws, *args, **kwargs):
+    # gevent-websocket writes the close frame itself. If a reply is mid-write it raises, and eel
+    # then never removes the page from its list.
+    try:
+        _webSocketClose(ws, *args, **kwargs)
+    except ConcurrentObjectUseError:
+        pass
+
+_webSocketClose = WebSocket.close
+WebSocket.close = _closeEvenIfBusy
 
 HOURLY_REPORT_ASSET_ROOT = os.path.join(settingsManager.getProjectRoot(), "src", "hourly_report", "assets")
 MEMORY_MATCH_ICON_ROOT = os.path.join(settingsManager.getProjectRoot(), "src", "images", "memorymatch")
