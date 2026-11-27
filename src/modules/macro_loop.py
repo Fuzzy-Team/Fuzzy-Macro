@@ -19,6 +19,8 @@ from modules.controls.sleep import (
     INTERRUPT_STICKER_SPROUT,
     INTERRUPT_FIND_ITEM,
     HANG_FILE,
+    arm_interrupts,
+    disarm_interrupts,
     wait_while_paused,
     is_stopped,
     paused_seconds,
@@ -170,6 +172,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
 
 def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMessageQueue=None, planterCommandQueue=None, skipServer=None):
     start_hang_watchdog(settingsManager.getUserDataPath(HANG_FILE))
+    # An interrupt belongs to the task that was running when it was requested.
+    # This is a fresh process, so any value left by a previous one is stale.
+    if skipTask is not None:
+        skipTask.value = INTERRUPT_NONE
     # imported here so the GUI process, which only passes this function to the macro
     # process, doesn't load the macro package (OCR, cv2, Vision, pyautogui)
     import modules.macro as macroModule
@@ -435,6 +441,10 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
             if watchedRows and all(row["id"] in macro.deferredQuestObjectives for row in watchedRows):
                 return None
 
+        # Only this task is interruptible. Rejoin, startup and menu scanning run
+        # outside here with no handler, so they must not be handed an interrupt.
+        arm_interrupts()
+        armed = True
         try:
             if taskWatchKey:
                 questWatchContext = macro.startQuestTaskWatch(taskWatchKey)
@@ -506,12 +516,16 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                     macro.AFB(gatherInterrupt=False)
                     taskCompleted = True
         except InterruptRequested as interrupt:
+            disarm_interrupts()
+            armed = False
             skipTask.value = INTERRUPT_NONE
             if questWatchContext:
                 macro.finishQuestTaskWatch(questWatchContext, checkCompletion=False)
                 questWatchContext = None
             return handle_interrupt(interrupt.action)
         finally:
+            if armed:
+                disarm_interrupts()
             if questWatchContext:
                 if macro.finishQuestTaskWatch(questWatchContext):
                     macro.markQuestTaskWatchCompleted(questWatchContext)
