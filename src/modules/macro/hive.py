@@ -857,6 +857,19 @@ class HiveMixin:
             time.sleep(0.35)
 
             available = self.detectOpenHiveSlotsFromSpawn()
+            # Some Windows joins start with the camera facing straight away from the hives, and the spin check
+            # above never matches at spawn. A pad is always open here, so seeing none means look behind.
+            if not available and sys.platform == "win32":
+                for turn in range(2): # turn round, and back again if that shows nothing either
+                    for _ in range(4):
+                        self.keyboard.press(".")
+                    if turn:
+                        break
+                    time.sleep(0.35)
+                    available = self.detectOpenHiveSlotsFromSpawn()
+                    if available:
+                        self.logger.webhook("", "The camera faced away from the hives; turned it round", "dark brown")
+                        break
             if available:
                 self.logger.webhook(
                     "",
