@@ -1,6 +1,7 @@
 import numpy as np
 import cv2
 import os
+import sys
 from functools import lru_cache
 from PIL import Image
 
@@ -51,6 +52,10 @@ def _loadImage(folder, imageName, display_type):
         name, res = x.split(".")[0].split("-",1)
         if name == imageName:
             found[res] = x
+    #"windows" files are 1x crops from Windows screenshots, which only Windows may use
+    windows = found.pop("windows", None)
+    if windows and sys.platform == "win32":
+        return pillowToCv2(Image.open(f"{folder}/{windows}"))
     if not found:
         return None
     res, x = (display_type, found[display_type]) if display_type in found else next(iter(found.items()))
