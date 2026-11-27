@@ -94,7 +94,8 @@ def runApp(macroTarget):
     logger = logModule.log(logQueue, False, None, False, discordMessageQueue=discordMessageQueue)
     gui.configureToolRuntime(logger=logger, status=status, presence=presence, ssa_command=ssaCommand)
 
-    disconnectCooldownUntil = 0
+    disconnectCheckAt = 0
+    disconnectPopupIgnoredUntil = 0 #after a disconnect, so its pop-up isn't counted twice
     disconnectDetected = False
     robloxWindowSeenBy = None #the macro process that has had a Roblox window, for the Windows check below
     robloxWindowMisses = 0
@@ -953,19 +954,22 @@ def runApp(macroTarget):
         
         # Only read the screen once a macro process is actually running; during a
         # crash backoff Roblox may be gone and the pending restart owns the window.
-        if run.value == 2 and macroProc and macroProc.is_alive() and time.time() > disconnectCooldownUntil:
+        if run.value == 2 and macroProc and macroProc.is_alive() and time.time() > disconnectCheckAt:
             # checking every few seconds is enough to catch a disconnect
-            disconnectCooldownUntil = time.time() + 5
-            img = adjustImage("./images/menu", "disconnect", screenInfo["display_type"])
-            try:
-                wmx, wmy, wmw, wmh = getWindowSize("roblox roblox")
-                disconnected = locateImageOnScreen(img, wmx+wmw/3, wmy+wmh/2.8, wmw/2.3, wmh/5, 0.7)
-            except virtual_display.DisplayError:
-                # Roblox has no window on the virtual display yet (starting or rejoining).
-                # A failing display is stopped by the display check above.
-                disconnected = False
+            disconnectCheckAt = time.time() + 5
+            disconnected = False
+            if time.time() > disconnectPopupIgnoredUntil:
+                img = adjustImage("./images/menu", "disconnect", screenInfo["display_type"])
+                try:
+                    wmx, wmy, wmw, wmh = getWindowSize("roblox roblox")
+                    disconnected = locateImageOnScreen(img, wmx+wmw/3, wmy+wmh/2.8, wmw/2.3, wmh/5, 0.7)
+                except virtual_display.DisplayError:
+                    # Roblox has no window on the virtual display yet (starting or rejoining).
+                    # A failing display is stopped by the display check above.
+                    pass
             # Closing Roblox on Windows shows no pop-up, and the macro kept sending keys to other windows for
             # almost three minutes. A rejoin closes Roblox itself, and a new macro may not have opened it yet.
+            # It runs during the pop-up's 5 minute pause, since only the replacement macro's own window counts.
             if sys.platform == "win32":
                 if appManager.hasRobloxWindow():
                     robloxWindowSeenBy, robloxWindowMisses = macroProc, 0
@@ -978,4 +982,4 @@ def runApp(macroTarget):
                 print("disconnected")
                 disconnectDetected = True
                 run.value = 4
-                disconnectCooldownUntil = time.time() + 300  # 5 min cooldown
+                disconnectPopupIgnoredUntil = time.time() + 300
