@@ -1,6 +1,7 @@
 from modules.screen import virtual_display
 import re
 import random
+import sys
 import requests
 from datetime import datetime, timezone
 import modules.controls.mouse as mouse
@@ -230,6 +231,11 @@ class RejoinMixin:
             time.sleep(3)
             if is_stopped():
                 return self._finish_rejoin(False)
+
+        # On Windows loading the text engine can take most of a minute. Left to the join loop's first read,
+        # it uses up the load time limit and the loading screen passes unseen.
+        if sys.platform == "win32":
+            ocr.loadOcrEngine()
 
         # Retry each configured private server in failover order, then use a
         # public server. Skipping one link invalidates only that link, allowing
