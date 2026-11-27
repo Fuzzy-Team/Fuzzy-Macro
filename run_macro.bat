@@ -12,6 +12,20 @@ if not exist "%PYTHON_EXE%" (
     if errorlevel 1 exit /b 1
 )
 
+:: Screen reading and game input need administrator rights, so relaunch elevated. The path goes through an
+:: environment variable so apostrophes in folder names work.
+fltmc >nul 2>&1
+if not errorlevel 1 goto :elevated
+set "FUZZY_LAUNCHER=%~f0"
+powershell -NoProfile -Command "Start-Process -FilePath $env:FUZZY_LAUNCHER -WorkingDirectory $env:PROJECT_ROOT -Verb RunAs" >nul 2>&1
+if errorlevel 1 (
+    echo Fuzzy Macro needs administrator access. Run this again and choose Yes at the prompt.
+    pause
+    exit /b 1
+)
+exit /b 0
+
+:elevated
 :: Stop only a Fuzzy Macro already running from this virtual environment, with its macro, bot and manager processes (/T).
 powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -ieq $env:PYTHON_EXE -and $_.CommandLine -match 'main\.py' } | ForEach-Object { taskkill /PID $_.ProcessId /T /F }" >nul 2>&1
 
