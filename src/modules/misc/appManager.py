@@ -268,6 +268,16 @@ def hasRobloxWindow():
     """False when Roblox is closed, including when only its tray icon is left."""
     return bool(_robloxWindows())
 
+_inputWindow = None #the Roblox window robloxWindowGone last saw
+
+def robloxWindowGone():
+    """hasRobloxWindow, reversed, and cheap enough to ask before every key press."""
+    global _inputWindow
+    if _inputWindow and user32.IsWindowVisible(_inputWindow):
+        return False
+    _inputWindow = next(iter(_robloxWindows()), None)
+    return _inputWindow is None
+
 def isAppFocusedWin(app="Roblox"):
     foreground = user32.GetForegroundWindow()
     if not foreground:

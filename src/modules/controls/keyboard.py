@@ -15,11 +15,16 @@ if TYPE_CHECKING:
 if sys.platform == "win32":
     import ctypes
     import pydirectinput as keys
+    from modules.misc.appManager import robloxWindowGone
     keys.PAUSE = pag.PAUSE
     #pydirectinput's codes for Page Up and Page Down aren't real scan codes, so Roblox never saw them
     _PAGE_KEYS = {"pageup": (0x21, 0x49), "pagedown": (0x22, 0x51)} #virtual key, scan code
     def _pageKeys(send, up):
         def wrapper(key, *args, **kwargs):
+            # The app takes up to 10 seconds to notice a closed Roblox, and until it restarts the macro the
+            # presses would go to whatever window is in front. Releases still go through.
+            if not up and robloxWindowGone():
+                return False
             if key not in _PAGE_KEYS:
                 return send(key, *args, **kwargs)
             ctypes.windll.user32.keybd_event(*_PAGE_KEYS[key], 0x1 | (0x2 if up else 0), 0) #extended key, key up
