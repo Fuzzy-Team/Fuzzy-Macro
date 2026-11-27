@@ -196,6 +196,7 @@ ROBLOX_EXES = ("RobloxPlayerBeta.exe", "Windows10Universal.exe")
 
 if IS_WINDOWS:
     import psutil
+    import pydirectinput
     from ctypes import wintypes
     user32 = ctypes.windll.user32
 
@@ -314,7 +315,7 @@ def enterRobloxFullscreenWin():
     if not isAppFocusedWin(): #F11 would go to another window, so try again on the next call
         return
     _fullscreenRequested = root
-    pag.press("f11")
+    pydirectinput.press("f11") #Roblox reads scancodes, which pyautogui doesn't send
     time.sleep(1.5) # the fullscreen animation
 
 def missingPermissionsWin():
