@@ -1122,6 +1122,10 @@ class CollectiblesMixin:
     def feedBee(self, item, quantity):
         res = self.findItemInInventory(item)
         if not res: 
+            # The search leaves the inventory open when the item is missing, and every
+            # caller runs feedBee with resetAfter=False, so close it before returning.
+            if not is_stopped():
+                self.toggleInventory("close")
             return
         
         x, y = res
