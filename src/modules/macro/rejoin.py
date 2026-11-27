@@ -15,11 +15,8 @@ from modules.macro.game_data import (
     LOADING_SCREEN_PERCENT,
     LOADING_SCREEN_TOLERANCE,
     MAIN_GAME_PLACE_ID,
-    REJOIN_COLOR_DURATION,
-    REJOIN_COLOR_PERCENT,
-    REJOIN_COLOR_TOLERANCE,
 )
-from modules.screen.color_check import get_sample_colors, percent_pixels_similar_to_color
+from modules.screen.color_check import percent_pixels_similar_to_color
 from modules.screen.imageSearch import locateImageOnScreen
 from modules.screen.screenshot import mssScreenshot
 
@@ -289,15 +286,6 @@ class RejoinMixin:
             joinErrorScanAfter = loadStartTime + 5
             signUpImage = self.adjustImage("./images/menu", "signup")
             disconnectImage = self.adjustImage("./images/menu", "disconnect")
-            # prepare rejoin color-based detection
-            try:
-                sample_colors = get_sample_colors()
-            except Exception:
-                sample_colors = [(250, 250, 250), (20, 20, 20)]
-            percent_threshold = REJOIN_COLOR_PERCENT
-            sustain_seconds = REJOIN_COLOR_DURATION
-            color_tolerance = REJOIN_COLOR_TOLERANCE
-            sustained_start = 0
             rejoinSuccess = True
             robloxOpenTime = 0
             gameLoaded = False
@@ -416,7 +404,7 @@ class RejoinMixin:
                 if robloxOpenTime and time.time() - robloxOpenTime > 5:
                     robloxScreen = mssScreenshot(self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw/2, self.robloxWindow.mh/2.5)
                     robloxScreenText = '\n'.join([x[1][0].lower() for x in ocr.ocrRead(robloxScreen)])
-                    if "connect" in robloxScreenText:
+                    if re.search(r"\bconnect", robloxScreenText):
                         print(robloxScreenText)
                         self.logger.webhook("","Roblox Home Page is open","brown","screen")
                         rejoinSuccess = False
@@ -427,42 +415,18 @@ class RejoinMixin:
                     rejoinSuccess = False
                     break
 
-                # Check for sustained dominant color (light/dark) that indicates a stuck screen.
-                try:
-                    if appManager.isAppFocused("Roblox"):
-                        matched = False
-                        for col in sample_colors:
-                            pct = percent_pixels_similar_to_color(self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw, self.robloxWindow.mh, col, tolerance=color_tolerance)
-                            if pct >= percent_threshold:
-                                matched = True
-                                break
-                        if matched:
-                            if sustained_start == 0:
-                                sustained_start = time.time()
-                            elif time.time() - sustained_start >= sustain_seconds:
-                                self.logger.webhook("","Detected sustained screen color — retrying rejoin","orange","screen")
-                                rejoinSuccess = False
-                                break
-                        else:
-                            sustained_start = 0
-                    else:
-                        sustained_start = 0
-                except Exception:
-                    sustained_start = 0
                 pausedBefore = paused_seconds()
                 time.sleep(1)
                 pausedFor = paused_seconds() - pausedBefore
                 if pausedFor > 0:
                     # Pause time must not count toward the load timeout, the
-                    # join-error delay or the sustained-color timer.
+                    # or the join-error delay.
                     loadStartTime += pausedFor
                     joinErrorScanAfter += pausedFor
                     if robloxOpenTime:
                         robloxOpenTime += pausedFor
                     if lastJoinErrorScan:
                         lastJoinErrorScan += pausedFor
-                    if sustained_start:
-                        sustained_start += pausedFor
 
             if self.skipServer is not None:
                 self.skipServer.value = 0

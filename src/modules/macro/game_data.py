@@ -229,10 +229,9 @@ blenderItems = ["red extract", "blue extract", "enzymes", "oil", "glue", "tropic
 MAIN_GAME_PLACE_ID = "1537690962"
 HIVE_HUB_PLACE_ID = "15579077077"
 # Rejoin/loading screen detection: at least REJOIN_COLOR_PERCENT of the Roblox window must be
-# within REJOIN_COLOR_TOLERANCE of one sample color. If that lasts REJOIN_COLOR_DURATION seconds, the rejoin is retried.
+# within REJOIN_COLOR_TOLERANCE of one sample color.
 REJOIN_COLOR_PERCENT = 0.7754
 REJOIN_COLOR_TOLERANCE = 40
-REJOIN_COLOR_DURATION = 60
 # The join loading screen is a solid blue. A join is confirmed once at least
 # LOADING_SCREEN_PERCENT of the window was this colour and then stopped being.
 LOADING_SCREEN_COLOR = (34, 87, 168)
