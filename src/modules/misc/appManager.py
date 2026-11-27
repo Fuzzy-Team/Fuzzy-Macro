@@ -208,19 +208,12 @@ if IS_WINDOWS:
     user32.GetClientRect.argtypes = [HWND, ctypes.POINTER(wintypes.RECT)]
     user32.ClientToScreen.argtypes = [HWND, ctypes.POINTER(wintypes.POINT)]
     user32.IsIconic.argtypes = [HWND]
-    user32.GetWindowRect.argtypes = [HWND, ctypes.POINTER(wintypes.RECT)]
-    user32.MonitorFromWindow.argtypes = [HWND, wintypes.DWORD]
-    user32.MonitorFromWindow.restype = ctypes.c_void_p
-    user32.GetMonitorInfoW.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
     user32.GetAncestor.argtypes = [HWND, wintypes.UINT]
     user32.GetAncestor.restype = HWND
     user32.GetClassNameW.argtypes = [HWND, wintypes.LPWSTR, ctypes.c_int]
     user32.GetWindowTextW.argtypes = [HWND, wintypes.LPWSTR, ctypes.c_int]
     user32.FindWindowExW.argtypes = [HWND, HWND, wintypes.LPCWSTR, wintypes.LPCWSTR]
     user32.FindWindowExW.restype = HWND
-
-    class _MonitorInfo(ctypes.Structure):
-        _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT), ("rcWork", wintypes.RECT), ("dwFlags", wintypes.DWORD)]
 
 def _robloxPids():
     out = subprocess.run(["tasklist", "/FO", "CSV", "/NH"],
@@ -309,20 +302,8 @@ def getWindowSizeWin(windowName):
     return best or (0, 0, mw, mh)
 
 def enterRobloxFullscreenWin():
-    """Press F11 when the Roblox window doesn't cover its monitor, so the game starts at the top of the screen."""
-    for hwnd in _robloxWindows():
-        window = wintypes.RECT()
-        user32.GetWindowRect(hwnd, ctypes.byref(window))
-        monitor = user32.MonitorFromWindow(hwnd, 2) #MONITOR_DEFAULTTONEAREST
-        info = _MonitorInfo()
-        info.cbSize = ctypes.sizeof(_MonitorInfo)
-        user32.GetMonitorInfoW(monitor, ctypes.byref(info))
-        screen = info.rcMonitor
-        if (window.left, window.top, window.right, window.bottom) != (screen.left, screen.top, screen.right, screen.bottom):
-            openAppWin()
-            pag.press("f11")
-            time.sleep(1.5) # the fullscreen animation
-        return
+    """Windows reads the window's content area, which already excludes the title bar, so a windowed Roblox is left alone.
+    F11 only toggles, so pressing it on a window that was already fullscreen would flip it back out."""
 
 def missingPermissionsWin():
     return []
