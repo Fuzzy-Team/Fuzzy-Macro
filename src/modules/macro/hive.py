@@ -1,3 +1,4 @@
+import sys
 import cv2
 import numpy as np
 import modules.controls.mouse as mouse
@@ -567,15 +568,26 @@ class HiveMixin:
                 return True
         except Exception:
             pass
+        # On Windows a text read takes about a second, long enough to walk past an open pad, so only
+        # read when the E key is up and the images haven't already shown that the hive is taken.
+        if sys.platform == "win32" and (self.occupiedHiveImageVisible() or not self.isBesideEImage("ebutton")):
+            return False
         return bool(self.isBesideE(["claim"], ["send", "trad", "trade"], log=True))
 
-    def occupiedHivePromptVisible(self):
+    def occupiedHiveImageVisible(self):
         for name in ("sendtrade", "tradedisabled", "tradelocked"):
             try:
                 if self.isBesideEImage(name):
                     return True
             except Exception:
                 pass
+        return False
+
+    def occupiedHivePromptVisible(self):
+        if self.occupiedHiveImageVisible():
+            return True
+        if sys.platform == "win32" and not self.isBesideEImage("ebutton"):
+            return False
         return bool(self.isBesideE(["send", "trad", "trade"], ["claim"], log=True))
 
     def anyHivePromptVisible(self):
