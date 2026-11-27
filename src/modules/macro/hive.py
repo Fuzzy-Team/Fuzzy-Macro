@@ -58,6 +58,17 @@ class HiveMixin:
             time.sleep(1)
             if self.isBesideE(["stop", "making"], ["make"], log=True): 
                 break
+        else:
+            # Right after a claim the player can be just off the front of the pad, where there is no prompt and E
+            # does nothing. With pollen left, honey still trickles in, so nothing below notices until the time
+            # limit. Step forward until a honey prompt shows. Resetting instead would throw the pollen away.
+            if bypass and sys.platform == "win32":
+                for step in range(5):
+                    if any(word in self.getTextBesideE() for word in ("mak", "stop")):
+                        break
+                    if step < 4:
+                        self.walkStuds("w", 4)
+                        time.sleep(0.5)
 
         self.set_task_status("converting", activity="converting")
         st = time.time()
