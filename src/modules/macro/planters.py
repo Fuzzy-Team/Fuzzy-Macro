@@ -213,6 +213,11 @@ class PlanterMixin:
 
             #Couldn't find planter
             if not hotbarSlot and self.planterCoords is None:
+                # A search that finds nothing leaves the inventory panel open, so close it
+                # before the retry, the field check and every return below: callers with
+                # resetAfter=False would otherwise keep walking and gathering underneath it.
+                if not is_stopped():
+                    self.toggleInventory("close")
                 # If not found: retry only if we haven't exhausted attempts.
                 if attempt < max_attempts - 1:
                     self.logger.webhook("", f"Couldn't find {planter.title()} in inventory, retrying", "red", "screen", ping_category="ping_critical_errors")
