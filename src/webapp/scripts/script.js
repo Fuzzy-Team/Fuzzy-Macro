@@ -1064,6 +1064,7 @@ function loadInputs(obj, save = "") {
 function updateDependentFields() {
   updateReturnDependentFields();
   updateScheduledRejoinDependentFields();
+  updateHiveSlotFields();
   updateQuestProgressFields();
   updateBoostHotbarIcons();
 }
@@ -1081,6 +1082,18 @@ function updateReturnDependentFields() {
   } else {
     form.style.display = "none";
   }
+}
+
+// With Always Rejoin off the macro never claims a hive at startup, so the user sets their hive slot instead of a preferred one
+function updateHiveSlotFields() {
+  const alwaysRejoin = document.getElementById("always_rejoin");
+  if (!alwaysRejoin) return;
+  const show = (id, visible) => {
+    const form = document.getElementById(id)?.closest("form");
+    if (form) form.style.display = visible ? "flex" : "none";
+  };
+  show("preferred_hive_slot", alwaysRejoin.checked);
+  show("hive_number", !alwaysRejoin.checked);
 }
 
 function updateScheduledRejoinDependentFields() {
