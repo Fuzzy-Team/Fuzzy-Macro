@@ -264,6 +264,10 @@ def _clientBounds(hwnd):
 def isAppOpenWin(app="roblox"):
     return bool(_robloxPids())
 
+def hasRobloxWindow():
+    """False when Roblox is closed, including when only its tray icon is left."""
+    return bool(_robloxWindows())
+
 def isAppFocusedWin(app="Roblox"):
     foreground = user32.GetForegroundWindow()
     if not foreground:

@@ -96,6 +96,8 @@ def runApp(macroTarget):
 
     disconnectCooldownUntil = 0
     disconnectDetected = False
+    robloxWindowSeenBy = None #the macro process that has had a Roblox window, for the Windows check below
+    robloxWindowMisses = 0
 
     #add missing defaults to the current profile's files and apply migrations
     settingsManager.ensureRuntimeData()
@@ -962,6 +964,16 @@ def runApp(macroTarget):
                 # Roblox has no window on the virtual display yet (starting or rejoining).
                 # A failing display is stopped by the display check above.
                 disconnected = False
+            # Closing Roblox on Windows shows no pop-up, and the macro kept sending keys to other windows for
+            # almost three minutes. A rejoin closes Roblox itself, and a new macro may not have opened it yet.
+            if sys.platform == "win32":
+                if appManager.hasRobloxWindow():
+                    robloxWindowSeenBy, robloxWindowMisses = macroProc, 0
+                elif robloxWindowSeenBy is macroProc and status.value != "rejoining":
+                    robloxWindowMisses += 1
+                    if robloxWindowMisses >= 2:
+                        robloxWindowSeenBy = None
+                        disconnected = True
             if disconnected:
                 print("disconnected")
                 disconnectDetected = True
