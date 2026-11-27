@@ -330,7 +330,9 @@ class RejoinMixin:
             watchFinished = threading.Event()
             if sys.platform == "win32":
                 threading.Thread(target=self._watchLoadingScreen, args=(watchedLoad, watchFinished), daemon=True).start()
-            while not is_stopped() and time.time() - loadStartTime < 36 and not watchedLoad.is_set():
+            # Joins from a closed Roblox have taken up to 43 seconds on Windows.
+            loadTimeout = 60 if sys.platform == "win32" else 36
+            while not is_stopped() and time.time() - loadStartTime < loadTimeout and not watchedLoad.is_set():
                 if joinPS and self.skipServer is not None and self.skipServer.value == 1:
                     self.skipServer.value = 0
                     invalidServerLinks.add(psLink)
@@ -471,7 +473,7 @@ class RejoinMixin:
             if not gameLoaded and rejoinSuccess:
                 self.logger.webhook(
                     "",
-                    f"Game load was not confirmed within 36 seconds; trying the next rejoin target ({launchedAttempts}/{len(attempts)}).",
+                    f"Game load was not confirmed within {loadTimeout} seconds; trying the next rejoin target ({launchedAttempts}/{len(attempts)}).",
                     "red",
                     "screen",
                     ping_category="ping_disconnects",
