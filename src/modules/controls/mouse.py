@@ -8,6 +8,7 @@ from modules.controls.sleep import heartbeat
 IS_WINDOWS = sys.platform == "win32"
 if IS_WINDOWS:
     import ctypes
+    from modules.misc.appManager import robloxWindowGone
     MOUSEEVENTF_MOVE = 0x0001
     MOUSEEVENTF_WHEEL = 0x0800
     MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP = 0x0002, 0x0004
@@ -40,6 +41,9 @@ def moveTo(x,y, delay = 0.1):
 def postLeftButton(eventType):
     heartbeat()
     if IS_WINDOWS:
+        #like key presses, a click while Roblox has no window would land on whatever is in front. Releases still go through.
+        if eventType == "down" and robloxWindowGone():
+            return
         ctypes.windll.user32.mouse_event(MOUSEEVENTF_LEFTDOWN if eventType == "down" else MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
         time.sleep(pag.PAUSE)
         return
@@ -95,6 +99,8 @@ def fastClick():
 def scroll(clicks, pause = False):
     if virtual_display.active(): virtual_display.state(require_window=True)
     if IS_WINDOWS:
+        if robloxWindowGone():
+            return
         #pyautogui passes the click count as the raw wheel delta, and one notch is 120. 200 per click is what
         #worked on the old windows branch; tune on real hardware
         ctypes.windll.user32.mouse_event(MOUSEEVENTF_WHEEL, 0, 0, int(clicks * 200), 0)
