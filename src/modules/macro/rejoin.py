@@ -2,6 +2,7 @@ from modules.screen import virtual_display
 import re
 import random
 import sys
+import threading
 import requests
 from datetime import datetime, timezone
 import modules.controls.mouse as mouse
@@ -30,6 +31,23 @@ class RejoinMixin:
             tolerance=LOADING_SCREEN_TOLERANCE, return_none_on_error=True,
         )
         return None if percent is None else percent >= LOADING_SCREEN_PERCENT
+
+    def _watchLoadingScreen(self, loaded, finished):
+        """Set `loaded` once the loading screen has been up and is gone."""
+        seen = False
+        goneChecks = 0
+        while not finished.wait(0.5):
+            showing = self._loadingScreenShowing()
+            if showing:
+                seen = True
+                goneChecks = 0
+            elif showing is None:
+                goneChecks = 0
+            elif seen:
+                goneChecks += 1
+                if goneChecks >= 2:
+                    loaded.set()
+                    return
 
     def _parseRejoinAtTime(self):
         value = str(self.setdat.get("rejoin_at_time", "00:00")).strip()
@@ -306,7 +324,13 @@ class RejoinMixin:
             # sprinkler counts, but an already-open client must see it disappear
             # first, since the old server's sprinkler is still up after launch.
             sawSprinklerGap = not clientAlreadyOpen
-            while not is_stopped() and time.time() - loadStartTime < 36:
+            # On Windows one pass of the loop below can take 14 seconds while Roblox loads, and the
+            # loading screen can be up for only 2, so it is also watched on its own thread.
+            watchedLoad = threading.Event()
+            watchFinished = threading.Event()
+            if sys.platform == "win32":
+                threading.Thread(target=self._watchLoadingScreen, args=(watchedLoad, watchFinished), daemon=True).start()
+            while not is_stopped() and time.time() - loadStartTime < 36 and not watchedLoad.is_set():
                 if joinPS and self.skipServer is not None and self.skipServer.value == 1:
                     self.skipServer.value = 0
                     invalidServerLinks.add(psLink)
@@ -433,6 +457,10 @@ class RejoinMixin:
                         robloxOpenTime += pausedFor
                     if lastJoinErrorScan:
                         lastJoinErrorScan += pausedFor
+
+            watchFinished.set()
+            if watchedLoad.is_set() and rejoinSuccess:
+                gameLoaded = True
 
             if self.skipServer is not None:
                 self.skipServer.value = 0
