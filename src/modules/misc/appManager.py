@@ -214,6 +214,8 @@ if IS_WINDOWS:
     user32.GetWindowTextW.argtypes = [HWND, wintypes.LPWSTR, ctypes.c_int]
     user32.FindWindowExW.argtypes = [HWND, HWND, wintypes.LPCWSTR, wintypes.LPCWSTR]
     user32.FindWindowExW.restype = HWND
+    user32.GetWindowLongW.argtypes = [HWND, ctypes.c_int]
+    user32.GetWindowLongW.restype = ctypes.c_long
 
 def _robloxPids():
     out = subprocess.run(["tasklist", "/FO", "CSV", "/NH"],
@@ -301,9 +303,23 @@ def getWindowSizeWin(windowName):
     # Window not found or minimised, assume fullscreen
     return best or (0, 0, mw, mh)
 
+_fullscreenRequested = None #the window F11 was last pressed for
+
 def enterRobloxFullscreenWin():
-    """Windows reads the window's content area, which already excludes the title bar, so a windowed Roblox is left alone.
-    F11 only toggles, so pressing it on a window that was already fullscreen would flip it back out."""
+    """Press F11 for a windowed Roblox, which has a title bar. F11 only toggles, so it is never pressed
+    for a window without a title bar or one it already pressed it for: a wrong guess would flip it back out."""
+    global _fullscreenRequested
+    windows = _robloxWindows()
+    if not windows:
+        return
+    root = user32.GetAncestor(windows[0], 2) #GA_ROOT: the Store version's frame, not its content window
+    if root == _fullscreenRequested or not user32.GetWindowLongW(root, -16) & 0xC00000: #GWL_STYLE, WS_CAPTION
+        return
+    _fullscreenRequested = root
+    openAppWin()
+    time.sleep(0.3)
+    pag.press("f11")
+    time.sleep(1.5) # the fullscreen animation
 
 def missingPermissionsWin():
     return []
