@@ -24,6 +24,8 @@ from modules.screen.screenshot import mssScreenshot
 
 
 class RejoinMixin:
+    _loadWatchFinished = threading.Event() #replaced by each join attempt, and set by every exit from a rejoin
+
     def _loadingScreenShowing(self):
         w = self.robloxWindow
         percent = percent_pixels_similar_to_color(
@@ -211,6 +213,7 @@ class RejoinMixin:
         # failed rejoin cannot leave night detection disabled.
         if self.skipServer is not None:
             self.skipServer.value = 0
+        self._loadWatchFinished.set()
         self.canDetectNight = True
         self.clear_task_status()
         return result
@@ -327,7 +330,7 @@ class RejoinMixin:
             # On Windows one pass of the loop below can take 14 seconds while Roblox loads, and the
             # loading screen can be up for only 2, so it is also watched on its own thread.
             watchedLoad = threading.Event()
-            watchFinished = threading.Event()
+            watchFinished = self._loadWatchFinished = threading.Event()
             if sys.platform == "win32":
                 threading.Thread(target=self._watchLoadingScreen, args=(watchedLoad, watchFinished), daemon=True).start()
             # Joins from a closed Roblox have taken up to 43 seconds on Windows.
