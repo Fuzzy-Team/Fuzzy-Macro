@@ -562,15 +562,16 @@ class HiveMixin:
         self.walkStuds(nudge_key, nudge_studs)
         time.sleep(0.25)
 
-    def claimHivePromptVisible(self):
+    def claimHivePromptVisible(self, walking=False):
         try:
             if self.isBesideEImage("claimhive"):
                 return True
         except Exception:
             pass
-        # On Windows a text read takes about a second, long enough to walk past an open pad, so only
-        # read when the E key is up and the images haven't already shown that the hive is taken.
-        if sys.platform == "win32" and (self.occupiedHiveImageVisible() or not self.isBesideEImage("ebutton")):
+        # On Windows a text read takes about a second, long enough to walk past an open pad. While
+        # walking, only read when the E key is up and the images haven't shown that the hive is taken.
+        # A standing check always reads, since a Roblox pop-up can cover the E key and part of the prompt.
+        if walking and sys.platform == "win32" and (self.occupiedHiveImageVisible() or not self.isBesideEImage("ebutton")):
             return False
         return bool(self.isBesideE(["claim"], ["send", "trad", "trade"], log=True))
 
@@ -583,21 +584,21 @@ class HiveMixin:
                 pass
         return False
 
-    def occupiedHivePromptVisible(self):
+    def occupiedHivePromptVisible(self, walking=False):
         if self.occupiedHiveImageVisible():
             return True
-        if sys.platform == "win32" and not self.isBesideEImage("ebutton"):
+        if walking and sys.platform == "win32" and not self.isBesideEImage("ebutton"):
             return False
         return bool(self.isBesideE(["send", "trad", "trade"], ["claim"], log=True))
 
-    def anyHivePromptVisible(self):
-        return bool(self.hivePromptKind())
+    def anyHivePromptVisible(self, walking=False):
+        return bool(self.hivePromptKind(walking))
 
-    def hivePromptKind(self):
+    def hivePromptKind(self, walking=False):
         """Return the currently observed hive-prompt type, if any."""
-        if self.claimHivePromptVisible():
+        if self.claimHivePromptVisible(walking):
             return "claim"
-        if self.occupiedHivePromptVisible():
+        if self.occupiedHivePromptVisible(walking):
             return "occupied"
         return None
 
@@ -650,7 +651,7 @@ class HiveMixin:
             for _ in range(40):
                 if self._hiveAcquisitionControlStatus() == "stopped":
                     return 0
-                if time.monotonic() >= deadline or not self.anyHivePromptVisible():
+                if time.monotonic() >= deadline or not self.anyHivePromptVisible(walking=True):
                     break
                 time.sleep(0.01)
             # Walk until the next pad's claim/occupied prompt appears.
@@ -660,7 +661,7 @@ class HiveMixin:
                 if time.monotonic() >= deadline:
                     self.logger.webhook("", f"Hive {slot} prompt not seen", "orange")
                     break
-                if self.claimHivePromptVisible():
+                if self.claimHivePromptVisible(walking=True):
                     self.keyboard.keyUp("a", False)
                     self.keyboard.keyUp("d", False)
                     self.logger.webhook("", f"Hive {slot} detected as available", "light green")
@@ -668,7 +669,7 @@ class HiveMixin:
                         slot, excluded_slots, prompt_confirmed=True
                     )
                     break
-                if self.occupiedHivePromptVisible():
+                if self.occupiedHivePromptVisible(walking=True):
                     self.logger.webhook("", f"Hive {slot} occupied", "dark brown")
                     break
                 time.sleep(0.01)
