@@ -315,9 +315,11 @@ def enterRobloxFullscreenWin():
     root = user32.GetAncestor(windows[0], 2) #GA_ROOT: the Store version's frame, not its content window
     if root == _fullscreenRequested or not user32.GetWindowLongW(root, -16) & 0xC00000: #GWL_STYLE, WS_CAPTION
         return
-    _fullscreenRequested = root
     openAppWin()
     time.sleep(0.3)
+    if not isAppFocusedWin(): #F11 would go to another window, so try again on the next call
+        return
+    _fullscreenRequested = root
     pag.press("f11")
     time.sleep(1.5) # the fullscreen animation
 
