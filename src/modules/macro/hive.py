@@ -345,7 +345,7 @@ class HiveMixin:
             if res:
                 if is_stopped():
                     return _finish_reset(False)
-                x2, y2 = res[1]
+                x2, y2 = [j//self.robloxWindow.multi for j in res[1]]
                 mouse.moveTo(x+x2, y+y2)
                 time.sleep(0.08)
                 mouse.moveBy(1,3)
