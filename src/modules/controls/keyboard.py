@@ -13,8 +13,22 @@ if TYPE_CHECKING:
 
 #pydirectinput sends scancodes, which Roblox on Windows reads (pyautogui only sends virtual keys)
 if sys.platform == "win32":
+    import ctypes
     import pydirectinput as keys
     keys.PAUSE = pag.PAUSE
+    #pydirectinput's codes for Page Up and Page Down aren't real scan codes, so Roblox never saw them
+    _PAGE_KEYS = {"pageup": (0x21, 0x49), "pagedown": (0x22, 0x51)} #virtual key, scan code
+    def _pageKeys(send, up):
+        def wrapper(key, *args, **kwargs):
+            if key not in _PAGE_KEYS:
+                return send(key, *args, **kwargs)
+            ctypes.windll.user32.keybd_event(*_PAGE_KEYS[key], 0x1 | (0x2 if up else 0), 0) #extended key, key up
+            if kwargs.get("_pause", True):
+                time.sleep(keys.PAUSE)
+            return True
+        return wrapper
+    keys.keyDown = _pageKeys(keys.keyDown, False)
+    keys.keyUp = _pageKeys(keys.keyUp, True)
 else:
     keys = pag
 
