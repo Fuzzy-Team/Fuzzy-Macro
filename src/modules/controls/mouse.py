@@ -15,14 +15,25 @@ else:
     import Quartz
 
 pynputMouse = Controller()
+
+#On Windows, pyautogui and pynput place the cursor without sending any mouse input, so Roblox never
+#saw it move and clicks did nothing. A pixel there and back tells it where the cursor is.
+def reportMove():
+    if IS_WINDOWS:
+        ctypes.windll.user32.mouse_event(MOUSEEVENTF_MOVE, 1, 0, 0, 0)
+        time.sleep(0.02)
+        ctypes.windll.user32.mouse_event(MOUSEEVENTF_MOVE, -1, 0, 0, 0)
+
 #move the mouse instantly
 def teleport(x,y):
     pag.moveTo(*virtual_display.to_global(x, y))
+    reportMove()
 
 def moveTo(x,y, delay = 0.1):
     x, y = virtual_display.to_global(x, y)
     pag.moveTo(x, y, delay)
     pynputMouse.position = (x, y)
+    reportMove()
 
 #pyautogui posts left button events without a click state, which makes WindowServer's gesture
 #handling lag on macOS 27. Post them the way pyautogui does, plus click state 1.
@@ -48,6 +59,7 @@ def mouseUp():
 def moveBy(x = 0,y = 0, pause=True):
     if virtual_display.active(): virtual_display.state(require_window=True)
     pag.move(x, y, _pause=pause)  
+    reportMove()
 
 def rightDragBy(x, y):
     """Send relative camera motion while the caller holds the right button."""
