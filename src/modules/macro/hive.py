@@ -342,7 +342,8 @@ class HiveMixin:
             stickerBookImg = self.adjustImage("./images/menu", "stickerbookclose") #sticker book
             x = self.robloxWindow.mx+250
             y = self.robloxWindow.my+110
-            res = locateImageOnScreen(stickerBookImg, x, y, 100, 80, 0.8)
+            # on Windows the close button reaches 90 pixels below the top of this area
+            res = locateImageOnScreen(stickerBookImg, x, y, 100, 100 if sys.platform == "win32" else 80, 0.8)
             if res:
                 if is_stopped():
                     return _finish_reset(False)
