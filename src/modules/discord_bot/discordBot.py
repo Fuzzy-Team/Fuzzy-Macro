@@ -2977,26 +2977,30 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     @bot.tree.command(name = "mute", description = "Mute system audio (macOS only)")
     @requires_discord_permission("system_actions")
     async def mute_audio(interaction: discord.Interaction):
+        if sys.platform != "darwin":
+            await interaction.response.send_message("❌ This command only works on macOS.")
+            return
+        # Starting osascript takes about half a second, so keep it off the event loop
+        await interaction.response.defer()
         try:
-            if sys.platform != "darwin":
-                await interaction.response.send_message("❌ This command only works on macOS.")
-                return
-            _set_macos_mute(True)
-            await interaction.response.send_message("🔇 System audio muted.")
+            await asyncio.get_running_loop().run_in_executor(None, _set_macos_mute, True)
+            await interaction.followup.send("🔇 System audio muted.")
         except Exception as e:
-            await interaction.response.send_message(f"❌ Failed to mute audio: {e}")
+            await interaction.followup.send(f"❌ Failed to mute audio: {e}")
 
     @bot.tree.command(name = "unmute", description = "Unmute system audio (macOS only)")
     @requires_discord_permission("system_actions")
     async def unmute_audio(interaction: discord.Interaction):
+        if sys.platform != "darwin":
+            await interaction.response.send_message("❌ This command only works on macOS.")
+            return
+        # Starting osascript takes about half a second, so keep it off the event loop
+        await interaction.response.defer()
         try:
-            if sys.platform != "darwin":
-                await interaction.response.send_message("❌ This command only works on macOS.")
-                return
-            _set_macos_mute(False)
-            await interaction.response.send_message("🔊 System audio unmuted.")
+            await asyncio.get_running_loop().run_in_executor(None, _set_macos_mute, False)
+            await interaction.followup.send("🔊 System audio unmuted.")
         except Exception as e:
-            await interaction.response.send_message(f"❌ Failed to unmute audio: {e}")
+            await interaction.followup.send(f"❌ Failed to unmute audio: {e}")
     
     @bot.tree.command(name = "disablegoo", description = "Disable goo for a specific field")
     @requires_discord_permission("configuration")
