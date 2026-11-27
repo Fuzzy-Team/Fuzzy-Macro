@@ -190,7 +190,9 @@ def enterRobloxFullscreen():
 
 # ---- Windows ----
 # Roblox is found by its process, not its window title, so a browser tab named "Roblox" never matches.
-ROBLOX_EXE = "RobloxPlayerBeta.exe"
+# The website installer runs RobloxPlayerBeta.exe. The Microsoft Store version runs Windows10Universal.exe
+# inside a window that ApplicationFrameHost.exe owns.
+ROBLOX_EXES = ("RobloxPlayerBeta.exe", "Windows10Universal.exe")
 
 if IS_WINDOWS:
     from ctypes import wintypes
@@ -210,22 +212,40 @@ if IS_WINDOWS:
     user32.MonitorFromWindow.argtypes = [HWND, wintypes.DWORD]
     user32.MonitorFromWindow.restype = ctypes.c_void_p
     user32.GetMonitorInfoW.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    user32.GetAncestor.argtypes = [HWND, wintypes.UINT]
+    user32.GetAncestor.restype = HWND
+    user32.GetClassNameW.argtypes = [HWND, wintypes.LPWSTR, ctypes.c_int]
+    user32.GetWindowTextW.argtypes = [HWND, wintypes.LPWSTR, ctypes.c_int]
+    user32.FindWindowExW.argtypes = [HWND, HWND, wintypes.LPCWSTR, wintypes.LPCWSTR]
+    user32.FindWindowExW.restype = HWND
 
     class _MonitorInfo(ctypes.Structure):
         _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT), ("rcWork", wintypes.RECT), ("dwFlags", wintypes.DWORD)]
 
 def _robloxPids():
-    out = subprocess.run(["tasklist", "/FI", f"IMAGENAME eq {ROBLOX_EXE}", "/FO", "CSV", "/NH"],
+    out = subprocess.run(["tasklist", "/FO", "CSV", "/NH"],
                          capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW).stdout
+    names = {exe.lower() for exe in ROBLOX_EXES}
     pids = set()
     for line in out.splitlines():
         cols = [c.strip('"') for c in line.split('","')]
-        if len(cols) > 1 and cols[0].strip('"').lower() == ROBLOX_EXE.lower():
+        if len(cols) > 1 and cols[0].strip('"').lower() in names:
             pids.add(int(cols[1]))
     return pids
 
+def _windowText(hwnd, read):
+    buffer = ctypes.create_unicode_buffer(256)
+    read(hwnd, buffer, 256)
+    return buffer.value
+
+def _storeRobloxContent(hwnd):
+    """The Store version's drawing area, or None if hwnd is not its window frame."""
+    if _windowText(hwnd, user32.GetClassNameW) != "ApplicationFrameWindow" or _windowText(hwnd, user32.GetWindowTextW) != "Roblox":
+        return None
+    return user32.FindWindowExW(hwnd, None, "ApplicationFrameInputSinkWindow", None) or None
+
 def _robloxWindows():
-    """Visible top level windows owned by the Roblox player."""
+    """Visible windows of the Roblox player. For the Store version this is its content window inside the frame."""
     pids = _robloxPids()
     found = []
     if not pids:
@@ -233,8 +253,12 @@ def _robloxWindows():
     def visit(hwnd, _):
         pid = wintypes.DWORD()
         user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-        if pid.value in pids and user32.IsWindowVisible(hwnd):
+        if not user32.IsWindowVisible(hwnd):
+            return True
+        if pid.value in pids:
             found.append(hwnd)
+        elif content := _storeRobloxContent(hwnd):
+            found.append(content)
         return True
     user32.EnumWindows(ctypes.WINFUNCTYPE(wintypes.BOOL, HWND, wintypes.LPARAM)(visit), 0)
     return found
@@ -256,13 +280,13 @@ def isAppFocusedWin(app="Roblox"):
         return False
     pid = wintypes.DWORD()
     user32.GetWindowThreadProcessId(foreground, ctypes.byref(pid))
-    return pid.value in _robloxPids()
+    return pid.value in _robloxPids() or any(user32.GetAncestor(hwnd, 2) == foreground for hwnd in _robloxWindows())
 
 def openAppWin(app="Roblox"):
     windows = _robloxWindows()
     if not windows:
         return False
-    hwnd = windows[0]
+    hwnd = user32.GetAncestor(windows[0], 2) #GA_ROOT: the Store version's frame, not its content window
     if user32.IsIconic(hwnd):
         user32.ShowWindow(hwnd, 9) #SW_RESTORE
     user32.SetForegroundWindow(hwnd)
@@ -272,7 +296,7 @@ def openDeeplinkWin(link):
     os.startfile(link)
 
 def closeAppWin(app):
-    subprocess.call(["taskkill", "/F", "/IM", ROBLOX_EXE], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    subprocess.call(["taskkill", "/F"] + [arg for exe in ROBLOX_EXES for arg in ("/IM", exe)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                     creationflags=subprocess.CREATE_NO_WINDOW)
 
 def getWindowSizeWin(windowName):
