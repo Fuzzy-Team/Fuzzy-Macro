@@ -1,3 +1,4 @@
+import sys
 import threading
 import time
 from collections import defaultdict
@@ -111,6 +112,11 @@ def watch_for_hotkeys(run):
     def keys_match_keybind(keybind):
         expected_keys = parse_keybind(keybind)
         active_keys = {key for key in pressed_keys if key not in IGNORED_KEYS}
+        if sys.platform == "win32":
+            # The listener also sees the keys the macro is holding, so on Windows only the modifiers have
+            # to match exactly. Otherwise pause did nothing while the macro was walking.
+            expected = set(expected_keys)
+            return bool(expected) and expected <= active_keys and active_keys & set(MODIFIER_KEYS) <= expected
         return bool(expected_keys) and active_keys == set(expected_keys)
 
     def is_stop_keybind_held():
@@ -164,9 +170,7 @@ def watch_for_hotkeys(run):
                         release_inputs()
                         set_run_state(0, 0)
 
-                if keys_match_keybind(settings.get("start_keybind", "F1")):
-                    if run.value != 3:  # only start from fully stopped
-                        return
+                if run.value == 3 and keys_match_keybind(settings.get("start_keybind", "F1")):
                     if gui_call("isAnyToolRunning"):
                         show_message("Tool Running", "Stop the running tool before starting the macro.")
                         return
@@ -176,8 +180,8 @@ def watch_for_hotkeys(run):
                     return
 
                 for setting, default, start_tool, title in TOOL_KEYBINDS:
-                    if keys_match_keybind(settings.get(setting, default)):
-                        if run.value != 3 or debounced(setting):
+                    if run.value == 3 and keys_match_keybind(settings.get(setting, default)):
+                        if debounced(setting):
                             return
                         result = gui_call(start_tool)
                         if result is not None and not result.get("ok") and not gui_call("isAnyToolRunning"):

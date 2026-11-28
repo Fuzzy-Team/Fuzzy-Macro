@@ -13,12 +13,37 @@ import os
 import re
 import tempfile
 import threading
+import time
 from contextlib import contextmanager
 
 try:
     import fcntl
-except ImportError:  # pragma: no cover - Windows fallback
+except ImportError:  # Windows
     fcntl = None
+    import msvcrt
+
+
+def replaceFile(source, destination):
+    """os.replace that waits out a reader holding the destination open, which Windows refuses to replace."""
+    for attempt in range(20):
+        try:
+            return os.replace(source, destination)
+        except PermissionError:
+            if os.name != "nt" or attempt == 19:
+                raise
+            time.sleep(0.05)
+
+
+def readFile(path, mode="rb"):
+    """Read a whole file. A replaceFile in another process briefly makes Windows refuse to open it, so wait that out."""
+    for attempt in range(20):
+        try:
+            with open(path, mode) as handle:
+                return handle.read()
+        except PermissionError:
+            if os.name != "nt" or attempt == 19:
+                raise
+            time.sleep(0.01)
 
 
 class MacroProfileError(Exception):
@@ -284,8 +309,7 @@ class MacroProfileStore:
 
     @staticmethod
     def _read_fields_file(path):
-        with open(path, encoding="utf-8") as handle:
-            raw = handle.read().strip()
+        raw = readFile(path).decode("utf-8").strip()
         value = ast.literal_eval(raw) if raw else {}
         if not isinstance(value, dict):
             raise ValueError("expected an object")
@@ -302,8 +326,7 @@ class MacroProfileStore:
     def _read_settings_file(path, defaults, warnings):
         """Parse key=value lines. A line that isn't a setting is skipped (and reported)
         rather than failing the file, so one bad line can't reset every other setting."""
-        with open(path, "rb") as handle:
-            content = handle.read()
+        content = readFile(path)
         try:
             raw = content.decode("utf-8")
         except UnicodeDecodeError:
@@ -523,11 +546,25 @@ class MacroProfileStore:
         with open(lock_path, "a+") as lock_file:
             if fcntl is not None:
                 fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            else:
+                lock_file.seek(0)
+                deadline = time.monotonic() + 30
+                while True:  # LK_LOCK only retries once a second, so poll instead
+                    try:
+                        msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+                        break
+                    except OSError:
+                        if time.monotonic() > deadline:
+                            raise
+                        time.sleep(0.01)
             try:
                 yield
             finally:
                 if fcntl is not None:
                     fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                else:
+                    lock_file.seek(0)
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
 
     def _write_file(self, path, data, fields=False, changed=None):
         if fields:
@@ -583,7 +620,7 @@ class MacroProfileStore:
                 handle.flush()
                 os.fsync(handle.fileno())
                 written = os.fstat(handle.fileno())
-            os.replace(temporary, path)
+            replaceFile(temporary, path)
             return (written.st_mtime_ns, written.st_size, written.st_ino)
         except Exception:
             try:

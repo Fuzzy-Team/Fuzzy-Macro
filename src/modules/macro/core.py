@@ -1,5 +1,6 @@
 import copy
 import json
+import sys
 import threading
 import traceback
 import time as raw_time
@@ -478,8 +479,8 @@ class macro(
         #this is done by checking if all pixels at the top of the screen are black
         topScreen = mssScreenshot(0, 0, self.robloxWindow.mw, 2)
         extrema = topScreen.convert("L").getextrema()
-        #all are black
-        if extrema == (0, 0):
+        #all are black. Only the macOS notch scaling does this.
+        if sys.platform == "darwin" and extrema == (0, 0):
             messageBox.msgBox(text='It seems like you have not enabled roblox scaling. The macro will not work properly.\n1. Close Roblox\n2. Go to finder -> applications -> right click roblox -> get info -> enable "scale to fit below built-in camera"', title='Roblox scaling')
         time.sleep(1)
         self.moveMouseToDefault()
@@ -491,7 +492,7 @@ class macro(
         mouse.moveBy(100, 0)
         time.sleep(0.15)
         newX = mouse.getPos()[0]
-        if originalX == newX:
+        if sys.platform == "darwin" and originalX == newX:
             messageBox.msgBox(text='It seems like terminal does not have the accessibility permission. The macro will not work properly.\n\nTo fix it, go to System Settings -> Privacy and Security -> Accessibility -> add and enable Terminal.\n\nVisit https://fuzzy-team.gitbook.io/fuzzy-macro/common-fixes/terminal-permissions for detailed instructions\n\n NOTE: This popup might be incorrect. If the macro is able to input keypresses and interact with the game, you can dismiss this popup', title='Accessibility Permission')
         time.sleep(1)
 

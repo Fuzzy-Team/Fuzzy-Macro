@@ -1,6 +1,7 @@
 import atexit
 import ctypes
 import eel
+import gevent
 import multiprocessing
 import pyautogui as pag
 import signal
@@ -29,6 +30,14 @@ def getCrashRestartDelay(consecutiveCrashes):
     index = min(max(consecutiveCrashes, 1), len(CRASH_RESTART_DELAYS)) - 1
     return CRASH_RESTART_DELAYS[index]
 
+
+def killProcess(proc):
+    """Force-kill a child. Windows refuses a second TerminateProcess on a child that is already exiting,
+    so a child that outlives terminate() is left to finish exiting instead of crashing the app."""
+    try:
+        proc.kill()
+    except PermissionError:
+        print(f"Process {proc.pid} did not exit after terminate")
 
 def runApp(macroTarget):
     print("Loading gui...")
@@ -86,8 +95,11 @@ def runApp(macroTarget):
     logger = logModule.log(logQueue, False, None, False, discordMessageQueue=discordMessageQueue)
     gui.configureToolRuntime(logger=logger, status=status, presence=presence, ssa_command=ssaCommand)
 
-    disconnectCooldownUntil = 0
+    disconnectCheckAt = 0
+    disconnectPopupIgnoredUntil = 0 #after a disconnect, so its pop-up isn't counted twice
     disconnectDetected = False
+    robloxWindowSeenBy = None #the macro process that has had a Roblox window, for the Windows check below
+    robloxWindowMisses = 0
 
     #add missing defaults to the current profile's files and apply migrations
     settingsManager.ensureRuntimeData()
@@ -119,10 +131,14 @@ def runApp(macroTarget):
     #setup stream class
     stream = cloudflaredStream()
     standbyCaffeinateProc = None
+    ES_CONTINUOUS, ES_SYSTEM_REQUIRED, ES_DISPLAY_REQUIRED = 0x80000000, 0x1, 0x2
 
     def stopStandbyKeepAwake():
         """Stop only the caffeinate instance started by this macro."""
         nonlocal standbyCaffeinateProc
+        if sys.platform == "win32":
+            ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS)
+            return
         if standbyCaffeinateProc is None:
             return
         if standbyCaffeinateProc.poll() is None:
@@ -139,6 +155,9 @@ def runApp(macroTarget):
 
     def startStandbyKeepAwake():
         nonlocal standbyCaffeinateProc
+        if sys.platform == "win32":
+            #applies to the calling thread until stopStandbyKeepAwake runs on it
+            return bool(ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED))
         if standbyCaffeinateProc is not None and standbyCaffeinateProc.poll() is None:
             return True
         try:
@@ -195,7 +214,7 @@ def runApp(macroTarget):
                 discordBotProc.terminate()
                 discordBotProc.join(timeout=2)
                 if discordBotProc.is_alive():
-                    discordBotProc.kill()
+                    killProcess(discordBotProc)
                     discordBotProc.join(timeout=2)
         except NameError:
             pass
@@ -222,11 +241,11 @@ def runApp(macroTarget):
             macroProc.terminate()
             macroProc.join(timeout=2)
             if macroProc.is_alive():
-                macroProc.kill()
+                killProcess(macroProc)
                 macroProc.join(timeout=2)
         macroProc = None
         stream.stop()
-        #if discordBotProc.is_alive(): discordBotProc.kill()
+        #if discordBotProc.is_alive(): killProcess(discordBotProc)
         releaseInputsSafely()
         releaseInputsSafely()
     
@@ -243,9 +262,14 @@ def runApp(macroTarget):
             pass  # eel may not be ready yet
 
     atexit.register(onExit)
-    # run_macro.command and the Discord /close command stop the app with SIGTERM.
+    # run_macro.command stops the app with SIGTERM.
     # Exit through SystemExit so onExit still stops the macro and releases keys.
     signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(0))
+    quitRequested = []
+    if sys.platform == "win32":
+        # gevent's Windows loop can swallow a KeyboardInterrupt raised inside its callbacks,
+        # so Ctrl+C only marks the quit and the main loop exits through SystemExit.
+        signal.signal(signal.SIGINT, lambda signum, frame: quitRequested.append(signum))
 
     #setup and launch gui
     gui.run = run
@@ -267,35 +291,36 @@ def runApp(macroTarget):
     
     #use run.value to control the macro loop
 
-    #check color profile
-    try:
-        colorProfileManager = DisplayColorProfile()
-        currentProfileColor = colorProfileManager.getCurrentColorProfile()
-        if not "sRGB" in currentProfileColor:
-            try:
-                if messageBox.msgBoxOkCancel(title="Incorrect Color Profile", text=f"You current display's color profile is {currentProfileColor} but sRGB is required for the macro.\nPress 'Ok' to change color profiles"):
-                    colorProfileManager.resetDisplayProfile()
-                    colorProfileManager.setCustomProfile("/System/Library/ColorSync/Profiles/sRGB Profile.icc")
-                    messageBox.msgBox(title="Color Profile Success", text="Successfully changed the current color profile to sRGB")
+    #color profile, screen recording and keyboard access only apply to macOS
+    if sys.platform == "darwin":
+        try:
+            colorProfileManager = DisplayColorProfile()
+            currentProfileColor = colorProfileManager.getCurrentColorProfile()
+            if not "sRGB" in currentProfileColor:
+                try:
+                    if messageBox.msgBoxOkCancel(title="Incorrect Color Profile", text=f"You current display's color profile is {currentProfileColor} but sRGB is required for the macro.\nPress 'Ok' to change color profiles"):
+                        colorProfileManager.resetDisplayProfile()
+                        colorProfileManager.setCustomProfile("/System/Library/ColorSync/Profiles/sRGB Profile.icc")
+                        messageBox.msgBox(title="Color Profile Success", text="Successfully changed the current color profile to sRGB")
 
-            except Exception as e:
-                messageBox.msgBox(title="Failed to change color profile", text=e)
-    except Exception:
-        pass
+                except Exception as e:
+                    messageBox.msgBox(title="Failed to change color profile", text=e)
+        except Exception:
+            pass  # An unavailable color profile must not prevent startup.
     
-    #check full keyboard access
-    try:
-        result = subprocess.run(
-            ["defaults", "read", "com.apple.universalaccess", "KeyboardAccessEnabled"],
-            capture_output=True,
-            text=True
-        )
-        value = result.stdout.strip()
-        if value == "1":
-            messageBox.msgBox(title="Full Keyboard Access", text = "Full Keyboard Access is enabled. The macro will not work properly\
-                \nTo disable it, go to System Settings -> Accessibility -> Keyboard -> uncheck 'Full Keyboard Access'")
-    except Exception as e:
-        print("Error reading Full Keyboard Access:", e)
+        #check full keyboard access
+        try:
+            result = subprocess.run(
+                ["defaults", "read", "com.apple.universalaccess", "KeyboardAccessEnabled"],
+                capture_output=True,
+                text=True
+            )
+            value = result.stdout.strip()
+            if value == "1":
+                messageBox.msgBox(title="Full Keyboard Access", text = "Full Keyboard Access is enabled. The macro will not work properly\
+                    \nTo disable it, go to System Settings -> Accessibility -> Keyboard -> uncheck 'Full Keyboard Access'")
+        except Exception as e:
+            print("Error reading Full Keyboard Access:", e)
 
     discordBotProc = None
     prevDiscordBotToken = None
@@ -353,7 +378,7 @@ def runApp(macroTarget):
             Thread(target=waitForStreamURL, daemon=True).start()
             return True
 
-        messageBox.msgBox(text='Cloudflared is required for streaming but is not installed. Visit https://fuzzy-team.gitbook.io/fuzzy-macro/discord-setup/stream-setup for installation instructions', title='Cloudflared not installed')
+        showMessageBox(text='Cloudflared is required for streaming but is not installed. Visit https://fuzzy-team.gitbook.io/fuzzy-macro/discord-setup/stream-setup for installation instructions', title='Cloudflared not installed')
         return False
 
     def processStreamControlCommands(settings):
@@ -383,6 +408,9 @@ def runApp(macroTarget):
                 break
 
             action = str(command.get("action", "")).lower()
+            if action == "quit":
+                # Sent by Discord /close. SystemExit runs onExit; a Windows process kill would skip it.
+                sys.exit(0)
             if action == "disable":
                 stopStandbyKeepAwake()
                 standbyState.active = False
@@ -404,7 +432,7 @@ def runApp(macroTarget):
             if not startStandbyKeepAwake():
                 standbyState.active = False
                 standbyState.deadline = 0.0
-                logger.webhook("Macro Standby Failed", "Could not start macOS keep-awake mode.", "red", route_category="macro_status")
+                logger.webhook("Macro Standby Failed", "Could not keep the computer awake.", "red", route_category="macro_status")
                 continue
 
             standbyState.active = True
@@ -445,10 +473,23 @@ def runApp(macroTarget):
                 route_category="macro_status",
             )
 
+    def showMessageBox(title, text):
+        # Native dialogs wait on a worker so Discord /close can still reach onExit.
+        dialog = gevent.get_hub().threadpool.spawn(messageBox.msgBox, title, text)
+        while not dialog.ready():
+            if quitRequested:
+                sys.exit(0)
+            processStandbyCommands()
+            eel.sleep(0.1)
+        dialog.get()
+        processStandbyCommands()
+
     while True:
         # Keep Eel responsive so GUI controls and hotkey recording checks can
         # complete. Standby still skips settings refresh and macro supervision.
         eel.sleep(1 if standbyState.active else 0.5)
+        if quitRequested:
+            sys.exit(0)
 
         current_time = time.time()
         processStandbyCommands()
@@ -531,7 +572,7 @@ def runApp(macroTarget):
                 discordBotProc.terminate()
                 discordBotProc.join(timeout=2)
                 if discordBotProc.is_alive():
-                    discordBotProc.kill()
+                    killProcess(discordBotProc)
                     discordBotProc.join(timeout=1)
             discordBotProc = multiprocessing.Process(target=discordBot, args=(currentDiscordBotToken, run, status, skipTask, recentLogs, pin_requests, updateGUI, discordMessageQueue, planterCommandQueue, streamControlQueue, skipServer, standbyCommandQueue, standbyState, ssaCommand), daemon=True)
             prevDiscordBotToken = currentDiscordBotToken
@@ -542,7 +583,7 @@ def runApp(macroTarget):
             discordBotProc.terminate()
             discordBotProc.join(timeout=2)
             if discordBotProc.is_alive():
-                discordBotProc.kill()
+                killProcess(discordBotProc)
                 discordBotProc.join(timeout=1)
             discordBotProc = None
             prevDiscordBotToken = None
@@ -618,7 +659,7 @@ def runApp(macroTarget):
                 names = " and ".join(missingPerms)
                 text = f"Terminal does not have the {names} permission. The macro cannot see or click anything without it.\n\nTo fix it, go to System Settings -> Privacy & Security -> {names}, add and enable Terminal in each, then restart Terminal and the macro."
                 logger.webhook("Missing Permission", text, "red", route_category="system")
-                messageBox.msgBox(title="Missing Permission", text=text)
+                showMessageBox(title="Missing Permission", text=text)
                 run.value = 3
                 showRunState(3)
                 continue
@@ -632,7 +673,7 @@ def runApp(macroTarget):
             except Exception as error:
                 releaseInputsSafely()
                 logger.webhook("1080p Display Error", str(error), "red", route_category="system")
-                messageBox.msgBox(title="1080p Display Error", text=str(error))
+                showMessageBox(title="1080p Display Error", text=str(error))
                 run.value = 3
                 showRunState(3)
                 continue
@@ -655,7 +696,7 @@ def runApp(macroTarget):
                 for field in setdat.get("fields", []):
                     fs = fieldSettings.get(field, {})
                     if fs.get("field_drift_compensation", False) and setdat.get("sprinkler_type") != "saturator":
-                        messageBox.msgBox(title="Field Drift Compensation", text=f"You have Field Drift Compensation enabled for {field} field, \
+                        showMessageBox(title="Field Drift Compensation", text=f"You have Field Drift Compensation enabled for {field} field, \
                                         but you do not have Supreme Saturator as your sprinkler type in configs.\n\
                                         Color-based Field Drift Compensation requires the Supreme Saturator.\n\
                                         Enable 'Use Sprinkler Model For Field Drift Compensation' in Config to use AI detection with any sprinkler, \
@@ -667,9 +708,11 @@ def runApp(macroTarget):
                 if setdat[f"blender_item_{i}"] != "none" and (setdat[f"blender_repeat_{i}"] or setdat[f"blender_repeat_inf_{i}"]):
                     validBlender = True
             if not validBlender:
-                messageBox.msgBox(title="Blender", text="You have blender enabled, \
+                showMessageBox(title="Blender", text="You have blender enabled, \
                                     but there are no more items left to craft.\n\
 				                    Check the 'repeat' setting on your blender items and reset blender data.")
+            if run.value != 1:
+                continue  # Stop or Standby may have arrived while a warning was open.
             #macro proc
             macroProc = startMacroProcess()
             macroProcStartedAt = time.time()
@@ -797,10 +840,12 @@ def runApp(macroTarget):
                 print(f"Error generating final report: {e}")
                 import traceback
                 traceback.print_exc()
-        elif run.value == 4: #disconnected
+        elif run.value == 4 or (run.value == 2 and disconnectDetected): #disconnected
             if macroProc and macroProc.is_alive():
-                macroProc.kill()
-                macroProc.join()
+                killProcess(macroProc)
+                macroProc.join(timeout=2)
+                if macroProc.is_alive():
+                    continue  # Keep supervising this child before starting a replacement.
             if disconnectDetected:
                 # The supervisor owns mid-session disconnect detection; persist the
                 # count after the macro process stops and before its replacement starts.
@@ -928,19 +973,32 @@ def runApp(macroTarget):
         
         # Only read the screen once a macro process is actually running; during a
         # crash backoff Roblox may be gone and the pending restart owns the window.
-        if run.value == 2 and macroProc and macroProc.is_alive() and time.time() > disconnectCooldownUntil:
+        if run.value == 2 and macroProc and macroProc.is_alive() and time.time() > disconnectCheckAt:
             # checking every few seconds is enough to catch a disconnect
-            disconnectCooldownUntil = time.time() + 5
-            img = adjustImage("./images/menu", "disconnect", screenInfo["display_type"])
-            try:
-                wmx, wmy, wmw, wmh = getWindowSize("roblox roblox")
-                disconnected = locateImageOnScreen(img, wmx+wmw/3, wmy+wmh/2.8, wmw/2.3, wmh/5, 0.7)
-            except virtual_display.DisplayError:
-                # Roblox has no window on the virtual display yet (starting or rejoining).
-                # A failing display is stopped by the display check above.
-                disconnected = False
+            disconnectCheckAt = time.time() + 5
+            disconnected = False
+            if time.time() > disconnectPopupIgnoredUntil:
+                img = adjustImage("./images/menu", "disconnect", screenInfo["display_type"])
+                try:
+                    wmx, wmy, wmw, wmh = getWindowSize("roblox roblox")
+                    disconnected = locateImageOnScreen(img, wmx+wmw/3, wmy+wmh/2.8, wmw/2.3, wmh/5, 0.7)
+                except virtual_display.DisplayError:
+                    # Roblox has no window on the virtual display yet (starting or rejoining).
+                    # A failing display is stopped by the display check above.
+                    pass
+            # Closing Roblox on Windows shows no pop-up, and the macro kept sending keys to other windows for
+            # almost three minutes. A rejoin closes Roblox itself, and a new macro may not have opened it yet.
+            # It runs during the pop-up's 5 minute pause, since only the replacement macro's own window counts.
+            if sys.platform == "win32":
+                if appManager.hasRobloxWindow():
+                    robloxWindowSeenBy, robloxWindowMisses = macroProc, 0
+                elif robloxWindowSeenBy is macroProc and status.value != "rejoining":
+                    robloxWindowMisses += 1
+                    if robloxWindowMisses >= 2:
+                        robloxWindowSeenBy = None
+                        disconnected = True
             if disconnected:
                 print("disconnected")
                 disconnectDetected = True
-                run.value = 4
-                disconnectCooldownUntil = time.time() + 300  # 5 min cooldown
+                # Keep the detection local so it cannot overwrite a concurrent Stop.
+                disconnectPopupIgnoredUntil = time.time() + 300

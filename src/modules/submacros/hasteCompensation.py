@@ -1,4 +1,7 @@
 import base64
+import sys
+import cv2
+import numpy as np
 from PIL import Image
 from io import BytesIO
 from modules import bitmap_matcher
@@ -37,8 +40,63 @@ class HasteCompensationRevamped():
 
             self.hastePlus = Image.new('RGBA', (20, 1), '#eddb4cff')
 
+        # On Windows a plain white line also matches hive art, pads and name tags far from the buffs,
+        # so haste is recognised by the running figure on its icon instead.
+        self.hasteFigure = None
+        if sys.platform == "win32" and not self.robloxWindow.isRetina:
+            self.hasteFigure = self._loadHasteFigure()
+
         self.prevHaste = 0
         self.endTime = 0
+
+    def _loadHasteFigure(self):
+        icon = np.asarray(Image.open("./images/buffs/haste-icon-windows.png").convert("RGB"), dtype=np.int16)
+        figure = ((icon.max(axis=2) - icon.min(axis=2) <= 8) & (icon.mean(axis=2) < 185)).astype(np.uint8)
+        kernel = np.ones((3, 3), np.uint8)
+        body = cv2.erode(figure, kernel)
+        surround = cv2.dilate(figure, kernel, iterations=3) & (1 - cv2.dilate(figure, kernel))
+        for mask in (body, surround):
+            mask[18:, 12:] = 0  # the stack count is drawn over the lower right
+            mask[[0, -1], :] = 0
+            mask[:, [0, -1]] = 0
+        bodyY, bodyX = np.nonzero(body)
+        return bodyY, bodyX, icon[bodyY, bodyX].mean(axis=1), np.nonzero(surround)
+
+    def findHasteIcons(self, screen):
+        """Left edges of the haste icons in the buff strip, left to right."""
+        strip = np.asarray(screen, dtype=np.int16)[:, :, :3]
+        bodyY, bodyX, shade, (surroundY, surroundX) = self.hasteFigure
+
+        # the white time-left bar ends sharply at the bottom of the icon (rows 37-46 as the icon pops in)
+        white = np.zeros((strip.shape[0], strip.shape[1] + 1), np.int32)
+        np.cumsum(np.abs(strip - 240).max(axis=2) <= 2, axis=1, out=white[:, 1:])
+        share = (white[:, 36:] - white[:, 2:-34]) / 34
+        xs = np.nonzero((share[37:47] - share[38:48]).max(axis=0) >= 0.5)[0]
+        xs = xs[xs <= strip.shape[1] - 38]
+        if not xs.size:
+            return []
+
+        tops = np.array([3, 4, 5])[:, None, None]
+        columns = xs[None, :, None]
+        pixels = strip[tops + bodyY, columns + bodyX]
+        grey = pixels.mean(axis=3)
+        neutral = np.ptp(pixels, axis=3) <= 14
+        # the unfilled part of the icon is dimmed, which darkens the figure slightly
+        dim = np.clip(np.median(grey - shade, axis=2, keepdims=True), -26, 8)
+        bodyFit = (neutral & (np.abs(grey - shade - dim) <= 12)).mean(axis=2)
+        level = np.median(grey, axis=2)[:, :, None, None]
+        around = strip[tops + surroundY, columns + surroundX]
+        outline = (np.abs(around - level).max(axis=3) > 18).mean(axis=2)
+        # saved frames: haste scores at least 0.53 and 0.83; nothing else with the bar scores anywhere near
+        score = np.where((bodyFit >= 0.45) & (outline >= 0.8), bodyFit + outline, 0).max(axis=0)
+
+        icons = []
+        for i in np.argsort(-score):
+            if not score[i]:
+                break
+            if all(abs(int(xs[i]) - x) >= 20 for x in icons):
+                icons.append(int(xs[i]))
+        return sorted(icons)
 
     def _loadNatroBuffBitmap(self, encoded):
         bitmap = bitmap_matcher.create_bitmap_from_base64(encoded)
@@ -81,9 +139,14 @@ class HasteCompensationRevamped():
         hasteX = None
         hasteIcons = 0
 
+        if self.hasteFigure is not None:
+            icons = self.findHasteIcons(screen)
+            hasteIcons = len(icons)
+            hasteX = icons[0] if icons else None
+
         x = 0
         #locate haste. It shares the same color as melody
-        for _ in range(3):
+        for _ in range(3 if self.hasteFigure is None else 0):
             res = bitmap_matcher.find_bitmap_cython(screen, self.hasteBitmap, x=x, variance=0)
             if not res:
                 break
@@ -109,8 +172,10 @@ class HasteCompensationRevamped():
         
         #search for bear morphs
         bearmorphSpeed = 0
+        # on Windows these one-row bitmaps also match scenery; the buff is only ever on the icons' bottom row
+        bearArea = screen if self.hasteFigure is None else screen.crop((0, 41, screen.width, 42))
         for img in self.bearMorphs:
-            if bitmap_matcher.find_bitmap_cython(screen, img, variance=30):
+            if bitmap_matcher.find_bitmap_cython(bearArea, img, variance=30):
                 bearmorphSpeed = 4
                 break
 

@@ -16,7 +16,7 @@ _engineLoadLock = threading.Lock()
 mac_version = tuple(int(part) for part in platform.mac_ver()[0].split(".")[:2] if part.isdigit())
 
 
-def _loadOcrEngine():
+def loadOcrEngine():
     """Load the OCR backend on the first read instead of at import.
 
     Every macro module imports this module, but only a few tasks read text.
@@ -67,7 +67,10 @@ def _loadOcrEngine():
             except ImportError:
                 pass
             print("Imported easyocr")
-            easyocrReader = easyocr.Reader(['en'])
+            # torch's quantized LSTM crashes with an illegal instruction on CPUs without AVX (emulated or old x86)
+            import torch
+            capability = getattr(getattr(torch.backends, "cpu", None), "get_cpu_capability", lambda: "")()
+            easyocrReader = easyocr.Reader(['en'], quantize=capability != "NO AVX")
             lib = "easyocr"
 
         ocrLib = lib
@@ -172,5 +175,5 @@ def lockedOcrMac(img):
 
 def ocrFunc(img):
     """Read text with whichever engine this Mac supports, loading it on first use."""
-    _loadOcrEngine()
+    loadOcrEngine()
     return _ocrDispatch(img)

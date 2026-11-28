@@ -1,6 +1,8 @@
 from modules.screen import virtual_display
 import re
 import random
+import sys
+import threading
 import requests
 from datetime import datetime, timezone
 import modules.controls.mouse as mouse
@@ -15,16 +17,15 @@ from modules.macro.game_data import (
     LOADING_SCREEN_PERCENT,
     LOADING_SCREEN_TOLERANCE,
     MAIN_GAME_PLACE_ID,
-    REJOIN_COLOR_DURATION,
-    REJOIN_COLOR_PERCENT,
-    REJOIN_COLOR_TOLERANCE,
 )
-from modules.screen.color_check import get_sample_colors, percent_pixels_similar_to_color
+from modules.screen.color_check import percent_pixels_similar_to_color
 from modules.screen.imageSearch import locateImageOnScreen
 from modules.screen.screenshot import mssScreenshot
 
 
 class RejoinMixin:
+    _loadWatchFinished = threading.Event() #replaced by each join attempt, and set by every exit from a rejoin
+
     def _loadingScreenShowing(self):
         w = self.robloxWindow
         percent = percent_pixels_similar_to_color(
@@ -32,6 +33,26 @@ class RejoinMixin:
             tolerance=LOADING_SCREEN_TOLERANCE, return_none_on_error=True,
         )
         return None if percent is None else percent >= LOADING_SCREEN_PERCENT
+
+    def _watchLoadingScreen(self, loaded, finished):
+        """Set `loaded` once the loading screen has been up and is gone."""
+        seen = False
+        goneChecks = 0
+        while not finished.wait(0.5):
+            if not appManager.isAppFocused("Roblox"):
+                goneChecks = 0
+                continue
+            showing = self._loadingScreenShowing()
+            if showing:
+                seen = True
+                goneChecks = 0
+            elif showing is None:
+                goneChecks = 0
+            elif seen:
+                goneChecks += 1
+                if goneChecks >= 2:
+                    loaded.set()
+                    return
 
     def _parseRejoinAtTime(self):
         value = str(self.setdat.get("rejoin_at_time", "00:00")).strip()
@@ -195,6 +216,7 @@ class RejoinMixin:
         # failed rejoin cannot leave night detection disabled.
         if self.skipServer is not None:
             self.skipServer.value = 0
+        self._loadWatchFinished.set()
         self.canDetectNight = True
         self.clear_task_status()
         return result
@@ -233,6 +255,11 @@ class RejoinMixin:
             time.sleep(3)
             if is_stopped():
                 return self._finish_rejoin(False)
+
+        # On Windows loading the text engine can take most of a minute. Left to the join loop's first read,
+        # it uses up the load time limit and the loading screen passes unseen.
+        if sys.platform == "win32":
+            ocr.loadOcrEngine()
 
         # Retry each configured private server in failover order, then use a
         # public server. Skipping one link invalidates only that link, allowing
@@ -289,15 +316,6 @@ class RejoinMixin:
             joinErrorScanAfter = loadStartTime + 5
             signUpImage = self.adjustImage("./images/menu", "signup")
             disconnectImage = self.adjustImage("./images/menu", "disconnect")
-            # prepare rejoin color-based detection
-            try:
-                sample_colors = get_sample_colors()
-            except Exception:
-                sample_colors = [(250, 250, 250), (20, 20, 20)]
-            percent_threshold = REJOIN_COLOR_PERCENT
-            sustain_seconds = REJOIN_COLOR_DURATION
-            color_tolerance = REJOIN_COLOR_TOLERANCE
-            sustained_start = 0
             rejoinSuccess = True
             robloxOpenTime = 0
             gameLoaded = False
@@ -312,7 +330,15 @@ class RejoinMixin:
             # sprinkler counts, but an already-open client must see it disappear
             # first, since the old server's sprinkler is still up after launch.
             sawSprinklerGap = not clientAlreadyOpen
-            while not is_stopped() and time.time() - loadStartTime < 36:
+            # On Windows one pass of the loop below can take 14 seconds while Roblox loads, and the
+            # loading screen can be up for only 2, so it is also watched on its own thread.
+            watchedLoad = threading.Event()
+            watchFinished = self._loadWatchFinished = threading.Event()
+            if sys.platform == "win32":
+                threading.Thread(target=self._watchLoadingScreen, args=(watchedLoad, watchFinished), daemon=True).start()
+            # Joins from a closed Roblox have taken up to 43 seconds on Windows.
+            loadTimeout = 60 if sys.platform == "win32" else 36
+            while not is_stopped() and time.time() - loadStartTime < loadTimeout and not watchedLoad.is_set():
                 if joinPS and self.skipServer is not None and self.skipServer.value == 1:
                     self.skipServer.value = 0
                     invalidServerLinks.add(psLink)
@@ -416,7 +442,7 @@ class RejoinMixin:
                 if robloxOpenTime and time.time() - robloxOpenTime > 5:
                     robloxScreen = mssScreenshot(self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw/2, self.robloxWindow.mh/2.5)
                     robloxScreenText = '\n'.join([x[1][0].lower() for x in ocr.ocrRead(robloxScreen)])
-                    if "connect" in robloxScreenText:
+                    if re.search(r"\bconnect", robloxScreenText):
                         print(robloxScreenText)
                         self.logger.webhook("","Roblox Home Page is open","brown","screen")
                         rejoinSuccess = False
@@ -427,42 +453,22 @@ class RejoinMixin:
                     rejoinSuccess = False
                     break
 
-                # Check for sustained dominant color (light/dark) that indicates a stuck screen.
-                try:
-                    if appManager.isAppFocused("Roblox"):
-                        matched = False
-                        for col in sample_colors:
-                            pct = percent_pixels_similar_to_color(self.robloxWindow.mx, self.robloxWindow.my, self.robloxWindow.mw, self.robloxWindow.mh, col, tolerance=color_tolerance)
-                            if pct >= percent_threshold:
-                                matched = True
-                                break
-                        if matched:
-                            if sustained_start == 0:
-                                sustained_start = time.time()
-                            elif time.time() - sustained_start >= sustain_seconds:
-                                self.logger.webhook("","Detected sustained screen color — retrying rejoin","orange","screen")
-                                rejoinSuccess = False
-                                break
-                        else:
-                            sustained_start = 0
-                    else:
-                        sustained_start = 0
-                except Exception:
-                    sustained_start = 0
                 pausedBefore = paused_seconds()
                 time.sleep(1)
                 pausedFor = paused_seconds() - pausedBefore
                 if pausedFor > 0:
                     # Pause time must not count toward the load timeout, the
-                    # join-error delay or the sustained-color timer.
+                    # or the join-error delay.
                     loadStartTime += pausedFor
                     joinErrorScanAfter += pausedFor
                     if robloxOpenTime:
                         robloxOpenTime += pausedFor
                     if lastJoinErrorScan:
                         lastJoinErrorScan += pausedFor
-                    if sustained_start:
-                        sustained_start += pausedFor
+
+            watchFinished.set()
+            if watchedLoad.is_set() and rejoinSuccess:
+                gameLoaded = True
 
             if self.skipServer is not None:
                 self.skipServer.value = 0
@@ -473,7 +479,7 @@ class RejoinMixin:
             if not gameLoaded and rejoinSuccess:
                 self.logger.webhook(
                     "",
-                    f"Game load was not confirmed within 36 seconds; trying the next rejoin target ({launchedAttempts}/{len(attempts)}).",
+                    f"Game load was not confirmed within {loadTimeout} seconds; trying the next rejoin target ({launchedAttempts}/{len(attempts)}).",
                     "red",
                     "screen",
                     ping_category="ping_disconnects",
@@ -562,6 +568,10 @@ class RejoinMixin:
                 if not self.reset(convert=False):
                     return self._finish_rejoin(False)
             else:
+                # The convert itself can travel (Auto Field Boost), and it starts on the claimed pad. Without
+                # this, Windows walked to the cannon as if the hive had never been found, and missed it.
+                if sys.platform == "win32":
+                    self.cannonFromHive = True
                 self.convert(bypass=True)
             self.cannonFromHive = True
             return self._finish_rejoin(True)

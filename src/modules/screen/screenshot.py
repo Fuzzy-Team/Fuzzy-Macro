@@ -1,6 +1,8 @@
 import mss
-import mss.darwin
-mss.darwin.IMAGE_OPTIONS = 0
+import sys
+if sys.platform == "darwin":
+    import mss.darwin
+    mss.darwin.IMAGE_OPTIONS = 0
 from PIL import Image
 import mss.tools
 import time
@@ -116,6 +118,8 @@ def screenshotRobloxWindow(filename = None, regionMultipliers = None):
 
 def benchmarkMSS():
     global usePillow
+    if sys.platform != "darwin":  # the slow capture and the screencapture fallback are macOS-only
+        return True
     try:
         with mss.mss() as sct:
             x, y = virtual_display.to_global(0, 0)

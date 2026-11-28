@@ -1820,7 +1820,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                                     from PIL import ImageDraw, ImageFont
                                     draw = ImageDraw.Draw(img)
                                     try:
-                                        font = ImageFont.truetype("/Library/Fonts/Arial.ttf", 20)
+                                        font = ImageFont.truetype("Arial.ttf", 20)
                                     except Exception:
                                         font = ImageFont.load_default()
 

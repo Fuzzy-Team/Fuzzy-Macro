@@ -6,6 +6,8 @@ import time
 
 import pyautogui as pag
 
+from modules.controls.keyboard import keys
+
 import modules.controls.mouse as mouse
 import modules.misc.appManager as appManager
 from modules.screen.robloxWindow import RobloxWindowBounds
@@ -412,7 +414,7 @@ class SsaRollerRunner:
     def _open_prompt(self):
         if self._prompt_visible():
             return
-        pag.press("e")
+        keys.press("e")
         end = time.time() + OPEN_PROMPT_TIMEOUT
         while not self._prompt_visible():
             if time.time() >= end:
@@ -476,6 +478,8 @@ class SsaRollerRunner:
                 raise RuntimeError("Roblox is not open.")
             appManager.openApp("Roblox")
             time.sleep(0.5)
+            if not appManager.isAppFocused("Roblox"):
+                raise RuntimeError("Could not focus Roblox. Bring its window to the front and try again.")
             self._window = RobloxWindowBounds()
             self._window.setRobloxWindowBounds()
             if self._window.mw <= 0 or self._window.mh <= 0:

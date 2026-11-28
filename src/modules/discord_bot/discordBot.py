@@ -14,7 +14,6 @@ import sys
 import os
 import re
 import asyncio
-import signal
 import json
 import ast
 import math
@@ -2820,7 +2819,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
                 try:
                     draw = ImageDraw.Draw(img)
                     try:
-                        font = ImageFont.truetype("/Library/Fonts/Arial.ttf", 20)
+                        font = ImageFont.truetype("Arial.ttf", 20)
                     except Exception:
                         font = ImageFont.load_default()
                     lines = [f"{n.title()}: {v}%" for n, v in values.items()]
@@ -2929,6 +2928,28 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     @requires_discord_permission("observation")
     async def battery(interaction: discord.Interaction):
         try:
+            if sys.platform == "win32":
+                import ctypes.wintypes
+                class SystemPowerStatus(ctypes.Structure):
+                    _fields_ = [("ACLineStatus", ctypes.c_ubyte), ("BatteryFlag", ctypes.c_ubyte),
+                                ("BatteryLifePercent", ctypes.c_ubyte), ("SystemStatusFlag", ctypes.c_ubyte),
+                                ("BatteryLifeTime", ctypes.wintypes.DWORD), ("BatteryFullLifeTime", ctypes.wintypes.DWORD)]
+                status = SystemPowerStatus()
+                available = ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(status))
+                #BatteryFlag 128 means no battery, BatteryLifePercent 255 means unknown
+                if not available or status.BatteryFlag == 128 or status.BatteryLifePercent == 255:
+                    await interaction.response.send_message("Battery information not found.")
+                else:
+                    if status.BatteryFlag == 255 or status.ACLineStatus == 255:
+                        state = "in an unknown state"
+                    elif status.BatteryFlag & 8:
+                        state = "charging"
+                    elif status.ACLineStatus == 1:
+                        state = "plugged in, not charging"
+                    else:
+                        state = "discharging"
+                    await interaction.response.send_message(f"Battery is at {status.BatteryLifePercent}% and is currently {state}.")
+                return
             output = subprocess.check_output(["pmset", "-g", "batt"], text=True)
             for line in output.split("\n"):
                 if "InternalBattery" in line:
@@ -2972,16 +2993,19 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             if action == "both":
                 run.value = 0
                 await loop.run_in_executor(None, closeApp, "Roblox")
-                await interaction.followup.send("Closing macro and Roblox...")
-                os.kill(os.getppid(), signal.SIGTERM)
+                try:
+                    await interaction.followup.send("Closing macro and Roblox...")
+                finally:
+                    standby_command_queue.put({"action": "quit"})  # quit even if the reply fails
             elif action == "roblox":
                 await loop.run_in_executor(None, closeApp, "Roblox")
                 await interaction.followup.send("Closing Roblox...")
             elif action == "macro":
-                # stop the macro loop but keep the bot running
-                run.value = 0
-                await interaction.followup.send("Stopping macro (Roblox will remain open).")
-                os.kill(os.getppid(), signal.SIGTERM)
+                # onExit stops the macro; setting run.value = 0 first would start a normal Stop and delay the exit.
+                try:
+                    await interaction.followup.send("Stopping macro (Roblox will remain open).")
+                finally:
+                    standby_command_queue.put({"action": "quit"})
             else:
                 await interaction.followup.send("❌ Unknown action. Use: both, roblox, or macro")
         except Exception as e:

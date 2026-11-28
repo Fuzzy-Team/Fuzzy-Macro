@@ -1,4 +1,5 @@
 import os
+import signal
 import sys
 import time as timeModule
 import threading
@@ -11,8 +12,9 @@ import modules.misc.settingsManager as settingsManager
 from modules.screen.screenshot import mssScreenshot
 import modules.logging.webhook as logWebhook
 import mss
-import mss.darwin
-mss.darwin.IMAGE_OPTIONS = 0
+if sys.platform == "darwin":
+    import mss.darwin
+    mss.darwin.IMAGE_OPTIONS = 0
 from modules.screen import virtual_display
 from modules.screen.robloxWindow import RobloxWindowBounds
 
@@ -281,7 +283,8 @@ def logHang(trace):
 def installCrashLog():
     """Log uncaught exceptions in this process's main thread and in its threads."""
     def onException(excType, exc, tb):
-        logException(excType, exc, tb)
+        if excType is not KeyboardInterrupt:  # Ctrl+C is a normal way to quit
+            logException(excType, exc, tb)
         sys.__excepthook__(excType, exc, tb)
 
     sys.excepthook = onException
@@ -301,6 +304,9 @@ def installCrashLog():
 def runLogged(target, *args):
     """Process target wrapper. multiprocessing prints a child's crash without calling sys.excepthook."""
     installCrashLog()
+    if sys.platform == "win32":
+        # Ctrl+C reaches every process on the console. The app stops the macro itself, so it isn't reported as a crash.
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
     try:
         target(*args)
     except Exception:
