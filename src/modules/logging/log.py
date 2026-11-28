@@ -13,6 +13,7 @@ import modules.logging.webhook as logWebhook
 import mss
 import mss.darwin
 mss.darwin.IMAGE_OPTIONS = 0
+from modules.screen import virtual_display
 from modules.screen.robloxWindow import RobloxWindowBounds
 
 colors = {
@@ -379,7 +380,10 @@ class log:
         else:
             print("new window bounds")
             robloxWindow = RobloxWindowBounds()
-            robloxWindow.setRobloxWindowBounds()
+            try:
+                robloxWindow.setRobloxWindowBounds()
+            except virtual_display.DisplayError:
+                return None
 
         screenshotRegions = {
             "screen": (robloxWindow.mx, robloxWindow.my, robloxWindow.mw, robloxWindow.mh),
