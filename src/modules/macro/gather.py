@@ -89,7 +89,7 @@ class GatherMixin:
 
     #place sprinklers by jumping up and down and placing them middair
     #fieldDimensions and startOffset (right, up tiles from the field center) spread sprinklers that place more than one
-    #across the field. Without them, they are all placed where the player stands
+    #across the field. Without them, or with the spread_sprinklers setting off, they are all placed where the player stands
     #sprinklerOffset (right, up tiles) is the field's sprinkler offset, already included in startOffset. It shifts the spread
     def placeSprinkler(self, fieldDimensions=None, startOffset=(0, 0), sprinklerOffset=(0, 0)):
         sprinklerSlot = str(self.setdat['sprinkler_slot'])
@@ -97,7 +97,7 @@ class GatherMixin:
         times = sprinklerCount.get(sprinklerType, 1)
         if is_stopped():
             return False
-        if times > 1 and fieldDimensions:
+        if times > 1 and fieldDimensions and self.setdat.get("spread_sprinklers", True):
             base = (startOffset[0] - sprinklerOffset[0], startOffset[1] - sprinklerOffset[1])
             spots = [(x + sprinklerOffset[0], y + sprinklerOffset[1]) for x, y in sprinklerSpots(times, fieldDimensions, base)]
             return self.placeSprinklersSpread(sprinklerSlot, spots, startOffset)

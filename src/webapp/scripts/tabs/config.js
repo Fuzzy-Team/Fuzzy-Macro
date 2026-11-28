@@ -68,8 +68,14 @@ function hotbarItemSettings() {
     {
       id: "sprinkler_type",
       title: "Sprinkler Type",
-      desc: "The type of sprinkler that you use. Silver, Golden and Diamond sprinklers are spread out across the field when gathering",
+      desc: "The type of sprinkler that you use",
       type: { name: "dropdown", data: ["Basic", "Silver", "Golden", "Diamond", "Saturator"], triggerFunction: saveGeneralTriggerFunction },
+    },
+    {
+      id: "spread_sprinklers",
+      title: "Spread Out Sprinklers",
+      desc: "Place Silver, Golden and Diamond sprinklers across the field when gathering. When off, they are all placed in one spot",
+      type: { name: "checkbox", triggerFunction: saveGeneralTriggerFunction },
     },
     {
       id: "sprinkler_slot",
