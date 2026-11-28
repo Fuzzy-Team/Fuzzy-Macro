@@ -506,7 +506,7 @@ class HourlyReportDrawer:
             try:
                 honeyUp = honeyThisHour >= loadUserLiteral("hourly_report_history.txt")[0]["honey"]
             except (SyntaxError, ValueError, IndexError, KeyError, TypeError):
-                pass
+                pass  # no usable previous hour (first report of a run): keep the up arrow
         if honeyUp:
             self.draw.polygon([(x + 980, y + 119), (x + 955, y + 161), (x + 1005, y + 161)], fill=(0, 255, 0))
         else:
