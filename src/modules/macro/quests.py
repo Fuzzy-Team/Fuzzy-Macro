@@ -805,6 +805,9 @@ class QuestMixin:
                 screen = cv2.cvtColor(screen, cv2.COLOR_BGRA2GRAY)
             return screen
 
+        # What the title search read, so a miss can say how close it came.
+        titleSearch = {"lines": 0, "score": 0.0, "text": ""}
+
         def ocrQuestTitleFromScreen(screen):
             bestMatch = None
             questTitleNoise = ["talk", "complete", "compete", "competer", "collect", "field", "pollen", "tokens", "defeat", "catch"]
@@ -812,9 +815,12 @@ class QuestMixin:
                 line = self.convertCyrillic(text.lower().strip())
                 if not line:
                     continue
+                titleSearch["lines"] += 1
                 if (questGiver in FIXED_LINE_GIVERS or questGiver == "black bear") and questGiver not in line:
                     # Their quest titles can have no giver name on them, so a line is a title when it reads as one of this giver's.
                     score = max(SequenceMatcher(None, line, title).ratio() for title in quest_data[questGiver])
+                    if score > titleSearch["score"]:
+                        titleSearch.update(score=score, text=line)
                     if score >= 0.9:
                         yPos = int(min(point[1] for point in bbox))
                         if bestMatch is None or score > bestMatch[0]:
@@ -980,7 +986,9 @@ class QuestMixin:
         if questTitle is None:
             # A stop ends the scan early, so the quest was not looked for and is not missing.
             if logDetection and not is_stopped():
-                self.logger.webhook("", f"Could not find {questGiver} quest", "orange")
+                closest = (f"closest title read: '{titleSearch['text']}' ({titleSearch['score']:.2f})"
+                           if titleSearch["text"] else f"read {titleSearch['lines']} lines of text")
+                self.logger.webhook("", f"Could not find {questGiver} quest ({closest})", "orange")
             if manageQuestUi and not is_stopped():
                 self.toggleQuest()
                 self.moveMouseToDefault()
