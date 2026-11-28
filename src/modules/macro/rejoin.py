@@ -39,6 +39,9 @@ class RejoinMixin:
         seen = False
         goneChecks = 0
         while not finished.wait(0.5):
+            if not appManager.isAppFocused("Roblox"):
+                goneChecks = 0
+                continue
             showing = self._loadingScreenShowing()
             if showing:
                 seen = True

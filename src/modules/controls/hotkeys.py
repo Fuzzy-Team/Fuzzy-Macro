@@ -170,9 +170,7 @@ def watch_for_hotkeys(run):
                         release_inputs()
                         set_run_state(0, 0)
 
-                if keys_match_keybind(settings.get("start_keybind", "F1")):
-                    if run.value != 3:  # only start from fully stopped
-                        return
+                if run.value == 3 and keys_match_keybind(settings.get("start_keybind", "F1")):
                     if gui_call("isAnyToolRunning"):
                         show_message("Tool Running", "Stop the running tool before starting the macro.")
                         return
@@ -182,8 +180,8 @@ def watch_for_hotkeys(run):
                     return
 
                 for setting, default, start_tool, title in TOOL_KEYBINDS:
-                    if keys_match_keybind(settings.get(setting, default)):
-                        if run.value != 3 or debounced(setting):
+                    if run.value == 3 and keys_match_keybind(settings.get(setting, default)):
+                        if debounced(setting):
                             return
                         result = gui_call(start_tool)
                         if result is not None and not result.get("ok") and not gui_call("isAnyToolRunning"):

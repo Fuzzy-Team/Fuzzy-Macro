@@ -15,7 +15,10 @@ def exitForMissingDependencies(message):
     script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "install_dependencies.bat" if windows else "install_dependencies.command"))
     try:
         if os.path.exists(script):
-            subprocess.Popen(["cmd", "/c", script] if windows else ["/bin/bash", script])
+            if windows:
+                subprocess.Popen(["cmd", "/c", "install_dependencies.bat"], cwd=os.path.dirname(script))
+            else:
+                subprocess.Popen(["/bin/bash", script])
         else:
             messageBox.msgBox(title="Dependencies not installed", text=message)
     except Exception:

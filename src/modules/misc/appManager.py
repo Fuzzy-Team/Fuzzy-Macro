@@ -228,6 +228,11 @@ def _windowText(hwnd, read):
     read(hwnd, buffer, 256)
     return buffer.value
 
+def _windowPid(hwnd):
+    pid = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    return pid.value
+
 def _storeRobloxContent(hwnd):
     """The Store version's drawing area, or None if hwnd is not its window frame."""
     if _windowText(hwnd, user32.GetClassNameW) != "ApplicationFrameWindow" or _windowText(hwnd, user32.GetWindowTextW) != "Roblox":
@@ -241,11 +246,9 @@ def _robloxWindows():
     if not pids:
         return found
     def visit(hwnd, _):
-        pid = wintypes.DWORD()
-        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
         if not user32.IsWindowVisible(hwnd):
             return True
-        if pid.value in pids:
+        if _windowPid(hwnd) in pids:
             found.append(hwnd)
         elif content := _storeRobloxContent(hwnd):
             found.append(content)
@@ -268,15 +271,18 @@ def hasRobloxWindow():
     """False when Roblox is closed, including when only its tray icon is left."""
     return bool(_robloxWindows())
 
-_inputWindow = None #the Roblox window robloxWindowGone last saw
+_inputWindow = None #the Roblox window and owner PID robloxWindowGone last saw
 
 def robloxWindowGone():
     """hasRobloxWindow, reversed, and cheap enough to ask before every key press."""
     global _inputWindow
-    if _inputWindow and user32.IsWindowVisible(_inputWindow):
-        return False
+    if _inputWindow:
+        hwnd, pid = _inputWindow
+        if user32.IsWindowVisible(hwnd) and _windowPid(hwnd) == pid:
+            return False
     hadWindow = _inputWindow is not None
-    _inputWindow = next(iter(_robloxWindows()), None)
+    hwnd = next(iter(_robloxWindows()), None)
+    _inputWindow = (hwnd, _windowPid(hwnd)) if hwnd else None
     if hadWindow and _inputWindow is None:
         #gathering holds the left button, which would stay down over whatever window is in front now
         user32.mouse_event(0x0004, 0, 0, 0, 0) #MOUSEEVENTF_LEFTUP
@@ -286,9 +292,7 @@ def isAppFocusedWin(app="Roblox"):
     foreground = user32.GetForegroundWindow()
     if not foreground:
         return False
-    pid = wintypes.DWORD()
-    user32.GetWindowThreadProcessId(foreground, ctypes.byref(pid))
-    return pid.value in _robloxPids() or any(user32.GetAncestor(hwnd, 2) == foreground for hwnd in _robloxWindows())
+    return _windowPid(foreground) in _robloxPids() or any(user32.GetAncestor(hwnd, 2) == foreground for hwnd in _robloxWindows())
 
 def openAppWin(app="Roblox"):
     windows = _robloxWindows()

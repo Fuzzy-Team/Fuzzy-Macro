@@ -840,10 +840,12 @@ def runApp(macroTarget):
                 print(f"Error generating final report: {e}")
                 import traceback
                 traceback.print_exc()
-        elif run.value == 4: #disconnected
+        elif run.value == 4 or (run.value == 2 and disconnectDetected): #disconnected
             if macroProc and macroProc.is_alive():
                 killProcess(macroProc)
-                macroProc.join()
+                macroProc.join(timeout=2)
+                if macroProc.is_alive():
+                    continue  # Keep supervising this child before starting a replacement.
             if disconnectDetected:
                 # The supervisor owns mid-session disconnect detection; persist the
                 # count after the macro process stops and before its replacement starts.
@@ -998,5 +1000,5 @@ def runApp(macroTarget):
             if disconnected:
                 print("disconnected")
                 disconnectDetected = True
-                run.value = 4
+                # Keep the detection local so it cannot overwrite a concurrent Stop.
                 disconnectPopupIgnoredUntil = time.time() + 300
