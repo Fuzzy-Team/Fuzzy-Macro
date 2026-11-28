@@ -258,8 +258,9 @@ else
 	# Apple Vision OCR needs macOS 10.15, so use easyocr. 1.7.1 is the last release that
 	# works with python-bidi 0.4.2 (the newest for Python 3.7), and torch 1.13.1 is the last
 	# for Python 3.7. --no-deps keeps easyocr from adding a second OpenCV package and
-	# scikit-image (its wheels need macOS 10.15; ocr.py stands in for it).
-	install_pip_package "pyobjc-framework-ColorSync<11.0 pyobjc-framework-ApplicationServices<11.0 easyocr==1.7.1" "--no-deps" || pip_failed
+	# scikit-image (its wheels need macOS 10.15; ocr.py stands in for it). pyobjc 9.2's
+	# ApplicationServices imports CoreText without declaring it, so list CoreText here.
+	install_pip_package "pyobjc-framework-ColorSync<11.0 pyobjc-framework-ApplicationServices<11.0 pyobjc-framework-CoreText<11.0 easyocr==1.7.1" "--no-deps" || pip_failed
 	packages="$packages pyobjc-core<11.0 pyobjc-framework-Cocoa<11.0 $wheels/opencv_python-4.11.0.86-cp37-cp37m-macosx_10_12_x86_64.whl#sha256=6fa718f43386ab0f9d1435592229bb36b53f701d141b70ff048b706e0dd2a4f6 torch==1.13.1 torchvision==0.14.1 scipy shapely pyclipper python-bidi==0.4.2 PyYAML ninja packaging"
 fi
 install_pip_package "$packages" || pip_failed
