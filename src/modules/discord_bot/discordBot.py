@@ -1370,8 +1370,11 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             _add_enabled_disabled(enabled, disabled)
 
         elif category_key == "hive_slot":
-            embed.add_field(name="Preferred", value=str(settings.get("preferred_hive_slot", "Unknown")), inline=True)
-            embed.add_field(name="Claimed", value=str(settings.get("hive_number", "Unknown")), inline=True)
+            if settings.get("always_rejoin", True):
+                embed.add_field(name="Preferred", value=str(settings.get("preferred_hive_slot", "Unknown")), inline=True)
+                embed.add_field(name="Claimed", value=str(settings.get("hive_number", "Unknown")), inline=True)
+            else:
+                embed.add_field(name="Hive Slot", value=str(settings.get("hive_number", "Unknown")), inline=True)
 
         if status_message:
             embed.set_footer(text=status_message)
@@ -2404,7 +2407,7 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             options = []
             for slot in range(1, 7):
                 options.append(discord.SelectOption(label=str(slot), value=str(slot), default=(slot == current)))
-            super().__init__(placeholder="Select hive slot", min_values=1, max_values=1, options=options)
+            super().__init__(placeholder="Select preferred hive slot", min_values=1, max_values=1, options=options)
 
         async def callback(self, interaction: discord.Interaction):
             slot = int(self.values[0])
@@ -2413,6 +2416,23 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             if success and updateGUI is not None:
                 updateGUI.value = 1
             status_message = message if success else "Failed to update hive slot."
+            await _update_category_message(interaction, "hive_slot", status_message=status_message)
+
+    class HiveNumberSelect(discord.ui.Select):
+        def __init__(self, settings: Dict):
+            current = settings.get("hive_number", 1)
+            options = []
+            for slot in range(1, 7):
+                options.append(discord.SelectOption(label=str(slot), value=str(slot), default=(slot == current)))
+            super().__init__(placeholder="Select the hive slot you own", min_values=1, max_values=1, options=options)
+
+        async def callback(self, interaction: discord.Interaction):
+            slot = int(self.values[0])
+            # With Always Rejoin off the macro never claims a hive, so this is the slot it walks from
+            success, message = update_setting("hive_number", slot)
+            if success and updateGUI is not None:
+                updateGUI.value = 1
+            status_message = message if success else "Failed to update the hive slot."
             await _update_category_message(interaction, "hive_slot", status_message=status_message)
 
     class SettingsHomeView(SettingsBaseView):
@@ -2442,7 +2462,11 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
             elif category_key == "utility":
                 self.add_item(UtilityToggleSelect(settings))
             elif category_key == "hive_slot":
-                self.add_item(HiveSlotSelect(settings))
+                # With Always Rejoin off the macro never claims a hive at startup, so set the owned slot instead of a preferred one
+                if settings.get("always_rejoin", True):
+                    self.add_item(HiveSlotSelect(settings))
+                else:
+                    self.add_item(HiveNumberSelect(settings))
 
             self.add_item(RefreshButton(category_key))
             self.add_item(BackButton())
