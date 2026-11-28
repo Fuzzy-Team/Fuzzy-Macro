@@ -58,7 +58,7 @@ def _closeEvenIfBusy(ws, *args, **kwargs):
     try:
         _webSocketClose(ws, *args, **kwargs)
     except ConcurrentObjectUseError:
-        pass
+        pass  # eel must still remove this closed page when its close frame cannot be sent.
 
 _webSocketClose = WebSocket.close
 WebSocket.close = _closeEvenIfBusy

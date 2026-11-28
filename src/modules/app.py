@@ -1,6 +1,7 @@
 import atexit
 import ctypes
 import eel
+import gevent
 import multiprocessing
 import pyautogui as pag
 import signal
@@ -156,8 +157,7 @@ def runApp(macroTarget):
         nonlocal standbyCaffeinateProc
         if sys.platform == "win32":
             #applies to the calling thread until stopStandbyKeepAwake runs on it
-            ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED)
-            return True
+            return bool(ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED))
         if standbyCaffeinateProc is not None and standbyCaffeinateProc.poll() is None:
             return True
         try:
@@ -306,7 +306,7 @@ def runApp(macroTarget):
                 except Exception as e:
                     messageBox.msgBox(title="Failed to change color profile", text=e)
         except Exception:
-            pass
+            pass  # An unavailable color profile must not prevent startup.
     
         #check full keyboard access
         try:
@@ -378,7 +378,7 @@ def runApp(macroTarget):
             Thread(target=waitForStreamURL, daemon=True).start()
             return True
 
-        messageBox.msgBox(text='Cloudflared is required for streaming but is not installed. Visit https://fuzzy-team.gitbook.io/fuzzy-macro/discord-setup/stream-setup for installation instructions', title='Cloudflared not installed')
+        showMessageBox(text='Cloudflared is required for streaming but is not installed. Visit https://fuzzy-team.gitbook.io/fuzzy-macro/discord-setup/stream-setup for installation instructions', title='Cloudflared not installed')
         return False
 
     def processStreamControlCommands(settings):
@@ -432,7 +432,7 @@ def runApp(macroTarget):
             if not startStandbyKeepAwake():
                 standbyState.active = False
                 standbyState.deadline = 0.0
-                logger.webhook("Macro Standby Failed", "Could not start macOS keep-awake mode.", "red", route_category="macro_status")
+                logger.webhook("Macro Standby Failed", "Could not keep the computer awake.", "red", route_category="macro_status")
                 continue
 
             standbyState.active = True
@@ -472,6 +472,17 @@ def runApp(macroTarget):
                 "purple",
                 route_category="macro_status",
             )
+
+    def showMessageBox(title, text):
+        # Native dialogs wait on a worker so Discord /close can still reach onExit.
+        dialog = gevent.get_hub().threadpool.spawn(messageBox.msgBox, title, text)
+        while not dialog.ready():
+            if quitRequested:
+                sys.exit(0)
+            processStandbyCommands()
+            eel.sleep(0.1)
+        dialog.get()
+        processStandbyCommands()
 
     while True:
         # Keep Eel responsive so GUI controls and hotkey recording checks can
@@ -648,7 +659,7 @@ def runApp(macroTarget):
                 names = " and ".join(missingPerms)
                 text = f"Terminal does not have the {names} permission. The macro cannot see or click anything without it.\n\nTo fix it, go to System Settings -> Privacy & Security -> {names}, add and enable Terminal in each, then restart Terminal and the macro."
                 logger.webhook("Missing Permission", text, "red", route_category="system")
-                messageBox.msgBox(title="Missing Permission", text=text)
+                showMessageBox(title="Missing Permission", text=text)
                 run.value = 3
                 showRunState(3)
                 continue
@@ -662,7 +673,7 @@ def runApp(macroTarget):
             except Exception as error:
                 releaseInputsSafely()
                 logger.webhook("1080p Display Error", str(error), "red", route_category="system")
-                messageBox.msgBox(title="1080p Display Error", text=str(error))
+                showMessageBox(title="1080p Display Error", text=str(error))
                 run.value = 3
                 showRunState(3)
                 continue
@@ -685,7 +696,7 @@ def runApp(macroTarget):
                 for field in setdat.get("fields", []):
                     fs = fieldSettings.get(field, {})
                     if fs.get("field_drift_compensation", False) and setdat.get("sprinkler_type") != "saturator":
-                        messageBox.msgBox(title="Field Drift Compensation", text=f"You have Field Drift Compensation enabled for {field} field, \
+                        showMessageBox(title="Field Drift Compensation", text=f"You have Field Drift Compensation enabled for {field} field, \
                                         but you do not have Supreme Saturator as your sprinkler type in configs.\n\
                                         Color-based Field Drift Compensation requires the Supreme Saturator.\n\
                                         Enable 'Use Sprinkler Model For Field Drift Compensation' in Config to use AI detection with any sprinkler, \
@@ -697,9 +708,11 @@ def runApp(macroTarget):
                 if setdat[f"blender_item_{i}"] != "none" and (setdat[f"blender_repeat_{i}"] or setdat[f"blender_repeat_inf_{i}"]):
                     validBlender = True
             if not validBlender:
-                messageBox.msgBox(title="Blender", text="You have blender enabled, \
+                showMessageBox(title="Blender", text="You have blender enabled, \
                                     but there are no more items left to craft.\n\
 				                    Check the 'repeat' setting on your blender items and reset blender data.")
+            if run.value != 1:
+                continue  # Stop or Standby may have arrived while a warning was open.
             #macro proc
             macroProc = startMacroProcess()
             macroProcStartedAt = time.time()

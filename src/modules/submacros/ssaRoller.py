@@ -478,6 +478,8 @@ class SsaRollerRunner:
                 raise RuntimeError("Roblox is not open.")
             appManager.openApp("Roblox")
             time.sleep(0.5)
+            if not appManager.isAppFocused("Roblox"):
+                raise RuntimeError("Could not focus Roblox. Bring its window to the front and try again.")
             self._window = RobloxWindowBounds()
             self._window.setRobloxWindowBounds()
             if self._window.mw <= 0 or self._window.mh <= 0:

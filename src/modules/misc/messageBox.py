@@ -8,6 +8,7 @@ if sys.platform == "win32":
     IDOK = 1
 
     def _windowsBox(title, text, style):
+        pause_hang_watchdog()
         return ctypes.windll.user32.MessageBoxW(None, str(text), str(title), style | MB_SETFOREGROUND | MB_TOPMOST)
 
 def _escapeAppleScript(value):

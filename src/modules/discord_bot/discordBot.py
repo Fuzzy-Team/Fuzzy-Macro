@@ -2929,19 +2929,25 @@ def discordBot(token, run, status, skipTask, recentLogs=None, pin_requests=None,
     async def battery(interaction: discord.Interaction):
         try:
             if sys.platform == "win32":
-                import ctypes
-                from ctypes import wintypes
+                import ctypes.wintypes
                 class SystemPowerStatus(ctypes.Structure):
                     _fields_ = [("ACLineStatus", ctypes.c_ubyte), ("BatteryFlag", ctypes.c_ubyte),
                                 ("BatteryLifePercent", ctypes.c_ubyte), ("SystemStatusFlag", ctypes.c_ubyte),
-                                ("BatteryLifeTime", wintypes.DWORD), ("BatteryFullLifeTime", wintypes.DWORD)]
+                                ("BatteryLifeTime", ctypes.wintypes.DWORD), ("BatteryFullLifeTime", ctypes.wintypes.DWORD)]
                 status = SystemPowerStatus()
-                ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(status))
+                available = ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(status))
                 #BatteryFlag 128 means no battery, BatteryLifePercent 255 means unknown
-                if status.BatteryFlag == 128 or status.BatteryLifePercent == 255:
+                if not available or status.BatteryFlag == 128 or status.BatteryLifePercent == 255:
                     await interaction.response.send_message("Battery information not found.")
                 else:
-                    state = "charging" if status.ACLineStatus == 1 else "discharging"
+                    if status.BatteryFlag == 255 or status.ACLineStatus == 255:
+                        state = "in an unknown state"
+                    elif status.BatteryFlag & 8:
+                        state = "charging"
+                    elif status.ACLineStatus == 1:
+                        state = "plugged in, not charging"
+                    else:
+                        state = "discharging"
                     await interaction.response.send_message(f"Battery is at {status.BatteryLifePercent}% and is currently {state}.")
                 return
             output = subprocess.check_output(["pmset", "-g", "batt"], text=True)

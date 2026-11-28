@@ -822,7 +822,7 @@ def _run_install_script(destination):
         if sys.platform == "win32":
             script = os.path.join(destination, "install_dependencies.bat")
             if os.path.exists(script):
-                subprocess.Popen(["cmd", "/c", script, "--no-launch"],
+                subprocess.Popen(["cmd", "/c", "install_dependencies.bat", "--no-launch"], cwd=destination,
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
                                  creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
             return
@@ -834,7 +834,7 @@ def _run_install_script(destination):
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
                              start_new_session=True, close_fds=True)
     except Exception:
-        pass
+        pass  # Dependency setup is best-effort after the application files have been updated.
 
 
 def update(t="main", update_channel="stable", progress_callback=None):

@@ -26,6 +26,9 @@ if errorlevel 1 (
 exit /b 0
 
 :elevated
+:: Let dependency updates finish before stopping the old process tree.
+powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.Name -ieq 'cmd.exe' -and $_.CommandLine -like '*install_dependencies.bat*' -and $_.CommandLine -match '--no-launch(?:\s|$)' } | ForEach-Object { Write-Host 'Waiting for dependency installation to finish...'; Wait-Process -Id $_.ProcessId -ErrorAction SilentlyContinue }"
+
 :: Stop only a Fuzzy Macro already running from this virtual environment, with its macro, bot and manager processes (/T).
 powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -ieq $env:PYTHON_EXE -and $_.CommandLine -match 'main\.py' } | ForEach-Object { taskkill /PID $_.ProcessId /T /F }" >nul 2>&1
 

@@ -104,6 +104,8 @@ def scroll(clicks, pause = False):
         #pyautogui passes the click count as the raw wheel delta, and one notch is 120. 200 per click is what
         #worked on the old windows branch; tune on real hardware
         ctypes.windll.user32.mouse_event(MOUSEEVENTF_WHEEL, 0, 0, int(clicks * 200), 0)
+        if pause:
+            time.sleep(pag.PAUSE)
         return
     pag.scroll(clicks, _pause = pause)
 

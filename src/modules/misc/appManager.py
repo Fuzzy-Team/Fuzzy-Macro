@@ -297,8 +297,9 @@ def openAppWin(app="Roblox"):
     hwnd = user32.GetAncestor(windows[0], 2) #GA_ROOT: the Store version's frame, not its content window
     if user32.IsIconic(hwnd):
         user32.ShowWindow(hwnd, 9) #SW_RESTORE
-    user32.SetForegroundWindow(hwnd)
-    return True
+    if user32.GetForegroundWindow() != hwnd and not user32.SetForegroundWindow(hwnd):
+        return False
+    return user32.GetForegroundWindow() == hwnd
 
 def openDeeplinkWin(link):
     os.startfile(link)
@@ -328,9 +329,10 @@ def enterRobloxFullscreenWin():
     root = user32.GetAncestor(windows[0], 2) #GA_ROOT: the Store version's frame, not its content window
     if root == _fullscreenRequested or not user32.GetWindowLongW(root, -16) & 0xC00000: #GWL_STYLE, WS_CAPTION
         return
-    openAppWin()
+    if not openAppWin():
+        return
     time.sleep(0.3)
-    if not isAppFocusedWin(): #F11 would go to another window, so try again on the next call
+    if user32.GetForegroundWindow() != root: #F11 would go to another window, so try again on the next call
         return
     _fullscreenRequested = root
     pydirectinput.press("f11") #Roblox reads scancodes, which pyautogui doesn't send
