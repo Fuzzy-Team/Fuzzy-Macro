@@ -1,5 +1,4 @@
-from modules.misc.imageManipulation import pillowToCv2
-from modules.screen.screenshot import mssScreenshot
+from modules.screen.screenshot import mssScreenshotNP
 import modules.misc.settingsManager as settingsManager
 from modules.controls.keyboard import keyboard
 from modules.controls.sleep import InterruptRequested, is_stopped
@@ -90,13 +89,14 @@ class fieldDriftCompensation():
         return (x+w//2, y+h//2)
 
     def getSaturatorLocation(self):
-        screenshot = pillowToCv2(
-            mssScreenshot(
+        screenshot = cv2.cvtColor(
+            mssScreenshotNP(
                 self.robloxWindow.mx,
                 self.robloxWindow.my + 100,
                 self.robloxWindow.mw,
                 self.robloxWindow.mh - 100,
-            )
+            ),
+            cv2.COLOR_BGRA2BGR,
         )
         saturatorLocation = self.getSaturatorInImage(screenshot)
         if saturatorLocation is None: return None
@@ -286,13 +286,14 @@ class fieldDriftCompensation():
     def getSprinklerLocation(self):
         if self._sprinkler_model_failed:
             return self.getSaturatorLocation()
-        screenshot = pillowToCv2(
-            mssScreenshot(
+        screenshot = cv2.cvtColor(
+            mssScreenshotNP(
                 self.robloxWindow.mx,
                 self.robloxWindow.my + 100,
                 self.robloxWindow.mw,
                 self.robloxWindow.mh - 100,
-            )
+            ),
+            cv2.COLOR_BGRA2BGR,
         )
         sprinklerLocation = self.getSprinklerInImage(screenshot)
         if self._sprinkler_model_failed:
