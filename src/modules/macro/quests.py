@@ -1,3 +1,5 @@
+import os
+import sys
 import cv2
 import re
 import fuzzywuzzy
@@ -895,7 +897,11 @@ class QuestMixin:
         questGiverTemplates = []
         # The title image is only a fallback for OCR, so a giver without one just reads by OCR.
         try:
-            questGiverImg = Image.open(f"./images/quest/{questGiver}-{self.robloxWindow.display_type}.png").convert('RGBA')
+            titleFile = f"./images/quest/{questGiver}-{self.robloxWindow.display_type}.png"
+            # Windows draws some of these names larger than the macOS 1x files, so it has its own crops
+            if sys.platform == "win32" and os.path.exists(f"./images/quest/{questGiver}-windows.png"):
+                titleFile = f"./images/quest/{questGiver}-windows.png"
+            questGiverImg = Image.open(titleFile).convert('RGBA')
             questGiverTemplates.extend(buildScaledTemplates(questGiverImg, primaryScales, self.robloxWindow.display_type))
         except FileNotFoundError:
             pass

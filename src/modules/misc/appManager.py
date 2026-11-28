@@ -195,6 +195,8 @@ def enterRobloxFullscreen():
 ROBLOX_EXES = ("RobloxPlayerBeta.exe", "Windows10Universal.exe")
 
 if IS_WINDOWS:
+    import psutil
+    import pydirectinput
     from ctypes import wintypes
     user32 = ctypes.windll.user32
 
@@ -218,15 +220,8 @@ if IS_WINDOWS:
     user32.GetWindowLongW.restype = ctypes.c_long
 
 def _robloxPids():
-    out = subprocess.run(["tasklist", "/FO", "CSV", "/NH"],
-                         capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW).stdout
     names = {exe.lower() for exe in ROBLOX_EXES}
-    pids = set()
-    for line in out.splitlines():
-        cols = [c.strip('"') for c in line.split('","')]
-        if len(cols) > 1 and cols[0].strip('"').lower() in names:
-            pids.add(int(cols[1]))
-    return pids
+    return {process.pid for process in psutil.process_iter(["name"]) if (process.info["name"] or "").lower() in names}
 
 def _windowText(hwnd, read):
     buffer = ctypes.create_unicode_buffer(256)
@@ -268,6 +263,24 @@ def _clientBounds(hwnd):
 
 def isAppOpenWin(app="roblox"):
     return bool(_robloxPids())
+
+def hasRobloxWindow():
+    """False when Roblox is closed, including when only its tray icon is left."""
+    return bool(_robloxWindows())
+
+_inputWindow = None #the Roblox window robloxWindowGone last saw
+
+def robloxWindowGone():
+    """hasRobloxWindow, reversed, and cheap enough to ask before every key press."""
+    global _inputWindow
+    if _inputWindow and user32.IsWindowVisible(_inputWindow):
+        return False
+    hadWindow = _inputWindow is not None
+    _inputWindow = next(iter(_robloxWindows()), None)
+    if hadWindow and _inputWindow is None:
+        #gathering holds the left button, which would stay down over whatever window is in front now
+        user32.mouse_event(0x0004, 0, 0, 0, 0) #MOUSEEVENTF_LEFTUP
+    return _inputWindow is None
 
 def isAppFocusedWin(app="Roblox"):
     foreground = user32.GetForegroundWindow()
@@ -320,7 +333,7 @@ def enterRobloxFullscreenWin():
     if not isAppFocusedWin(): #F11 would go to another window, so try again on the next call
         return
     _fullscreenRequested = root
-    pag.press("f11")
+    pydirectinput.press("f11") #Roblox reads scancodes, which pyautogui doesn't send
     time.sleep(1.5) # the fullscreen animation
 
 def missingPermissionsWin():

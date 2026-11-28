@@ -1,6 +1,8 @@
 from modules.screen import virtual_display
 import re
 import random
+import sys
+import threading
 import requests
 from datetime import datetime, timezone
 import modules.controls.mouse as mouse
@@ -22,6 +24,8 @@ from modules.screen.screenshot import mssScreenshot
 
 
 class RejoinMixin:
+    _loadWatchFinished = threading.Event() #replaced by each join attempt, and set by every exit from a rejoin
+
     def _loadingScreenShowing(self):
         w = self.robloxWindow
         percent = percent_pixels_similar_to_color(
@@ -29,6 +33,23 @@ class RejoinMixin:
             tolerance=LOADING_SCREEN_TOLERANCE, return_none_on_error=True,
         )
         return None if percent is None else percent >= LOADING_SCREEN_PERCENT
+
+    def _watchLoadingScreen(self, loaded, finished):
+        """Set `loaded` once the loading screen has been up and is gone."""
+        seen = False
+        goneChecks = 0
+        while not finished.wait(0.5):
+            showing = self._loadingScreenShowing()
+            if showing:
+                seen = True
+                goneChecks = 0
+            elif showing is None:
+                goneChecks = 0
+            elif seen:
+                goneChecks += 1
+                if goneChecks >= 2:
+                    loaded.set()
+                    return
 
     def _parseRejoinAtTime(self):
         value = str(self.setdat.get("rejoin_at_time", "00:00")).strip()
@@ -192,6 +213,7 @@ class RejoinMixin:
         # failed rejoin cannot leave night detection disabled.
         if self.skipServer is not None:
             self.skipServer.value = 0
+        self._loadWatchFinished.set()
         self.canDetectNight = True
         self.clear_task_status()
         return result
@@ -230,6 +252,11 @@ class RejoinMixin:
             time.sleep(3)
             if is_stopped():
                 return self._finish_rejoin(False)
+
+        # On Windows loading the text engine can take most of a minute. Left to the join loop's first read,
+        # it uses up the load time limit and the loading screen passes unseen.
+        if sys.platform == "win32":
+            ocr.loadOcrEngine()
 
         # Retry each configured private server in failover order, then use a
         # public server. Skipping one link invalidates only that link, allowing
@@ -300,7 +327,15 @@ class RejoinMixin:
             # sprinkler counts, but an already-open client must see it disappear
             # first, since the old server's sprinkler is still up after launch.
             sawSprinklerGap = not clientAlreadyOpen
-            while not is_stopped() and time.time() - loadStartTime < 36:
+            # On Windows one pass of the loop below can take 14 seconds while Roblox loads, and the
+            # loading screen can be up for only 2, so it is also watched on its own thread.
+            watchedLoad = threading.Event()
+            watchFinished = self._loadWatchFinished = threading.Event()
+            if sys.platform == "win32":
+                threading.Thread(target=self._watchLoadingScreen, args=(watchedLoad, watchFinished), daemon=True).start()
+            # Joins from a closed Roblox have taken up to 43 seconds on Windows.
+            loadTimeout = 60 if sys.platform == "win32" else 36
+            while not is_stopped() and time.time() - loadStartTime < loadTimeout and not watchedLoad.is_set():
                 if joinPS and self.skipServer is not None and self.skipServer.value == 1:
                     self.skipServer.value = 0
                     invalidServerLinks.add(psLink)
@@ -428,6 +463,10 @@ class RejoinMixin:
                     if lastJoinErrorScan:
                         lastJoinErrorScan += pausedFor
 
+            watchFinished.set()
+            if watchedLoad.is_set() and rejoinSuccess:
+                gameLoaded = True
+
             if self.skipServer is not None:
                 self.skipServer.value = 0
 
@@ -437,7 +476,7 @@ class RejoinMixin:
             if not gameLoaded and rejoinSuccess:
                 self.logger.webhook(
                     "",
-                    f"Game load was not confirmed within 36 seconds; trying the next rejoin target ({launchedAttempts}/{len(attempts)}).",
+                    f"Game load was not confirmed within {loadTimeout} seconds; trying the next rejoin target ({launchedAttempts}/{len(attempts)}).",
                     "red",
                     "screen",
                     ping_category="ping_disconnects",

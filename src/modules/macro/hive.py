@@ -1,3 +1,4 @@
+import sys
 import cv2
 import numpy as np
 import modules.controls.mouse as mouse
@@ -57,6 +58,17 @@ class HiveMixin:
             time.sleep(1)
             if self.isBesideE(["stop", "making"], ["make"], log=True): 
                 break
+        else:
+            # Right after a claim the player can be just off the front of the pad, where there is no prompt and E
+            # does nothing. With pollen left, honey still trickles in, so nothing below notices until the time
+            # limit. Step forward until a honey prompt shows. Resetting instead would throw the pollen away.
+            if bypass and sys.platform == "win32":
+                for step in range(5):
+                    if any(word in self.getTextBesideE() for word in ("mak", "stop")):
+                        break
+                    if step < 4:
+                        self.walkStuds("w", 4)
+                        time.sleep(0.5)
 
         self.set_task_status("converting", activity="converting")
         st = time.time()
@@ -341,7 +353,8 @@ class HiveMixin:
             stickerBookImg = self.adjustImage("./images/menu", "stickerbookclose") #sticker book
             x = self.robloxWindow.mx+250
             y = self.robloxWindow.my+110
-            res = locateImageOnScreen(stickerBookImg, x, y, 100, 80, 0.8)
+            # on Windows the close button reaches 90 pixels below the top of this area
+            res = locateImageOnScreen(stickerBookImg, x, y, 100, 100 if sys.platform == "win32" else 80, 0.8)
             if res:
                 if is_stopped():
                     return _finish_reset(False)
@@ -561,31 +574,43 @@ class HiveMixin:
         self.walkStuds(nudge_key, nudge_studs)
         time.sleep(0.25)
 
-    def claimHivePromptVisible(self):
+    def claimHivePromptVisible(self, walking=False):
         try:
             if self.isBesideEImage("claimhive"):
                 return True
         except Exception:
             pass
+        # On Windows a text read takes about a second, long enough to walk past an open pad. While
+        # walking, only read when the E key is up and the images haven't shown that the hive is taken.
+        # A standing check always reads, since a Roblox pop-up can cover the E key and part of the prompt.
+        if walking and sys.platform == "win32" and (self.occupiedHiveImageVisible() or not self.isBesideEImage("ebutton")):
+            return False
         return bool(self.isBesideE(["claim"], ["send", "trad", "trade"], log=True))
 
-    def occupiedHivePromptVisible(self):
+    def occupiedHiveImageVisible(self):
         for name in ("sendtrade", "tradedisabled", "tradelocked"):
             try:
                 if self.isBesideEImage(name):
                     return True
             except Exception:
                 pass
+        return False
+
+    def occupiedHivePromptVisible(self, walking=False):
+        if self.occupiedHiveImageVisible():
+            return True
+        if walking and sys.platform == "win32" and not self.isBesideEImage("ebutton"):
+            return False
         return bool(self.isBesideE(["send", "trad", "trade"], ["claim"], log=True))
 
-    def anyHivePromptVisible(self):
-        return bool(self.hivePromptKind())
+    def anyHivePromptVisible(self, walking=False):
+        return bool(self.hivePromptKind(walking))
 
-    def hivePromptKind(self):
+    def hivePromptKind(self, walking=False):
         """Return the currently observed hive-prompt type, if any."""
-        if self.claimHivePromptVisible():
+        if self.claimHivePromptVisible(walking):
             return "claim"
-        if self.occupiedHivePromptVisible():
+        if self.occupiedHivePromptVisible(walking):
             return "occupied"
         return None
 
@@ -638,7 +663,7 @@ class HiveMixin:
             for _ in range(40):
                 if self._hiveAcquisitionControlStatus() == "stopped":
                     return 0
-                if time.monotonic() >= deadline or not self.anyHivePromptVisible():
+                if time.monotonic() >= deadline or not self.anyHivePromptVisible(walking=True):
                     break
                 time.sleep(0.01)
             # Walk until the next pad's claim/occupied prompt appears.
@@ -648,7 +673,7 @@ class HiveMixin:
                 if time.monotonic() >= deadline:
                     self.logger.webhook("", f"Hive {slot} prompt not seen", "orange")
                     break
-                if self.claimHivePromptVisible():
+                if self.claimHivePromptVisible(walking=True):
                     self.keyboard.keyUp("a", False)
                     self.keyboard.keyUp("d", False)
                     self.logger.webhook("", f"Hive {slot} detected as available", "light green")
@@ -656,7 +681,7 @@ class HiveMixin:
                         slot, excluded_slots, prompt_confirmed=True
                     )
                     break
-                if self.occupiedHivePromptVisible():
+                if self.occupiedHivePromptVisible(walking=True):
                     self.logger.webhook("", f"Hive {slot} occupied", "dark brown")
                     break
                 time.sleep(0.01)
@@ -843,6 +868,19 @@ class HiveMixin:
             time.sleep(0.35)
 
             available = self.detectOpenHiveSlotsFromSpawn()
+            # Some Windows joins start with the camera facing straight away from the hives, and the spin check
+            # above never matches at spawn. A pad is always open here, so seeing none means look behind.
+            if not available and sys.platform == "win32":
+                for turn in range(2): # turn round, and back again if that shows nothing either
+                    for _ in range(4):
+                        self.keyboard.press(".")
+                    if turn:
+                        break
+                    time.sleep(0.35)
+                    available = self.detectOpenHiveSlotsFromSpawn()
+                    if available:
+                        self.logger.webhook("", "The camera faced away from the hives; turned it round", "dark brown")
+                        break
             if available:
                 self.logger.webhook(
                     "",
