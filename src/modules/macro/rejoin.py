@@ -565,6 +565,10 @@ class RejoinMixin:
                 if not self.reset(convert=False):
                     return self._finish_rejoin(False)
             else:
+                # The convert itself can travel (Auto Field Boost), and it starts on the claimed pad. Without
+                # this, Windows walked to the cannon as if the hive had never been found, and missed it.
+                if sys.platform == "win32":
+                    self.cannonFromHive = True
                 self.convert(bypass=True)
             self.cannonFromHive = True
             return self._finish_rejoin(True)
