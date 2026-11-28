@@ -6,6 +6,7 @@ import modules.misc.settingsManager as settingsManager
 import modules.macro.planter_bonus_loot as bonusLoot
 from modules.macro.game_data import quest_data, MAIN_GAME_PLACE_ID
 from modules.misc.badgeData import badge_id_from_task, gather_overrides, get_badge, resolve_gather_field, setting_key
+from modules.submacros.tadAltSync import is_field_alt, main_field_for_alt
 from modules.quest_planning import (quest_giver_order, bee_locked_quest_givers, choose_quest_gather, is_gather_objective, allowed_fields,
                                     quest_uses_ant_challenge, kill_objective_mob, manual_objective_name, objective_allowed,
                                     FIXED_LINE_GIVERS, QUEST_BLENDER_SETTING, QUEST_VICIOUS_SETTING)
@@ -1147,7 +1148,8 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                 if taskId.startswith("gather_"):
                     fieldName = taskId.replace("gather_", "").replace("_", " ")
                     if taskId not in executedTasks:
-                        runTask(macro.gather, args=(fieldName,), resetAfter=False)
+                        mainField = main_field_for_alt(settingsManager.loadSettings(), time.time()) if is_field_alt(macro.setdat) else None
+                        runTask(macro.gather, args=(mainField or fieldName,), resetAfter=False)
                         executedTasks.add(taskId)
 
             # Skip to next iteration
@@ -1390,7 +1392,8 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                     if collectName in macroModule.fieldBoosterData:
                         if macro.setdat[collectName] and macro.hasRespawned(collectName, macro.collectCooldowns[collectName]) and macro.hasRespawned("last_booster", macro.setdat["boost_seperate"]*60):
                             boostedField = runTask(macro.collect, args=(collectName,))
-                            if macro.setdat["gather_boosted"] and boostedField:
+                            # Field alts never gather their own boosted field, only the main's.
+                            if macro.setdat["gather_boosted"] and boostedField and not is_field_alt(macro.setdat):
                                 if macro.pineTapDue(boostedField):
                                     runTask(macro.tapField, args=("pine tree",), convertAfter=False)
                                 # Gather in boosted field for 15 minutes
@@ -1480,7 +1483,9 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                 # Check if this field is enabled in gather tab
                 for i in range(len(macro.setdat["fields_enabled"])):
                     if macro.setdat["fields_enabled"][i] and macro.setdat["fields"][i] == fieldName:
-                        runTask(macro.gather, args=(fieldName,), resetAfter=False)
+                        # A field alt gathers in the main's field while the main has one.
+                        mainField = main_field_for_alt(settingsManager.loadSettings(), time.time()) if is_field_alt(macro.setdat) else None
+                        runTask(macro.gather, args=(mainField or fieldName,), resetAfter=False)
                         executedTasks.add(taskId)
                         return True
                 
