@@ -40,7 +40,7 @@ def run(self):
     if not self.checkIfVicSummoned():
         return False
     self.viciousWalk('sa', 15)
-    return self.viciousKillPattern()
+    return self.viciousFight()
 
 
 result = run(self)

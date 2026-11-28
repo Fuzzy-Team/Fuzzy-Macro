@@ -1,5 +1,6 @@
 import modules.controls.mouse as mouse
 from modules.controls.sleep import is_stopped, pause_aware_time as time, sleep
+from modules.macro.vicious_sense import SenseFight
 
 
 class ViciousMixin:
@@ -41,20 +42,66 @@ class ViciousMixin:
                 if died:
                     break
                 if self.checkIfViciousDied():
-                    self.hourlyReport.addHourlyStat("vicious_bees", 1)
-                    self.recordVicStat("defeats")
-                    self.recordVicStat("stingers", getattr(self, "_viciousRewardAmount", 0))
+                    self.viciousRecordDefeat()
                     return True
             if not died:
                 return False
             # A kill announced right before the death still counts.
             if self.checkIfViciousDied():
-                self.hourlyReport.addHourlyStat("vicious_bees", 1)
-                self.recordVicStat("defeats")
-                self.recordVicStat("stingers", getattr(self, "_viciousRewardAmount", 0))
+                self.viciousRecordDefeat()
                 return True
             if not self.viciousReturnToField():
                 return False
+
+
+    def viciousFight(self):
+        """The fight in self.viciousField: target sense when it is turned on, else the fixed pattern."""
+        return self.viciousSenseFight() if self.setdat.get("mob_target_sense") else self.viciousKillPattern()
+
+
+    def viciousRecordDefeat(self):
+        self.hourlyReport.addHourlyStat("vicious_bees", 1)
+        self.recordVicStat("defeats")
+        self.recordVicStat("stingers", getattr(self, "_viciousRewardAmount", 0))
+
+
+    def viciousSenseFight(self):
+        """Fight in self.viciousField with target sense. Like viciousKillPattern: a death means the
+        bee is still alive, so after returning to the field a fresh fight starts. Ending without a
+        death or a defeat means the bee is gone."""
+        lastDeathCheck = lastDefeatCheck = time.time()
+
+        def check():
+            nonlocal lastDeathCheck, lastDefeatCheck
+            now = time.time()
+            if now - lastDeathCheck >= 1:
+                lastDeathCheck = now
+                if self.blueTextImageSearch("died", screen=self.blueTextScreen()):
+                    return "died"
+            if now - lastDefeatCheck >= 5:
+                lastDefeatCheck = now
+                self.keyboard.releaseMovement()
+                if self.checkIfViciousDied():
+                    return "defeated"
+            return None
+
+        try:
+            while True:
+                outcome = SenseFight(self, self.viciousField, check).run()
+                if outcome == "defeated":
+                    self.viciousRecordDefeat()
+                    return True
+                if outcome != "died":
+                    return False
+                self.recordVicStat("deaths")
+                # A kill announced right before the death still counts.
+                if self.checkIfViciousDied():
+                    self.viciousRecordDefeat()
+                    return True
+                if not self.viciousReturnToField():
+                    return False
+        finally:
+            self.viciousResetCamera()
 
 
     def viciousResetCamera(self):
@@ -120,7 +167,7 @@ class ViciousMixin:
             return False
         if not self.goToField(field, "north"):
             return False
-        result = self.viciousKillPattern()
+        result = self.viciousFight()
         self.logger.webhook("Vicious Bee", "Vicious Bee defeated" if result else "Vicious Bee hunt ended without a confirmed defeat", "light green" if result else "orange", "screen", ping_category="ping_vicious_bee")
         return result
 
