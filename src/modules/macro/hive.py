@@ -521,6 +521,12 @@ class HiveMixin:
             return
         self.keyboard.tileWalk(key, studs / self._STUDS_PER_TILE)
 
+    def stepBackAfterClaim(self):
+        # On Windows the walk ends no more than about 4 studs inside the front of the pad, so this step
+        # often took the player off it, where the convert that follows can't start.
+        if sys.platform != "win32":
+            self.walkStuds("s", 4)
+
     def walkStudsAsyncThen(self, async_key, async_studs, sync_key, sync_studs):
         """Walk two keys at once for the shorter leg, then finish the longer leg alone."""
         async_studs = max(0.0, float(async_studs or 0))
@@ -757,7 +763,7 @@ class HiveMixin:
         )
         if claimed:
             self.logger.webhook("", f"Hive {claimed} detected as available", "light green")
-            self.walkStuds("s", 4)
+            self.stepBackAfterClaim()
             return claimed
 
         if self.occupiedHivePromptVisible():
@@ -920,7 +926,7 @@ class HiveMixin:
                     target, excluded_slots, prompt_confirmed=(prompt == "claim")
                 )
                 if claimed:
-                    self.walkStuds("s", 4)
+                    self.stepBackAfterClaim()
                     return claimed
 
                 # First pick was wrong/occupied — try other spawn-detected pads before a full scan.
@@ -944,7 +950,7 @@ class HiveMixin:
                     )
                     claimed = self.walkBetweenHiveSlotsForClaim(current, nxt, excluded_slots | failed)
                     if claimed:
-                        self.walkStuds("s", 4)
+                        self.stepBackAfterClaim()
                         return claimed
                     failed.add(nxt)
                     current = nxt
