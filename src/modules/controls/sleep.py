@@ -9,6 +9,14 @@ import threading
 _run_state = None
 _interrupt_action = None
 _resume_callback = None
+# Interrupt requests are only delivered while a task is running. The task runner
+# arms them for its duration on every thread, so helper threads a task spawns
+# (AFB's glitter/field pair, mob watchers) still abort with InterruptRequested and
+# hand it back to the caller. Rejoining, startup and menu scanning stay disarmed,
+# so an action requested there waits for the next task instead of raising inside a
+# sleep that would kill the macro process.
+_interruptLock = threading.Lock()
+_interruptDepth = 0
 
 INTERRUPT_NONE = 0
 INTERRUPT_SKIP = 1
@@ -42,6 +50,23 @@ def set_resume_callback(callback):
     _resume_callback = callback
 
 
+def arm_interrupts():
+    """Deliver interrupt requests until the matching disarm_interrupts()."""
+    global _interruptDepth
+    with _interruptLock:
+        _interruptDepth += 1
+
+
+def disarm_interrupts():
+    global _interruptDepth
+    with _interruptLock:
+        _interruptDepth = max(0, _interruptDepth - 1)
+
+
+def interrupts_armed():
+    return _interruptDepth > 0
+
+
 def get_interrupt_action():
     if _interrupt_action is None:
         return INTERRUPT_NONE
@@ -52,6 +77,9 @@ def get_interrupt_action():
 
 
 def raise_if_interrupted():
+    """Raise on a pending action, but only for a caller that armed interrupts."""
+    if not interrupts_armed():
+        return
     action = get_interrupt_action()
     if action != INTERRUPT_NONE:
         raise InterruptRequested(action)
