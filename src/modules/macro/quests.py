@@ -27,11 +27,13 @@ DIGIT_LOOKALIKES = {"l": "1", "i": "1", "|": "1", "!": "1", "j": "1", "7": "1", 
 def findLogEnd(scanScreen):
     """Return the y offset where the quest log ends and the game world starts, or None when no log is on screen."""
     height = scanScreen.shape[0]
-    pixels = scanScreen[:, :, :3].astype(np.int16)
+    pixels = scanScreen[:, :, :3]
     logColors = ([222, 195, 150], [247, 240, 229])  # BGR: the log's background and its title bars
     isLog = np.zeros(pixels.shape[:2], dtype=bool)
     for color in logColors:
-        isLog |= np.all(np.abs(pixels - np.array(color, dtype=np.int16)) <= 10, axis=2)
+        lower = np.array([max(0, c - 10) for c in color], dtype=np.uint8)
+        upper = np.array([min(255, c + 10) for c in color], dtype=np.uint8)
+        isLog |= cv2.inRange(pixels, lower, upper) > 0
     hasLog = np.mean(isLog, axis=1) > 0.005
     if not hasLog.any():
         return None
