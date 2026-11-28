@@ -63,6 +63,21 @@ class FinalReport:
             except (TypeError, ValueError):
                 numericValues.append(0.0)
 
+        # Honey only goes up, so the first readings cannot sit above the middle of the hour. A bad
+        # first read would otherwise become the floor, flatten every real reading after it and
+        # report 0 honey earned. Treat those leading readings as failed reads.
+        positives = [value for value in numericValues if value > 0]
+        if len(positives) >= 3:
+            median = statistics.median(positives)
+            for i, value in enumerate(numericValues):
+                if value <= 0:
+                    continue
+                if value <= median:
+                    break
+                numericValues[i] = 0.0
+            if baseline is not None and float(baseline or 0.0) > median:
+                baseline = None
+
         firstNonZero = next((value for value in numericValues if value > 0), 0.0)
         if baseline is None:
             baseline = firstNonZero
