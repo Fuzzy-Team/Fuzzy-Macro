@@ -3,7 +3,7 @@ import time
 from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime, timedelta
 from modules.misc.formatting import formatHMS, millify
-from modules.misc.settingsManager import getCurrentProfile, getMacroVersion
+from modules.misc.settingsManager import getCurrentProfile, getMacroVersion, loadUserLiteral
 from modules.reports.buffs import (
     BUFF_RENDER_CONFIG,
     DEFAULT_HOURLY_BUFFS,
@@ -500,7 +500,17 @@ class HourlyReportDrawer:
         topFont = self.getFont("bold", 60)
         self.draw.text((x + 200, y + 96), "Honey Earned", font=topFont, fill=self.bodyColor)
         self.draw.text((x + 720, y + 96), millify(honeyThisHour, "report"), font=topFont, fill=self.bodyColor)
-        self.draw.polygon([(x + 980, y + 119), (x + 955, y + 161), (x + 1005, y + 161)], fill=(0, 255, 0))
+        # Compare with the hour before; history is newest first and this hour is saved after the report.
+        honeyUp = True
+        if reportTitle != "Session Report":
+            try:
+                honeyUp = honeyThisHour >= loadUserLiteral("hourly_report_history.txt")[0]["honey"]
+            except (SyntaxError, ValueError, IndexError, KeyError, TypeError):
+                pass
+        if honeyUp:
+            self.draw.polygon([(x + 980, y + 119), (x + 955, y + 161), (x + 1005, y + 161)], fill=(0, 255, 0))
+        else:
+            self.draw.polygon([(x + 955, y + 119), (x + 1005, y + 119), (x + 980, y + 161)], fill=(255, 60, 60))
         avg = max(0, sessionHoney / (totalBreakdown / 3600)) if totalBreakdown else 0
         self.draw.text((x + 170, y + 180), "Hourly Average", font=topFont, fill=self.bodyColor)
         self.draw.text((x + 720, y + 180), millify(avg, "report"), font=topFont, fill=self.bodyColor)
