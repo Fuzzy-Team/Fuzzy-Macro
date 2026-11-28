@@ -116,6 +116,12 @@ def quest_giver_order(settings):
             and settings.get("bees", 50) >= QUEST_GIVER_MIN_BEES.get(giver, 0)]
 
 
+def bee_locked_quest_givers(settings):
+    """(giver, bees needed) for givers switched on that the Bees setting keeps out of quest_giver_order."""
+    return [(giver, needed) for giver, needed in QUEST_GIVER_MIN_BEES.items()
+            if settings.get(giver.replace(" ", "_") + "_quest", False) and settings.get("bees", 50) < needed]
+
+
 def manual_objective_name(action):
     """'manual_use 10 red portal' -> 'Use 10 Red Portal'; 'use_10_fielddice' -> 'Use 10 Field Dice'"""
     kind, _, target = action.partition("_")

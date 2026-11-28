@@ -1,5 +1,5 @@
 import cv2
-from modules.screen.screenshot import mssScreenshot, mssScreenshotNP
+from modules.screen.screenshot import mssScreenshotNP
 import numpy as np
 from functools import lru_cache
 from modules.screen.template_loader import load_template_for_display
@@ -157,7 +157,7 @@ def findBlackPixel(window, x1, x2, y):
 
 def captureRegionBGR(x, y, w, h):
     """Screenshot a region as a BGR array, for passing to locateImageInScreen."""
-    return cv2.cvtColor(np.array(mssScreenshot(x, y, w, h)), cv2.COLOR_RGB2BGR)
+    return cv2.cvtColor(mssScreenshotNP(x, y, w, h), cv2.COLOR_BGRA2BGR)
 
 
 def locateImageInScreen(target, screen, threshold=0, scales=None, return_scale=False, resize_interp=cv2.INTER_AREA, early_exit_thresh=0.995):

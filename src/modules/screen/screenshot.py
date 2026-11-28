@@ -73,7 +73,8 @@ def mssScreenshotNP(x,y,w,h, save = False):
             if virtual_display.active() and sct_img.size != (int(w), int(h)):
                 raise virtual_display.DisplayError("The virtual-display capture is not at 1x scale.")
             if save: mss.tools.to_png(sct_img.rgb, sct_img.size, output=f"screen-{time.time()}.png")
-            return np.array(sct_img)
+            # Keep the captured bytearray as the view base instead of copying every frame.
+            return np.asarray(sct_img)
 
 
 def mssScreenshot(x=0,y=0,w=None,h=None, save = False, filename=None):

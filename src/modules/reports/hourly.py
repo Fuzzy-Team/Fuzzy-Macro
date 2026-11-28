@@ -561,7 +561,9 @@ class HourlyReport():
         self.latestNectarQuantity = []
         self.itemMonitorSnapshot = None
         self.resetHourlyStats()
-    
+        # the Honey Earned arrow compares with the last hour of this run only
+        settingsManager.saveUserLiteral("hourly_report_history.txt", [])
+
     def addHourlyStat(self, stat, value, save=True):
         self.hourlyReportStats.setdefault(stat, 0)
         if stat.startswith("vic_"):

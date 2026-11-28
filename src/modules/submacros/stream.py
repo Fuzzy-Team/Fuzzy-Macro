@@ -502,15 +502,27 @@ class cloudflaredStream:
             def log_message(self, *args):
                 pass
 
-        ThreadingHTTPServer(("127.0.0.1", 8081), Handler).serve_forever()
+        try:
+            ThreadingHTTPServer(("127.0.0.1", 8081), Handler).serve_forever()
+        except OSError as error:
+            # A server that cannot bind (another instance or app already owns 8081)
+            # must not leave the stream advertised as running. The tunnel would
+            # publish a URL with nothing behind it, and every later start would
+            # short-circuit on the stale streaming flag instead of retrying.
+            if self.serverThread is threading.current_thread():
+                print(f"Stream server could not start: {error}")
+                self.streaming = False
+                self.publicURL = None
+                self._clearStreamURLFile()
     
     def isCloudflaredInstalled(self):
         return self.cloudflaredPath
 
     def _run_cloudflared(self, token):
         time.sleep(2)
-        # stop() or a newer start() during the wait cancels this launch
-        if self.cfToken is not token:
+        # stop(), a newer start(), or a server thread that reset the stream after
+        # failing to bind cancels this launch
+        if self.cfToken is not token or not self.streaming:
             return
         if not self.cloudflaredPath:
             print("Cloudflare tunnel unavailable: cloudflared binary not found, skipping")

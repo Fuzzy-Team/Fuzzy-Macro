@@ -11,9 +11,7 @@ import modules.misc.appManager as appManager
 import modules.misc.settingsManager as settingsManager
 from modules.controls.keyboard import keyboard
 from modules.controls.sleep import (
-    get_interrupt_action,
-    INTERRUPT_NONE,
-    InterruptRequested,
+    raise_if_interrupted,
     is_paused,
     is_stopped,
     pause_aware_time as time,
@@ -287,9 +285,8 @@ class macro(
         self.set_task_status(None)
 
     def raiseIfInterrupted(self):
-        action = get_interrupt_action()
-        if action != INTERRUPT_NONE:
-            raise InterruptRequested(action)
+        # Shares the task runner's arming rule: only an armed caller is interrupted.
+        raise_if_interrupted()
 
     def checkPauseAndWait(self, stop_event=None):
         """Check if macro is paused and wait until resumed. Returns True if stop was requested."""

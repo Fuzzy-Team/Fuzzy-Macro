@@ -922,6 +922,10 @@ def runApp(macroTarget):
                     nextRestartAt = 0.0
                     run.value = 3
                     showRunState(3)
+                    # No restart owns the session resources now. The normal stop
+                    # path tears the stream down in stopApp(), so a public tunnel
+                    # must not outlive a session that gave up on restarting.
+                    stream.stop()
                     # No restart owns the virtual display now, so release it.
                     displaySession.close()
                 else:

@@ -6,7 +6,7 @@ import modules.misc.settingsManager as settingsManager
 import modules.macro.planter_bonus_loot as bonusLoot
 from modules.macro.game_data import quest_data, MAIN_GAME_PLACE_ID
 from modules.misc.badgeData import badge_id_from_task, gather_overrides, get_badge, resolve_gather_field, setting_key
-from modules.quest_planning import (quest_giver_order, choose_quest_gather, is_gather_objective, allowed_fields,
+from modules.quest_planning import (quest_giver_order, bee_locked_quest_givers, choose_quest_gather, is_gather_objective, allowed_fields,
                                     quest_uses_ant_challenge, kill_objective_mob, manual_objective_name, objective_allowed,
                                     FIXED_LINE_GIVERS, QUEST_BLENDER_SETTING, QUEST_VICIOUS_SETTING)
 from modules.controls.sleep import (
@@ -19,6 +19,8 @@ from modules.controls.sleep import (
     INTERRUPT_STICKER_SPROUT,
     INTERRUPT_FIND_ITEM,
     HANG_FILE,
+    arm_interrupts,
+    disarm_interrupts,
     wait_while_paused,
     is_stopped,
     paused_seconds,
@@ -170,6 +172,10 @@ def macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMess
 
 def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discordMessageQueue=None, planterCommandQueue=None, skipServer=None):
     start_hang_watchdog(settingsManager.getUserDataPath(HANG_FILE))
+    # An interrupt belongs to the task that was running when it was requested.
+    # This is a fresh process, so any value left by a previous one is stale.
+    if skipTask is not None:
+        skipTask.value = INTERRUPT_NONE
     # imported here so the GUI process, which only passes this function to the macro
     # process, doesn't load the macro package (OCR, cv2, Vision, pyautogui)
     import modules.macro as macroModule
@@ -200,6 +206,7 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
     taskCompleted = True
     questCache = {}
     emptyHandIns = {}
+    warnedBeeLocked = set()
     questScanScreens = None
     macro.questGatherInterruptMobs = {}
     macro.questTaskWatchers = {}
@@ -435,6 +442,10 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
             if watchedRows and all(row["id"] in macro.deferredQuestObjectives for row in watchedRows):
                 return None
 
+        # Only this task is interruptible. Rejoin, startup and menu scanning run
+        # outside here with no handler, so they must not be handed an interrupt.
+        arm_interrupts()
+        armed = True
         try:
             if taskWatchKey:
                 questWatchContext = macro.startQuestTaskWatch(taskWatchKey)
@@ -506,12 +517,16 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
                     macro.AFB(gatherInterrupt=False)
                     taskCompleted = True
         except InterruptRequested as interrupt:
+            disarm_interrupts()
+            armed = False
             skipTask.value = INTERRUPT_NONE
             if questWatchContext:
                 macro.finishQuestTaskWatch(questWatchContext, checkCompletion=False)
                 questWatchContext = None
             return handle_interrupt(interrupt.action)
         finally:
+            if armed:
+                disarm_interrupts()
             if questWatchContext:
                 if macro.finishQuestTaskWatch(questWatchContext):
                     macro.markQuestTaskWatchCompleted(questWatchContext)
@@ -1099,6 +1114,16 @@ def _run_macro(status, logQueue, updateGUI, run, skipTask, presence=None, discor
             updateGUI.value = 1
             runTask(macro.gather, args=(altField,), resetAfter=False, allowAFB=False)
             continue
+
+        # A giver the Bees setting locks is dropped from the quest list, so say so once per bee count.
+        if macro.setdat.get("macro_mode", "normal") in ("normal", "quest"):
+            bees = macro.setdat.get("bees", 50)
+            for giver, needed in bee_locked_quest_givers(macro.setdat):
+                if (giver, bees) not in warnedBeeLocked:
+                    warnedBeeLocked.add((giver, bees))
+                    macro.logger.webhook(f"{giver.title()} skipped",
+                                         f"Needs {needed} bees, but Bees in Config is {bees}. Raise it if your hive has more.",
+                                         "orange", route_category="quests")
 
         #run empty task
         #this is in case no other settings are selected

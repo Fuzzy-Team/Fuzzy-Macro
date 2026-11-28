@@ -34,6 +34,16 @@
           },
         },
         {
+          id: "hive_number",
+          title: "Hive Slot",
+          desc: "The hive you own. Always Rejoin is off, so the macro won't claim one at startup. Set this to your hive slot. 1 is closest to the red cannon and 6 is furthest.",
+          type: {
+            name: "dropdown",
+            data: [1, 2, 3, 4, 5, 6],
+            triggerFunction: saveGeneralTriggerFunction,
+          },
+        },
+        {
           id: "hive_claim_method",
           title: "Hive Claim Method",
           desc: "Detect zooms out and finds open hives from spawn, then checks slots if it can't see any. Check walks from spawn to your preferred hive slot, then scans neighboring pads if it's taken.",
@@ -446,7 +456,7 @@
           desc: "Rejoin Bee Swarm whenever the macro starts. Disable this to keep the current Roblox session when it is already open.",
           type: {
             name: "checkbox",
-            triggerFunction: saveGeneralTriggerFunction,
+            triggerFunction: `${saveGeneralTriggerFunction}; updateDependentFields()`,
           },
         },
         {

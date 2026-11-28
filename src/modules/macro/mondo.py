@@ -163,5 +163,10 @@ class MondoMixin:
                     misses = 0      # the hour has just started and mondo has not spawned yet
             return "stopped"
         finally:
-            mouse.moveTo(window.mx + 350, window.my + 150)
-            mouse.mouseUp()
+            # Release before the camera nudge can raise (a fail-safe or display error
+            # here would otherwise leave the left button held).
+            try:
+                if not is_stopped():
+                    mouse.moveTo(window.mx + 350, window.my + 150)
+            finally:
+                mouse.mouseUp()

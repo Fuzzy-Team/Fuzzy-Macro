@@ -335,17 +335,23 @@ class EventDetectionMixin:
         """True if every pixel of the field's boost icon matches somewhere in the screen within the colour tolerance."""
         icon = self.adjustImage("./images/buffs", f"boost_{field.replace(' ', '_')}")[:, :, :3].astype(np.int16)
         iconH, iconW = icon.shape[:2]
-        screen = screen[:, :, :3].astype(np.int16)
+        screen = screen[:, :, :3]
         if screen.shape[0] < iconH or screen.shape[1] < iconW:
             return False
         # Start from the pixels matching the icon's first pixel, then drop positions as the other icon pixels disagree.
-        candidates = np.argwhere(np.all(np.abs(screen[:screen.shape[0] - iconH + 1, :screen.shape[1] - iconW + 1] - icon[0, 0]) <= BUFF_BAR_BOOST_TOLERANCE, axis=2))
+        seedLower = np.maximum(icon[0, 0] - BUFF_BAR_BOOST_TOLERANCE, 0).astype(np.uint8)
+        seedUpper = np.minimum(icon[0, 0] + BUFF_BAR_BOOST_TOLERANCE, 255).astype(np.uint8)
+        seed = cv2.inRange(screen[:screen.shape[0] - iconH + 1, :screen.shape[1] - iconW + 1], seedLower, seedUpper)
+        seedPoints = cv2.findNonZero(seed)
+        if seedPoints is None:
+            return False
+        candidates = seedPoints.reshape(-1, 2)[:, ::-1]
         for dy in range(iconH):
             for dx in range(iconW):
                 if not len(candidates):
                     return False
                 ys, xs = candidates[:, 0] + dy, candidates[:, 1] + dx
-                candidates = candidates[np.all(np.abs(screen[ys, xs] - icon[dy, dx]) <= BUFF_BAR_BOOST_TOLERANCE, axis=1)]
+                candidates = candidates[np.all(np.abs(screen[ys, xs].astype(np.int16) - icon[dy, dx]) <= BUFF_BAR_BOOST_TOLERANCE, axis=1)]
         return len(candidates) > 0
 
     def detectGuidingStarAnnouncement(self, text, now):

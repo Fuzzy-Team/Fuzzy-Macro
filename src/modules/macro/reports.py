@@ -78,9 +78,11 @@ class ReportMixin:
         ocrres = ocr.ocrFunc(cap)
         honeyText = ""
         try:
-            result = ''.join([x[1][0] for x in ocrres])
+            # boxes are joined with a space and the read stops at the first gap after the number, so
+            # a rate box ("(+533,110/sec)") that lost its "(+" cannot have its digits glued on
+            result = ' '.join([x[1][0] for x in ocrres])
             for i in result:
-                if i == "(" or i == "+":
+                if i == "(" or i == "+" or i == "/" or (i.isspace() and honeyText):
                     break
                 elif i.isdigit():
                     honeyText += i
